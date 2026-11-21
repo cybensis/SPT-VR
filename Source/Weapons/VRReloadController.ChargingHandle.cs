@@ -8,30 +8,30 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // The charging handle: the off-hand trigger takes it, the hand pulls it straight back along the barrel and lets go of the
-    // trigger. The gun hand can do the same once it's off the grip with the off hand holding the gun up.
-    //  - a full pull with a round in the chamber -> Tarkov's own rechamber: that round is thrown out, the next one chambered
-    //  - let go from a full pull -> the bolt slams forward; a bolt locked back closes. Tarkov has no operation that chambers on
-    //    its own: its magazine insert already chambered the round, which counts as in the magazine until a full pull (WaitingForRack).
-    // The bolt lock is Tarkov's bolt-catch animator flag; while it's on the gun doesn't fire (BlocksFiring).
+    // The charging handle. The off-hand trigger grabs it, the hand pulls it straight back along the barrel, and releasing the trigger
+    // lets go. The gun hand can do the same once it's off the grip and the off hand holds the gun up.
+    //  - A full pull with a round in the chamber runs Tarkov's own rechamber: that round is thrown out and the next one chambered.
+    //  - Letting go after a full pull slams the bolt forward; a bolt locked back closes. Tarkov has no operation that only chambers:
+    //    its magazine insert already chambered the round, which counts as still in the magazine until a full pull (WaitingForRack).
+    // The bolt lock is Tarkov's bolt-catch animator flag. While it's set the gun doesn't fire (BlocksFiring).
     // A handle on the bolt (AK-type guns, VAL, SCAR, SVD: the mod_charge bone sits on the carrier, its slot usually empty) brings
     // the whole carrier back with it. A pistol's slide is worked the same way.
-    // The bolt follows the handle: Tarkov's locked-back pose (the "Catch" layer, or the IdlePosition blend) blended in by how far
-    // back the handle is. Only the pose; the bolt-catch flag isn't touched.
+    // The bolt follows the handle: Tarkov's locked-back pose (the "Catch" layer, or the IdlePosition blend) is blended in by how far
+    // back the handle is. Only the pose changes; the bolt-catch flag isn't touched.
     public static partial class VRReloadController
     {
-        public static float handleGrabRadius = 0.06f;      // m palm to the back of the charging handle to grab it
-        public static float handleZoneBack = 0.05f;        // m the grab zone reaches on past that toward the stock (a capsule)
+        public static float handleGrabRadius = 0.06f;      // m, palm distance to the back of the charging handle to grab it
+        public static float handleZoneBack = 0.05f;        // m the grab zone (a capsule) extends past that toward the stock
         public static float handleTravel = 0.08f;          // m the handle comes back
-        public static float minHandleTravel = 0.01f;       // m a handle already at (or past) its full back still gives, so a pull reads as one
+        public static float minHandleTravel = 0.01f;       // m a handle already at (or past) its full back can still move, so the pull registers
         public static float handleFullPull = 0.9f;         // share of handleTravel that counts as all the way back
-        public static float handleLockedBackTravel = 0.02f; // m a handle on the bolt has left to give, with the bolt already locked back
-        public static float underGunPullGain = 1.6f;        // the off hand on a handle on the bolt: handle travel per controller travel (1 = one to one).
-                                                            // That hand reaches under the gun and would run into the other controller over a full pull.
+        public static float handleLockedBackTravel = 0.02f; // m of travel left for a handle on the bolt when the bolt is already locked back
+        public static float underGunPullGain = 1.6f;        // off hand on a handle on the bolt: handle travel per controller travel (1 = one to one).
+                                                            // That hand reaches under the gun and would hit the other controller over a full pull.
         public static float boltLockOnDistance = 0.003f;   // m a part has to come back before it's taken as the bolt the round follows
 
         public static bool HoldingChargingHandle { get; private set; }
-        public static bool OffHandAtChargingHandle { get; private set; }   // the trigger is the handle's here, not a weapon-part interaction
+        public static bool OffHandAtChargingHandle { get; private set; }   // the trigger here works the handle, not a weapon-part interaction
         public static bool HandleInGunHand => HoldingChargingHandle && handleInGunHand;
 
         public static bool BoltLockedBack
@@ -44,7 +44,7 @@ namespace TarkovVR.Source.Weapons
         }
 
         private static bool handleInGunHand;                // which hand took it; only meaningful while holding it
-        // The gun hand on the handle by a pin of its own, not the shared hand latch (PinGunHandOnHandle)
+        // The gun hand can hold the handle with its own pin instead of the shared hand latch (PinGunHandOnHandle)
         private static Transform handleHandPin;
         private static RootMotion.FinalIK.LimbIK handleHandArm;
         private static bool handleHandPinned;
@@ -53,12 +53,12 @@ namespace TarkovVR.Source.Weapons
         private static Transform handleView;                // the handle model, a direct child of that bone
         private static Vector3 handleRestLocalPosition;
         private static Vector3 handleAxisInSlot;            // back toward the stock, in the slot bone's frame
-        private static Vector3 handAtHandleGrabInSlot;      // the controller when the handle was grabbed
+        private static Vector3 handAtHandleGrabInSlot;      // the controller position when the handle was grabbed
         private static float handlePull;                    // m back from rest
         private static bool handleFullyBack;
 
-        // The chambered round while the bolt is open: Tarkov's round model sits on the patron_in_weapon bone, shown and
-        // hidden by the clips' events
+        // The chambered round while the bolt is open. Tarkov's round model sits on the patron_in_weapon bone and is shown and
+        // hidden by the clips' events.
         private static bool showingChamber;
         private static bool chamberShownEmpty;              // the pull threw the round out, or it's still in the magazine: empty until the bolt goes forward
         private static Transform chamberBone;
@@ -77,7 +77,7 @@ namespace TarkovVR.Source.Weapons
         private static Transform handleFrame;
         private static Transform handleRider;
 
-        // The gun's handle, looked up again now and then (mods only change in the inventory)
+        // The gun's handle, looked up again every couple of seconds (mods only change in the inventory)
         private static FirearmController handleSlotFor;
         private static float handleSlotLookupTime;
         private static Transform foundHandleBone;           // the mod_charge bone
@@ -91,8 +91,8 @@ namespace TarkovVR.Source.Weapons
         private static MeshFilter[] handleMeshes;
         private static GameObject handleZoneViz;
 
-        // The hand on the handle, read from the gun's rack clip while the handle is back: in the mod_charge bone's frame, which
-        // the clip moves back with the handle (ours stays put and the model moves, so it's the bone's pose with the handle at rest)
+        // The hand pose on the handle, read from the gun's rack clip while the handle is back. It's in the mod_charge bone's frame,
+        // which the clip moves back with the handle. Ours stays put and the model moves, so this is the bone's pose with the handle at rest.
         private sealed class HandleHold
         {
             public Vector3 position;
@@ -101,7 +101,8 @@ namespace TarkovVR.Source.Weapons
             public float travel;            // m; 0 = handleTravel
         }
 
-        // By animation set; the other guns' come from ReloadHolds.json. m4a1_reload_charge_0 at 0.6 s: thumb and index on the left wing of the T.
+        // By animation set; the other guns' holds come from ReloadHolds.json. m4a1 = m4a1_reload_charge_0 at 0.6 s: thumb and index on the
+        // left wing of the T.
         private static readonly Dictionary<string, HandleHold> handleHolds = new Dictionary<string, HandleHold>
         {
             {
@@ -123,32 +124,33 @@ namespace TarkovVR.Source.Weapons
         };
         // Same for the gun hand, from a clip where the right hand racks; all from ReloadHolds.json
         private static readonly Dictionary<string, HandleHold> gunHandHandleHolds = new Dictionary<string, HandleHold>();
-        // Another way to hold the same handle (an AK's from over the top or from below): whichever the hand is turned closest to as it takes it
+        // Other ways to hold the same handle (an AK's from over the top or from below). The one the hand is turned closest to at the grab is used.
         private static readonly Dictionary<string, List<HandleHold>> handleAlternates = new Dictionary<string, List<HandleHold>>();
         private static readonly Dictionary<string, List<HandleHold>> gunHandHandleAlternates = new Dictionary<string, List<HandleHold>>();
         // A handle with no slot whose rig bone isn't named mod_charge (MP7: weapon_charghing_handle, sic), by animation set
         private static readonly Dictionary<string, string> handleBoneNames = new Dictionary<string, string>();
-        // Of those, a knob riding the bolt or carrier, which is what comes back (9A-91, G36), and a bolt that's the handle itself with
-        // no knob of its own, whose back end is inside the receiver: grabbed where its clip's fingers close on it, in the bone's frame (PPSh, PP-91)
+        // Of those: the bolt or carrier a knob rides on, which is what comes back (9A-91, G36). And for a bolt that is the handle itself,
+        // with no knob of its own and its back end inside the receiver: the grab point where its clip's fingers close on it, in the bone's
+        // frame (PPSh, PP-91).
         private static readonly Dictionary<string, string> handleCarrierNames = new Dictionary<string, string>();
         private static readonly Dictionary<string, Vector3> handleGrabPoints = new Dictionary<string, Vector3>();
-        // Where the carrier those handles move is at the rack's full back: the pull stops there from wherever it is at the grab (an open
-        // bolt rests cocked: the PPSh's 2 cm short of full back, and its whole travel from there went out of the back of the gun)
+        // Where the carrier of those handles sits at the rack's full back. The pull stops there, from wherever the carrier is at the grab:
+        // an open bolt rests cocked (the PPSh's 2 cm short of full back), and a full handle travel from there would leave the back of the gun.
         private static readonly Dictionary<string, SavedHandleFullBack> handleFullBacks = new Dictionary<string, SavedHandleFullBack>();
-        // How far the handle comes back where no clip hand rides it to say (the RPD's, from its charge clip)
+        // How far the handle comes back, for guns with no clip hand pose on it to tell (the RPD's, from its charge clip)
         private static readonly Dictionary<string, float> handleTravels = new Dictionary<string, float>();
         private static Vector3? foundHandleGrabLocal;
-        // Ambidextrous, a knob each side (the MDR's paddles): left then right, in the handle bone's frame. A zone on each; the left hand's
-        // holds are on the left one, the right hand's (or their mirror) on the right.
+        // Ambidextrous handles with a knob each side (the MDR's paddles): left then right, in the handle bone's frame. Each has a grab zone.
+        // The left hand's holds are on the left knob, the right hand's (or their mirror) on the right.
         private static readonly Dictionary<string, Vector3[]> handleKnobs = new Dictionary<string, Vector3[]>();
         private static Vector3[] foundHandleKnobs;
         private static int grabbedKnob;                     // which of those the hand took, while holding
-        // The left hand over the top of the handle, for a palm above it (the MDR's, moved over from the M4's: every MDR clip racks underhand)
+        // A left-hand hold over the top of the handle, used when the palm is above it (the MDR's is the M4's: every MDR clip racks underhand)
         private static readonly Dictionary<string, HandleHold> overTopHandleHolds = new Dictionary<string, HandleHold>();
         public static float handleMirrorPlaneTolerance = 0.015f;   // m a grab point can sit off the gun's centre plane and still take the left hand's hold mirrored (a T)
         private static GameObject otherKnobZoneViz;
-        // The knob the hand took folds out about its pin (the MDR's paddles, 45 deg in its clips; the right one's the left's mirrored;
-        // a handle with one, the Vector's, 83.5 deg: grabbedKnob 0), and back once let go
+        // The knob the hand takes folds out about its pin, and back once let go. The MDR's paddles fold 45 deg in its clips (the right one
+        // is the left's mirrored); a handle with one knob, the Vector's, folds 83.5 deg (grabbedKnob 0).
         private sealed class KnobFold
         {
             public string bone;
@@ -163,11 +165,11 @@ namespace TarkovVR.Source.Weapons
         private static FirearmController foldingKnobFor;
         private static float knobFoldShown;
         private static bool knobFoldWasOut;                 // held out last frame (its fold back plays a sound)
-        private static Vector3[] handleHandFingers;         // null = no clip read for this gun yet: the magazine pull's pinch
+        private static Vector3[] handleHandFingers;         // null = no clip pose for this gun; the fingers use the magazine pull's pinch
         private static float heldHandleTravel;              // m this gun's handle comes back
 
-        // The gun a magazine went into with its bolt forward on an empty chamber: Tarkov's insert chambered the top round,
-        // but it's still in the magazine until the handle is racked. On the weapon, so it holds across a weapon swap.
+        // Guns a magazine went into with the bolt forward on an empty chamber. Tarkov's insert chambered the top round, but it counts
+        // as still in the magazine until the handle is racked. Kept per weapon, so it survives a weapon swap.
         private static readonly HashSet<Weapon> weaponsWaitingForRack = new HashSet<Weapon>();
         private static bool insertNeedsRack;                // the insert under way went in on a closed bolt and an empty chamber
 
@@ -184,10 +186,10 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // Tarkov's draw (SpawnOperation.Start) chambers a round into an empty chamber, and the animator takes its racking draw while it
-        // still reads the chamber as empty (SPAWN -> OUT TO IDLE ARM on AmmoInChamber < 1). Placing the round now makes it take the plain
-        // draw; the round then waits for the hand, like one a magazine brought in. A gun the hand can't rack keeps Tarkov's.
-        // Not TryGetChargingHandle: the gun isn't on the rig yet, and that remembers what it finds.
+        // Tarkov's draw (SpawnOperation.Start) chambers a round into an empty chamber, and the animator picks its racking draw while it
+        // still reads the chamber as empty (SPAWN -> OUT TO IDLE ARM on AmmoInChamber < 1). Placing the round now makes it pick the plain
+        // draw, and the round then waits for the hand, like one a magazine brought in. A gun the hand can't rack keeps Tarkov's draw.
+        // This doesn't use TryGetChargingHandle: the gun isn't on the rig yet, and TryGetChargingHandle caches what it finds.
         public static void TakeRackOutOfDraw(FirearmController.SpawnOperation spawnOperation)
         {
             try
@@ -222,8 +224,8 @@ namespace TarkovVR.Source.Weapons
             string family = AnimationFamily(firearmController);
             if (slideBones.ContainsKey(family) || handleHolds.ContainsKey(family) || handleBoneNames.ContainsKey(family))
                 return true;
-            // A handle on the bolt carrier that only the gun hand's clips rack, its slot for an add-on handle empty (AK-50).
-            // The hand takes the carrier's bone; a bolt-action's is the bolt, which the hand doesn't work.
+            // A handle on the bolt carrier that only the gun hand's clips rack, with its add-on handle slot empty (AK-50).
+            // The hand takes the carrier's bone. On a bolt-action that bone is the bolt, which isn't worked here.
             if (gunHandHandleHolds.ContainsKey(family) && !weapon.BoltAction)
                 return true;
             foreach (Slot slot in weapon.AllSlots)
@@ -238,7 +240,7 @@ namespace TarkovVR.Source.Weapons
 
         private static bool TryGetChargingHandle(FirearmController firearmController, Weapon weapon)
         {
-            // (the gun's model goes before its controller at a raid's end: no views to look in)
+            // At a raid's end the gun's model is destroyed before its controller, leaving no views to look in
             if (weapon == null || firearmController == null || firearmController.Firearms == null || firearmController.Firearms.ContainerCollectionView == null)
                 return false;
             if (handleSlotFor != firearmController || Time.time > handleSlotLookupTime)
@@ -271,8 +273,8 @@ namespace TarkovVR.Source.Weapons
                     ? FindRigBone(firearmController, handleBoneName) : null;
                 if (namedHandle != null)
                 {
-                    // That bone is the handle itself, moving: worked like a carrier (our frame on the gun body, the bone follows the
-                    // hand), as a pistol's slide. Measured against the bone, the pull would follow its own movement (the hand shakes).
+                    // That bone is the moving handle itself. It is worked like a carrier (our frame on the gun body, the bone follows the
+                    // hand), as a pistol's slide is. Measured against the bone, the pull would feed back on its own movement and shake the hand.
                     foundHandleBone = namedHandle;
                     foundHandleModel = namedHandle;
                     Transform carrier = handleCarrierNames.TryGetValue(family, out string carrierName) ? FindRigBone(firearmController, carrierName) : null;
@@ -284,7 +286,7 @@ namespace TarkovVR.Source.Weapons
                 }
                 else if (foundHandleBone == null)
                 {
-                    // A pistol: the slide is the handle and its own carrier, its meshes say where the back of it is
+                    // A pistol: the slide is the handle and its own carrier, and its meshes give where its back end is
                     if (slideBones.TryGetValue(family, out string slideBone))
                         foundHandleBone = FindRigBone(firearmController, slideBone);
                     foundHandleModel = foundHandleBone;
@@ -296,14 +298,14 @@ namespace TarkovVR.Source.Weapons
                     if (handleParent != null && (handleParent.name.IndexOf("bolt", System.StringComparison.OrdinalIgnoreCase) >= 0
                         || handleParent.name.IndexOf("charg", System.StringComparison.OrdinalIgnoreCase) >= 0))
                         foundHandleCarrier = handleParent;
-                    // The bolt pose moves this bone, and the pull would be measured against that: the pose follows the pull, the pull
-                    // follows the pose (MP5: the hand shakes on the handle). Worked like a carrier, nothing measures from it.
+                    // The bolt pose moves this bone. Measuring the pull against it would feed back (the pose follows the pull, the pull
+                    // follows the pose; on the MP5 the hand shakes on the handle), so it's worked like a carrier and nothing measures from it.
                     else if (handleMovesWithBolt.Contains(family))
                         foundHandleCarrier = foundHandleBone;
                 }
             }
-            // An empty slot on a gun whose handle slides on its own: there's nothing there to take hold of. A tube shotgun worked by its pump
-            // (the M3 in pump mode): its handle isn't what works the action then.
+            // An empty slot on a gun whose handle slides on its own (not on the carrier): there's nothing to take hold of. A tube shotgun
+            // worked by its pump (the M3 in pump mode) doesn't use its handle to work the action.
             return foundHandleBone != null && (foundHandleModel != null || foundHandleCarrier != null) && !ShotgunInPumpMode(firearmController);
         }
 
@@ -328,8 +330,8 @@ namespace TarkovVR.Source.Weapons
             return found;
         }
 
-        // Where the hand takes it: the back of the fitted handle, or the bone where a handle built into the carrier sits. A pair of knobs:
-        // the one taken while holding, else the left.
+        // Where the hand grabs it: the back of the fitted handle, or the bone where a handle built into the carrier sits. With a pair of
+        // knobs: the one taken while holding, else the left one.
         private static Vector3 ChargingHandleGrabPoint(Vector3 backWorld)
         {
             if (foundHandleKnobs != null)
@@ -352,8 +354,8 @@ namespace TarkovVR.Source.Weapons
             return foundHandleKnobs != null ? HandleKnobPoint(zone) : ChargingHandleGrabPoint(backWorld);
         }
 
-        // On a jammed gun only when the hands clear it (VRReloadController.Malfunctions); else that's the interaction menu's, which this
-        // zone would keep from coming up
+        // On a jammed gun, only when the jam is one the hands clear (VRReloadController.Malfunctions). Otherwise clearing it is the
+        // interaction menu's job, and this zone would keep the menu from coming up.
         private static bool InChargingHandleZone(FirearmController firearmController, Weapon weapon, bool gunHand = false)
         {
             if (!HandsMayWorkAction(firearmController, weapon) || !TryGetChargingHandle(firearmController, weapon))
@@ -368,7 +370,7 @@ namespace TarkovVR.Source.Weapons
             return false;
         }
 
-        // The knob the hand is nearest of a pair
+        // Which knob of a pair the hand is nearest
         private static int NearestHandleKnob(bool gunHand, Vector3 backWorld)
         {
             int nearest = 0;
@@ -391,7 +393,7 @@ namespace TarkovVR.Source.Weapons
             return HandTouchesCapsule(false, start, end, radius);
         }
 
-        // Any part of the hand counts: a single point reads as out with the fingers plainly in the zone
+        // Any part of the hand counts: a single point can read as outside while the fingers are clearly in the zone
         private static readonly List<Vector3> handTouchPoints = new List<Vector3>();
         private static bool HandTouchesCapsule(bool gunHand, Vector3 start, Vector3 end, float radius)
         {
@@ -410,8 +412,8 @@ namespace TarkovVR.Source.Weapons
             return nearest;
         }
 
-        // The back end of the handle (the T on an AR): the handle model is a long bar reaching forward into the receiver,
-        // so its middle would be nowhere near where you grab it. The furthest point of its meshes' boxes toward the stock.
+        // The back end of the handle (the T on an AR): the furthest point of its meshes' boxes toward the stock. The handle model is a
+        // long bar reaching forward into the receiver, so its middle is nowhere near where you grab it.
         private static Vector3 HandleGrabPoint(Transform view, Vector3 backWorld)
         {
             if (handleMeshesFor != view)
@@ -451,7 +453,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (!TryGetChargingHandle(firearmController, weapon))
                 return;
-            // Mid press check (the off hand coming to rack it): the slide back to rest before it's measured as the handle's rest
+            // During a press check (the off hand coming to rack it): put the slide back to rest before it's measured as the handle's rest
             if (PressCheckActive)
                 EndPressCheck();
 
@@ -498,11 +500,11 @@ namespace TarkovVR.Source.Weapons
                 StartKnobFold(firearmController, family);
             handleHolds.TryGetValue(family, out HandleHold offHandHold);
             gunHandHandleHolds.TryGetValue(family, out HandleHold gunHandHold);
-            // By the arm, not the controller: with the gun in the left hand the off hand is the right hand, and racks with the right
-            // hand's clip (the side handle's hold is the left hand's: the right one takes it where it grabs)
+            // Chosen by arm, not by controller: with the gun in the left hand the off hand is the right hand, and racks with the right
+            // hand's clip. The side handle's hold is the left hand's; the right hand takes the side handle where it grabs.
             bool rightArm = OnRightArm(gunHand);
             HandleHold handleHold = sideHandle ? (rightArm ? null : heldSideHandle.hold) : rightArm ? gunHandHold : offHandHold;
-            // The same handle goes back as far whichever hand has it, and a gun's clips may only ever rack with one
+            // The handle travels as far whichever hand has it, and a gun's clips may only rack with one hand
             HandleHold otherHandHold = sideHandle ? null : rightArm ? offHandHold : gunHandHold;
             if (handleHold != null && handleHold.travel > 0f)
                 heldHandleTravel = handleHold.travel;
@@ -510,7 +512,7 @@ namespace TarkovVR.Source.Weapons
                 heldHandleTravel = otherHandHold.travel;
             if (handleCarrier != null && BoltLockedBack)
                 heldHandleTravel = Mathf.Min(heldHandleTravel, handleLockedBackTravel);
-            // What's left to its full back from where it is now (an open bolt cocked: the PPSh's 2 cm)
+            // Only the travel left to its full back from where it is now (a cocked open bolt: the PPSh's 2 cm)
             if (handleCarrier != null && handleCarrierAxis.sqrMagnitude > 1e-8f && handleFullBacks.TryGetValue(family, out SavedHandleFullBack carrierFullBack)
                 && carrierFullBack.bone == handleCarrier.name)
             {
@@ -538,18 +540,19 @@ namespace TarkovVR.Source.Weapons
                     $"round model shown: {(patron != null ? $"{patron.gameObject.activeSelf} ({patron.childCount} child)" : "no patron_in_weapon")}, gun hand: {gunHand}, hold from a clip: {grip != null}, " +
                     $"knob: {(foundHandleKnobs != null ? (grabbedKnob == 0 ? "left" : "right") : "one")}, carrier: {(handleCarrier != null ? handleCarrier.name : "none")}");
             }
-            // Taking it: a knob that folds out as it's taken (the MDR's paddles, the Spear's side handle) has its own sound (HandleOpen =
-            // a handle grab clip on both), else the gun's grab sound (a stuck one's on a hard slide)
+            // A knob that folds out as it's taken (the MDR's paddles, the Spear's side handle) has its own sound (HandleOpen is a handle
+            // grab clip on both). Otherwise the gun's grab sound plays (the stuck grab sound on a hard-slide malfunction).
             bool knobFolds = (foldingKnob != null && foldingKnobFor == firearmController) || heldSideHandle != null;
             if (!(knobFolds && PlayFirstGunSound(firearmController, HandleSoundHand, "HandleOpen")))
                 PlayGrabSound(firearmController, HandleSoundHand);
             PulseHandleHand(0.3f, 0.04f);
         }
 
-        // The hold this arm takes the handle with; null = the hand stays where it took hold. Its own clip's, the one the hand is turned
-        // closest to - or, with the palm above the knob, the over-the-top one where the gun has it. No clip of the right hand's: the left
-        // hand's mirrored across the handle where that maps the handle onto itself (a T on the gun's centre plane, a pair of knobs).
-        // A pair of knobs: the left hand's holds are on the left one, the right hand's on the right; the other knob is taken where the hand is.
+        // The hold this arm takes the handle with; null = the hand stays where it grabbed. It is the arm's own clip hold the hand is turned
+        // closest to, or the over-the-top hold when the palm is above the knob and the gun has one. With no right-hand clip, the left hand's
+        // hold is mirrored across the handle where that maps the handle onto itself (a T on the gun's centre plane, or a pair of knobs).
+        // With a pair of knobs the left hand's holds are on the left one and the right hand's on the right; the other knob is taken where
+        // the hand is.
         private static HandleHold HandleGripFor(FirearmController firearmController, bool rightArm, string family, HandleHold offHandHold, HandleHold gunHandHold, Vector3 backWorld)
         {
             if (foundHandleKnobs != null && foundHandleKnobs.Length > 1 && grabbedKnob != (rightArm ? 1 : 0))
@@ -592,15 +595,15 @@ namespace TarkovVR.Source.Weapons
             return HoldHandIsTurnedTo(main, others);
         }
 
-        // The palm above the point it took (the gun's up: WeaponRoot +z, the sights' side)
+        // True if the palm is above the grab point (the gun's up is WeaponRoot +z, the sights' side)
         private static bool PalmAboveHandle(FirearmController firearmController, bool rightArm, Vector3 backWorld)
         {
             Vector3 palm = VRGlobals.handsInteractionController != null ? VRGlobals.handsInteractionController.PalmOrigin(dominant: rightArm) : LatchedHandRig.position;
             return Vector3.Dot(palm - ChargingHandleGrabPoint(backWorld), firearmController.WeaponRoot.forward) > 0f;
         }
 
-        // The plane mirroring the handle onto itself, in the hold frame (handleBone): between a pair of knobs, or the gun's centre plane
-        // with the grab point on it
+        // The plane that mirrors the handle onto itself, in the hold frame (handleBone): halfway between a pair of knobs, or the gun's
+        // centre plane if the grab point lies on it
         private static bool TryHandleMirrorPlane(Vector3 backWorld, out Vector3 normal, out Vector3 point)
         {
             if (foundHandleKnobs != null && foundHandleKnobs.Length > 1)
@@ -620,8 +623,8 @@ namespace TarkovVR.Source.Weapons
             return Mathf.Abs(Vector3.Dot(grabPoint - point, normal)) <= handleMirrorPlaneTolerance;
         }
 
-        // A left-hand hold as the right hand's mirror image of it through that plane: the palm reflected and turned into the right palm's
-        // frame (HandMirror.TryMirrorPalm), the fingers mirrored. Null until HandMirror has the hands mesh.
+        // Turns a left-hand hold into its mirror image for the right hand through that plane: the palm is reflected and turned into the
+        // right palm's frame (HandMirror.TryMirrorPalm), and the fingers are mirrored. Returns null until HandMirror has the hands mesh.
         private static HandleHold MirroredHandleHold(HandleHold hold, Vector3 normal, Vector3 point)
         {
             if (hold == null || !TarkovVR.Source.Player.Body.HandMirror.TryMirrorPalm(Quaternion.Euler(hold.rotation), normal, rightToLeft: false, out Quaternion rotation))
@@ -686,12 +689,12 @@ namespace TarkovVR.Source.Weapons
             knobFoldWasOut = false;
         }
 
-        // LateUpdate, after the animator: out while the handle is held, back after
+        // Runs in LateUpdate, after the animator: the knob is folded out while the handle is held, and back after
         public static void ApplyKnobFold()
         {
             if (foldingKnob == null || foldingKnobFold == null)
                 return;
-            // Another gun in the hands: the old one's knob straight back
+            // Another gun in the hands: put the old one's knob straight back
             if (foldingKnobFor != VRGlobals.firearmController)
             {
                 PutFoldingKnobBack();
@@ -708,8 +711,8 @@ namespace TarkovVR.Source.Weapons
                 PutFoldingKnobBack();
         }
 
-        // The carrier is animated and we move it, so the pull can't be measured against it: two transforms of ours on the gun's
-        // body, where the mod_charge bone sits now. The hand rides the second; the carrier follows in ApplyHandleCarrier.
+        // The carrier is animated and we move it, so the pull can't be measured against it. Instead two transforms of ours sit on the gun's
+        // body where the mod_charge bone is now. The hand follows the second one, and the carrier follows it in ApplyHandleCarrier.
         private static void FrameHandleOnCarrier(Vector3 backWorld)
         {
             EnsureHandleFrame();
@@ -734,7 +737,7 @@ namespace TarkovVR.Source.Weapons
             }
         }
 
-        // LateUpdate, after the animator has posed the carrier this frame
+        // Runs in LateUpdate, after the animator has posed the carrier this frame
         public static void ApplyHandleCarrier()
         {
             if (!HoldingChargingHandle)
@@ -752,13 +755,15 @@ namespace TarkovVR.Source.Weapons
                 return false;
             if (VRGlobals.firearmController == null || VRGlobals.firearmController != handleForFirearm)
                 return false;
-            // The grip taken back some other way; the off hand letting go too leaves the gun on this hand (ChestHang.HandleHeld)
+            // The gun hand keeps the handle only while the off hand holds the gun (SupportOnly), or while the gun stays on this hand after
+            // the off hand let go too (ChestHang.HandleHeld). Otherwise the grip was taken back some other way.
             if (handleInGunHand && !ChestHang.SupportOnly && !ChestHang.HandleHeld)
                 return false;
-            // The gun went from one hand to the other: that arm isn't this hand's any more (pinned: the latch is the other hand's to use)
+            // The gun went from one hand to the other, so that arm isn't this hand's any more. Not checked when pinned: the latch then
+            // belongs to the other hand.
             if (!handleHandPinned && latchedOnRightArm != OnRightArm(handleInGunHand))
                 return false;
-            // Our own operations run for a frame while the handle is back: the rechamber, a magazine out or in (an "Iraqi" reload)
+            // Our own operations may run for a frame while the handle is back: the rechamber, or a magazine out or in (an "Iraqi" reload)
             if (!(handleForFirearm.CurrentOperation is FirearmController.Idling) && expectedOperation == ExpectedOperation.None)
                 return false;
             // The M3 switched to pump mode meanwhile
@@ -771,7 +776,7 @@ namespace TarkovVR.Source.Weapons
         private static void UpdateChargingHandle(bool triggerReleased)
         {
             Vector3 axis = handleBone.TransformDirection(handleAxisInSlot).normalized;
-            // The hand holding it: pinned, the latch may be the other hand's by now
+            // The hand holding it. When pinned, the latch may belong to the other hand by now.
             Transform handRig = handleHandPinned ? HandRig(handleInGunHand) : LatchedHandRig;
             bool handOnRightArm = handleHandPinned ? OnRightArm(handleInGunHand) : latchedOnRightArm;
             Vector3 handDelta = handRig.position - handleBone.TransformPoint(handAtHandleGrabInSlot);
@@ -791,13 +796,13 @@ namespace TarkovVR.Source.Weapons
                 BoltComesBack(handleForFirearm);
             }
 
-            // After the rechamber above: its skip puts the bolt pose back to the catch flag, this frame would flash it closed
+            // Done after the rechamber above: skipping it puts the bolt pose back to the catch flag, which would flash the bolt closed this frame
             FirearmsAnimator firearmsAnimator = handleForFirearm.FirearmsAnimator;
             float boltOpen = Mathf.Clamp01(handlePull / (heldHandleTravel * handleFullPull));
             SetBoltOpen(firearmsAnimator, firearmsAnimator.GetBoltCatch() ? 1f : boltOpen);
 
-            // Only letting go of the trigger lets go (no distance release). Once it has been all the way back, that slams
-            // the bolt forward whatever the handle does after
+            // Only releasing the trigger lets go (there is no distance release). Once the handle has been all the way back, letting go
+            // slams the bolt forward, whatever the handle does after.
             if (triggerReleased)
                 LetGoOfChargingHandle(snapForward: handleFullyBack);
         }
@@ -816,8 +821,8 @@ namespace TarkovVR.Source.Weapons
                 chamberShownEmpty = true;
                 return;
             }
-            // An empty magazine's follower pushes the catch up under the bolt. (With a round to throw out Tarkov's
-            // rechamber below sets it.)
+            // An empty magazine's follower pushes the catch up under the bolt. With a round to throw out, Tarkov's
+            // rechamber below sets it instead.
             if (!firearmController.FirearmsAnimator.GetBoltCatch() && BoltStaysBack(weapon))
             {
                 if (debugLog)
@@ -839,9 +844,9 @@ namespace TarkovVR.Source.Weapons
             chamberShownEmpty = true;
         }
 
-        // The gun hand off the shared hand latch onto a pin of its own on the handle, where the latch has it (ChestHang.HandleHeld, an
-        // "Iraqi" reload): the off hand's magazine catching the track takes that latch, and one latch for both hands would move the gun
-        // hand's arm onto the magazine and fail the handle hold. The pin rides the handle model like the latch did.
+        // Moves the gun hand off the shared hand latch onto its own pin on the handle, at the latch's pose (ChestHang.HandleHeld, an
+        // "Iraqi" reload). The off hand's magazine catching the track takes that latch, and sharing one latch would move the gun hand's
+        // arm onto the magazine and break the handle hold. The pin follows the handle model like the latch did.
         internal static void PinGunHandOnHandle()
         {
             if (handleHandPinned || !HandleInGunHand || !handLatched || handLatchReleasing || !latchedHandIsGunHand || handLatch == null || handleView == null)
@@ -856,7 +861,7 @@ namespace TarkovVR.Source.Weapons
             armIk.solver.target = handleHandPin;
             handleHandArm = armIk;
             handleHandPinned = true;
-            // The shared latch free for the other hand, as it is (the arm already aims at the pin)
+            // Free the shared latch for the other hand where it is (the arm already aims at the pin)
             handLatch.SetParent(null, worldPositionStays: true);
             handLatched = false;
             handLatchReleasing = false;
@@ -879,11 +884,12 @@ namespace TarkovVR.Source.Weapons
 
         private static void LetGoOfChargingHandle(bool snapForward)
         {
-            // How hard the spring takes it home (the jolt of the slam below): from where it's let go
+            // How hard the spring drives it home (the jolt of the slam below) depends on where it's let go
             float fullPull = heldHandleTravel * handleFullPull;
             float letGoPull = fullPull > 1e-4f ? Mathf.Clamp01(HandlePullAtLetGo(handlePull) / fullPull) : 1f;
             handleSlamFraction = letGoPull;
-            // The hand first, where it is, so it doesn't snap forward with the handle (pinned: its own pin, the latch is the other hand's)
+            // Release the hand first, where it is, so it doesn't snap forward with the handle. A pinned hand releases its own pin (the
+            // latch is the other hand's).
             if (handleHandPinned)
                 UnpinGunHand();
             else
@@ -928,7 +934,7 @@ namespace TarkovVR.Source.Weapons
             else
             {
                 // Let go part way: it springs home from there. A gun with no handle sound plays its bolt's (the AK's handle is its carrier),
-                // only when it came back some: a grab let go isn't a bolt hitting home.
+                // but only if it came back some way: releasing a grab isn't a bolt hitting home.
                 bool cameBack = letGoPull >= partPullSoundMin;
                 if (!PlayFirstGunSound(firearmController, HandleSoundHand, "HandleIn", "SlideIn") && cameBack)
                     PlayFirstGunSound(firearmController, HandleSoundHand, "BoltIn");
@@ -956,9 +962,9 @@ namespace TarkovVR.Source.Weapons
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // Only a bolt this pull opens: one already locked back (a magazine swapped into an empty gun) has its next round
-        // counted in the chamber by Tarkov's insert, but it's still in the magazine until the bolt goes forward. The same
-        // round under a bolt that was forward (WaitingForRack) is hidden while it opens.
+        // Shows the chambered round only for a bolt this pull opens. A bolt already locked back (a magazine swapped into an empty gun)
+        // has its next round counted in the chamber by Tarkov's insert, but it is still in the magazine until the bolt goes forward.
+        // The same round under a bolt that was forward (WaitingForRack) is hidden while the bolt opens.
         private static void BeginChamberView(FirearmController firearmController, Weapon weapon)
         {
             chamberShownEmpty = WaitingForRack(weapon);
@@ -980,8 +986,8 @@ namespace TarkovVR.Source.Weapons
             boltPart = null;
         }
 
-        // LateUpdate, after the animator has posed the bolt this frame (read in Update it trails a frame behind).
-        // The round rides the bolt face; the model itself isn't animated, so its offset stays until the next write.
+        // Runs in LateUpdate, after the animator has posed the bolt this frame (read in Update it lags a frame behind).
+        // The round moves with the bolt face. The model itself isn't animated, so its offset stays until the next write.
         // Hidden once the rechamber has thrown it out (its model goes back to Tarkov's pool), and while it's still in the magazine.
         public static void ApplyChamberView()
         {
@@ -1001,11 +1007,11 @@ namespace TarkovVR.Source.Weapons
             chamberedRound.localPosition = chamberedRoundRestLocalPosition + BoltMovementInChamber(weaponRoot.up);
         }
 
-        // Every part of the gun, and where it sits in the chamber bone's frame with the bolt closed (the grab's first frame).
-        // The chamber frame, not the gun's root: the receiver sways against the root with the idle breathing and the chamber
-        // sways with it, so only the bolt's own travel is left (against the root the round bobs).
+        // Records every part of the gun and where it sits in the chamber bone's frame with the bolt closed (the grab's first frame).
+        // The chamber frame is used, not the gun's root: the receiver sways against the root with the idle breathing and the chamber
+        // sways with it, so only the bolt's own travel is left (measured against the root, the round bobs).
         // Left out: the handle and the round (we move those), the gun's own arm and camera bones, and its hand markers and elbow
-        // goals (every clip moves those, the walk too: the round would follow a hand).
+        // goals (every clip and the walk move those, so the round would follow a hand).
         private static void RecordBoltParts(Transform weaponRoot)
         {
             Transform[] parts = weaponRoot.GetComponentsInChildren<Transform>();
@@ -1034,8 +1040,8 @@ namespace TarkovVR.Source.Weapons
                 && name.IndexOf("bend_goal", System.StringComparison.OrdinalIgnoreCase) < 0;
         }
 
-        // How far the round comes back: the bolt's travel along the bore only (a round in the chamber can't move any other way),
-        // and none before the handle moves. In the chamber bone's frame, = the round's.
+        // How far the round comes back: only the bolt's travel along the bore (a round in the chamber can't move any other way),
+        // and nothing before the handle moves. In the chamber bone's frame, which is the round's.
         private static Vector3 BoltMovementInChamber(Vector3 backWorld)
         {
             if (handlePull <= 0f)
@@ -1044,8 +1050,8 @@ namespace TarkovVR.Source.Weapons
             return boreBack * Mathf.Max(0f, Vector3.Dot(BoltPartMovement(backWorld), boreBack));
         }
 
-        // The bolt = the part that has come furthest back along the barrel (the locked-back pose moves the whole bolt
-        // group together); followed on its own once it's clearly moving.
+        // The bolt is the part that has come furthest back along the barrel (the locked-back pose moves the whole bolt
+        // group together). Once it is clearly moving, that part alone is followed.
         private static Vector3 BoltPartMovement(Vector3 backWorld)
         {
             if (boltPart == null)
@@ -1124,8 +1130,8 @@ namespace TarkovVR.Source.Weapons
             }
         }
 
-        // The bolt going forward takes the round a magazine brought in on a closed bolt into the chamber, however it was let go:
-        // the handle from a full pull, or slapped (an MP5's out of its notch, which it went into from that same pull)
+        // The bolt going forward takes the round a magazine brought in on a closed bolt into the chamber, however it was released:
+        // the handle let go after a full pull, or slapped (an MP5's out of its notch, which it entered on that same pull).
         private static bool BoltStripsRound(Weapon weapon)
         {
             if (!WaitingForRack(weapon) || weapon.GetCurrentMagazine() == null)

@@ -20,7 +20,7 @@ namespace TarkovVR.Source.XR
         public static float fingerFistDegrees = 250f;
         public static float thumbOpenDegrees = 10f;
         public static float thumbFistDegrees = 100f;
-        public static bool indexControllersOnly = true;    // SteamVR treated Touch as estimated (baked poses), keep that
+        public static bool indexControllersOnly = true;    // SteamVR rates Touch as estimated (baked poses): only Index gets curls
         public static bool debugLog = false;               // once a second: bend + curl per finger
 
         private static OpenXRHandTracking instance;

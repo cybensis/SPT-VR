@@ -20,10 +20,10 @@ namespace TarkovVR.Patches.Visuals
 
 
         // Tarkov's clouds (CloudController + CloudLayerRenderer, a port of HDRP's Cloud Layer) are a full-screen pass at
-        // AfterForwardOpaque whose only view input is _PixelCoordToViewDirWS (pixel -> sky direction; the shader reads no camera
-        // position and no depth). Vanilla builds it from the camera's mono projection with a centred lens: in VR each eye's
-        // frustum is off-centre, so both eyes got one pixel -> direction map = the clouds in a different place per eye. Rebuilt
-        // per eye below (OnPreRenderCamera runs once per eye in MultiPass). CloudSix skips RenderClouds itself.
+        // AfterForwardOpaque. Their only view input is _PixelCoordToViewDirWS, which maps a pixel to a sky direction; the shader reads
+        // no camera position and no depth. Vanilla builds it from the camera's mono projection with a centred lens. Each VR eye's
+        // frustum is off-centre, so one shared map puts the clouds in a different place in each eye. This rebuilds it per eye
+        // (OnPreRenderCamera runs once per eye in MultiPass). CloudSix skips RenderClouds itself.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CloudController), "UpdateParameters")]
         private static void CloudDirectionsPerEye(BuiltinSkyParameters parameters, Camera cam)
@@ -33,7 +33,7 @@ namespace TarkovVR.Patches.Visuals
             Camera.StereoscopicEye eye = cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? Camera.StereoscopicEye.Right : Camera.StereoscopicEye.Left;
             Matrix4x4 projection = cam.GetStereoProjectionMatrix(eye);
             Matrix4x4 view = cam.GetStereoViewMatrix(eye);
-            // The eye's frustum the way the helper takes it: vertical FOV, aspect and the off-centre lens shift (m02 / m12 = 2 x shift)
+            // The eye's frustum in the form the helper takes: vertical FOV, aspect and the off-centre lens shift (m02 / m12 = 2 x shift)
             float verticalFov = 2f * Mathf.Atan(1f / projection.m11);
             float aspect = projection.m11 / projection.m00;
             Vector2 lensShift = new Vector2(projection.m02 * 0.5f, projection.m12 * 0.5f);
@@ -51,7 +51,6 @@ namespace TarkovVR.Patches.Visuals
                 __instance.sky.Components.Camera = __instance;
             }
             return false;
-            //__instance.enabled = false;
         }
 
         //Tarkov fog doesn't render correctly in VR so disable it
@@ -59,7 +58,6 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(MBOIT_Scattering), "Start")]
         private static void DisableMBOIT(CloudController __instance)
         {
-            //__instance.enabled = false;
         }
 
         [HarmonyPrefix]
@@ -107,20 +105,6 @@ namespace TarkovVR.Patches.Visuals
 
             fpsPrism.useFog = false;
         }
-        /*
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(PrismEffects), "method_12")]
-        private static void ApplyFXAAAfterAllEffects(PrismEffects __instance, RenderTexture source, RenderTexture destination)
-        {
-            Rendering.LoadFXAAShader();
-            if (Rendering._fxaaMat == null || !__instance.useFog) return;
-
-            RenderTexture temp = RenderTexture.GetTemporary(destination.descriptor);
-            Graphics.Blit(destination, temp);
-            Graphics.Blit(temp, destination, Rendering._fxaaMat);
-            RenderTexture.ReleaseTemporary(temp);
-        }
-        */
         private static void InitializeCameras()
         {
             foreach (var camera in Camera.allCameras)

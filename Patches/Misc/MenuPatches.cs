@@ -65,7 +65,6 @@ namespace TarkovVR.Patches.Misc
             float num = 1.333f;
             if (__instance._image != null)
             {
-                //if (num.ApproxEquals(__instance.image_0.pixelsPerUnitMultiplier))
                 if (Utils.ApproxEquals(num, __instance._image.pixelsPerUnitMultiplier))
                 {
                     return false;
@@ -100,39 +99,6 @@ namespace TarkovVR.Patches.Misc
 
 
 
-        //[HarmonyPatch(typeof(PixelPerfectSpriteScaler), "method_1")]
-        //public static class FixMenuImagesScaling
-        //{
-        //    static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
-        //    {
-        //        var codes = new List<CodeInstruction>(instructions);
-
-        //        for (int i = 0; i < codes.Count; i++)
-        //        {
-        //            // Find the call to get_lossyScale and Math.Min
-        //            if (codes[i].opcode == OpCodes.Callvirt && codes[i].operand is MethodInfo methodInfo && methodInfo.Name == "get_lossyScale")
-        //            {
-        //                // Replace the call to get_lossyScale with the constant value 1.333
-        //                codes[i] = new CodeInstruction(OpCodes.Ldc_R4, 1.333f); // Load constant 1.333
-        //                                                                        // Remove the instructions that load x and y and call Math.Min
-        //                //codes.RemoveAt(i - 1); // Remove stloc.0
-        //                //codes.RemoveAt(i); // Remove stloc.0
-        //                codes.RemoveAt(i + 1); // Remove stloc.0
-        //                codes.RemoveAt(i + 1); // Remove ldloc.0
-        //                codes.RemoveAt(i + 1); // Remove ldfld float32 x
-        //                codes.RemoveAt(i + 1); // Remove ldloc.0
-        //                codes.RemoveAt(i + 1); // Remove ldfld float32 y
-        //                codes.RemoveAt(i + 1); // Remove call Math.Min
-        //                codes.Insert(i + 1, new CodeInstruction(OpCodes.Stloc_1)); // Store the constant into num (stloc.1)
-        //                break;
-        //            }
-        //        }
-
-        //        return codes.AsEnumerable();
-        //    }
-        //}
-
-        
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MainMenuShowOperation), "Init")]
         private static void AddAndFixMenuVRCam(MainMenuShowOperation __instance)
@@ -145,13 +111,10 @@ namespace TarkovVR.Patches.Misc
                 FixMainMenuCamera();
             }
             VRGlobals.commonUi = __instance.commonUI_0.transform;
-            //__instance.commonUI_0.transform.GetChild(0).RectTransform().sizeDelta = new Vector2(2560, 1440);
 
             VRGlobals.preloaderUi = __instance.preloaderUI_0.transform;
-            //__instance.preloaderUI_0.transform.GetChild(0).RectTransform().sizeDelta = new Vector2(2560, 1440);
 
             VRGlobals.menuUi = __instance.menuUI_0.transform;
-            //__instance.menuUI_0.transform.GetChild(0).RectTransform().sizeDelta = new Vector2(2560, 1440);
 
             environmentUi = __instance.environmentUI_0;
 
@@ -239,7 +202,7 @@ namespace TarkovVR.Patches.Misc
                 }
                 else if (!VRGlobals.inGame)
                 {
-                    // Someetimes when coming out of a raid the colliders bounds is way off so fix it here,
+                    // Coming out of a raid, the collider's bounds are sometimes far off. Re-enabling it a frame later fixes them.
                     PreloaderUI.Instance.WaitOneFrame(delegate
                     {
                         BoxCollider menuCollider = menuUIObject.gameObject.GetComponent<BoxCollider>();
@@ -250,29 +213,6 @@ namespace TarkovVR.Patches.Misc
 
                 }
 
-                //3.4132 1.9199 0.0007
-                //if (backingCollider == null)
-                //{
-                //    GameObject colliderHolder = new GameObject("uiMover");
-                //    colliderHolder.transform.parent = environmentUi.transform.root;
-                //    colliderHolder.transform.position = new Vector3(-1.283f, -1001.76f, 0.9748f);
-                //    colliderHolder.transform.localEulerAngles = new Vector3(90, 0, 0);
-                //    backingCollider = colliderHolder.AddComponent<BoxCollider>();
-                //    backingCollider.extents = new Vector3(2222, 2222, 0.5f);
-                //    cubeUiMover = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                //    cubeUiMover.transform.parent = backingCollider.transform;
-                //    cubeUiMover.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
-                //    cubeUiMover.transform.position = new Vector3(0.017f, -1001.26f, 0.8748f);
-                //    menuMover = cubeUiMover.AddComponent<MenuMover>();
-                //    menuMover.raycastReceiver = cubeUiMover.AddComponent<Rigidbody>();
-                //    menuMover.raycastReceiver.isKinematic = true;
-                //    menuMover.menuCollider = menuCollider;
-                //    colliderHolder.layer = LayerMask.NameToLayer("UI");
-                //    cubeUiMover.layer = LayerMask.NameToLayer("UI");
-                //    menuMover.commonUI = VRGlobals.commonUi.gameObject;
-                //    menuMover.preloaderUI = VRGlobals.preloaderUi.gameObject;
-                //    menuMover.menuUI = VRGlobals.menuUi.gameObject;
-                //}
             }
         }
         private static Quaternion camHolderRot;
@@ -285,7 +225,6 @@ namespace TarkovVR.Patches.Misc
                 if (!camContainer.gameObject.GetComponent<SteamVR_TrackedObject>())
                     camContainer.gameObject.AddComponent<SteamVR_TrackedObject>();
 
-                //camContainer.GetComponent<PostProcessLayer>().m_Camera = environmentUi._alignmentCamera;
                 Camera mainMenuCam = camContainer.GetComponent<Camera>();
                 Vector3 newCamHolderPos = mainMenuCam.transform.localPosition * -1;
                 newCamHolderPos.y += 0.1f;
@@ -310,7 +249,6 @@ namespace TarkovVR.Patches.Misc
                         uiCam.clearFlags = CameraClearFlags.Depth;
                         TarkovVR.Patches.Core.VR.InitVRPatches.MakeUiCameraLight(uiCam);
                     }
-                    //mainMenuCam.cullingMask = -1;
                     mainMenuCam.RemoveAllCommandBuffers();
 
                 }
@@ -318,7 +256,6 @@ namespace TarkovVR.Patches.Misc
                 camContainer.GetComponent<CameraMotionBlur>().enabled = false;
                 if (VRGlobals.camRoot == null)
                 {
-                    //Plugin.MyLog.LogWarning("\n\n CharacterControllerSpawner Spawn " + __instance.gameObject + "\n");                   
                     VRGlobals.camHolder = new GameObject("camHolder");
                     VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
                     VRGlobals.camRoot = new GameObject("camRoot");
@@ -348,7 +285,6 @@ namespace TarkovVR.Patches.Misc
                 VRGlobals.menuVRManager = VRGlobals.camHolder.AddComponent<MenuVRManager>();
                 VRGlobals.camRoot.transform.position = new Vector3(0, -999.8f, -0.5f);
                 VRGlobals.menuVRManager.RightHand.transform.parent = Camera.main.transform.parent;
-                //Camera.main.transform.parent.localPosition = Camera.main.transform.localPosition * -1;
             }
         }
 
@@ -372,7 +308,6 @@ namespace TarkovVR.Patches.Misc
             if (environmentUi && environmentUi._currentEnvironment.ScreenAnchors.Length > 0)
             {
                 Transform envProp = environmentUi._currentEnvironment.ScreenAnchors[0].transform;
-                //Plugin.MyLog.LogInfo("Position Environment Props: " + envProp);
                 if (envProp.name == "CameraContainer")
                 {
                     envProp.localPosition = new Vector3(2.8f, 0.81f, 2.86f);
@@ -392,25 +327,22 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(GridView), "CalculateItemLocation")]
         private static bool FixDragHighlighting(GridView __instance, DragItemContext itemContext, ref LocationInGrid __result)
         {
-            //Plugin.MyLog.LogWarning(itemContext.ItemPosition);
             RectTransform rectTransform = __instance.transform.RectTransform();
             Vector2 size = rectTransform.rect.size;
             Vector2 pivot = rectTransform.pivot;
             Vector2 vector = size * pivot;
             Vector2 cellSizes = itemContext.Item.CalculateCellSize();
             Vector3 pointerPos = vrUiInteracter.uiPointerPos;
-            // The highlighted spaces place the corner on the pointer position so I need to move the pointer position
-            // so it highlight from the center of the pointer, and in world space each grid item is about 0.084 away
-            // from each other so use this to center it properly
+            // The highlight puts the item's corner on the pointer, so the position is shifted by half the item's cell size
+            // to center the item on the pointer. In world space each grid cell is about 0.084 apart.
             if (itemContext.ItemRotation == ItemRotation.Vertical)
             {
                 float tempHolder = cellSizes.x;
                 cellSizes.x = cellSizes.y;
                 cellSizes.y = tempHolder;
             }
-            //Vector2 should come out to an x,y value that represents the position in the grid
+            // vector2 ends up as the x, y cell position in the grid
             Vector2 vector2 = rectTransform.InverseTransformPoint(pointerPos);
-            //Plugin.MyLog.LogWarning( vector2 + "   |     " + pointerPos);
 
             vector2 += vector;
             IntVec2 gStruct = itemContext.Item.CalculateRotatedSize(itemContext.ItemRotation);
@@ -421,9 +353,6 @@ namespace TarkovVR.Patches.Misc
             vector2.y = vector2.y + cellSizes.y / 2;
 
             __result = new LocationInGrid(Mathf.Clamp(Mathf.RoundToInt(vector2.x), 0, __instance.Grid.GridWidth), Mathf.Clamp(Mathf.RoundToInt(vector2.y), 0, __instance.Grid.GridHeight), itemContext.ItemRotation);
-            //Quaternion gridRotation = rectTransform.rotation;
-            //vector2 = gridRotation * vector2;
-            // a uiPointerPos of -3.4 and 1.5 = X left most grid and Y in the middle
             return false;
         }
 
@@ -452,7 +381,8 @@ namespace TarkovVR.Patches.Misc
             }
         }
 
-        // Closes the context menu on a VR button press away from it: BSG closes it on mouse click state, which VR controls don't produce
+        // Closes the context menu when a VR button is pressed while pointing away from it. BSG closes it on a mouse click,
+        // which VR controls don't produce.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SimpleContextMenu), "Update")]
         private static void CloseContextMenu(SimpleContextMenu __instance)
@@ -487,7 +417,6 @@ namespace TarkovVR.Patches.Misc
             Vector3 newPos = __instance.transform.localPosition;
             if (__instance.transform.parent.name == "InteractionButtonsContainer")
             {
-                //newPos.z = 0;
                 newPos.x = (__instance.transform.parent as RectTransform).sizeDelta.x;
             }
             __instance.WaitOneFrame(delegate {
@@ -495,7 +424,6 @@ namespace TarkovVR.Patches.Misc
                 {
                     __instance.transform.position = vrUiInteracter.hitObject.transform.position;
                     Vector3 newPos = __instance.transform.localPosition;
-                    //newPos.z = 0;
                     newPos.y = newPos.y + (__instance.RectTransform.sizeDelta.y / 2);
                     newPos.x = (vrUiInteracter.hitObject.transform as RectTransform).sizeDelta.x;
                     if (__instance.transform.parent.name == "ItemInfoWindowTemplate(Clone)")
@@ -504,7 +432,6 @@ namespace TarkovVR.Patches.Misc
                     __instance.transform.localPosition = newPos;
                 }
             });
-            //newPos.z = 0;
             __instance.transform.localPosition = newPos;
             __instance.transform.localScale = new Vector3(1.3f, 1.3f, 1f);
             return false;
@@ -540,7 +467,7 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
-        //possible cause of preloaderui moving
+        // This may be what moves the preloader UI
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ItemUiContext), "EditTag")]
         private static void RepositionMessageWindow(ItemUiContext __instance) 
@@ -591,7 +518,7 @@ namespace TarkovVR.Patches.Misc
             return true;
         }
         
-        // In menus the hand that isn't pointing holds Ctrl (trigger) and Alt (lower face button): MenuModifiers
+        // In menus, the hand that isn't pointing acts as Ctrl (trigger) and Alt (lower face button). See MenuModifiers.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Input), nameof(Input.GetKey), typeof(KeyCode))]
         private static bool GetKeyPrefix(KeyCode key, ref bool __result)
@@ -651,7 +578,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
-        // Stupid hover thingy blocks the autofill from being selected
+        // The trader screen's "Hover" tooltip area blocks the autofill button from being selected
         [HarmonyPostfix]
         [HarmonyPatch(typeof(HoverTooltipArea), "Show")]
         private static void HideTraderAutoFillHover(HoverTooltipArea __instance)
@@ -670,9 +597,6 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(ItemInfoWindowLabels), "Rotate")]
         private static bool ApplyItemDetailWindowViewerRotate(ItemInfoWindowLabels __instance, PointerEventData pointerData)
         {
-            //float xRot = (MenuPatches.vrUiInteracter.pressPosition.x - MenuPatches.vrUiInteracter.uiPointerPos.x) * -1 * 10;
-            //float yRot = (MenuPatches.vrUiInteracter.pressPosition.y - MenuPatches.vrUiInteracter.uiPointerPos.y) * -1 * 10;
-
             Vector3 pressPosition = vrUiInteracter.pressPosition;
             Vector3 currentPointerPosition = vrUiInteracter.uiPointerPos;
 
@@ -693,23 +617,17 @@ namespace TarkovVR.Patches.Misc
         private static bool FixItemDetailWindowDrag(UIDragComponent __instance, PointerEventData eventData)
         {
 
-            //StackTrace stackTrace = new StackTrace();
-            //Plugin.MyLog.LogError("End dragging " + stackTrace.ToString());
             if (__instance.CheckTarget())
             {
-                //__instance._target.localPosition = eventData.position - __instance.vector2_0;
                 __instance._target.position = eventData.worldPosition;
                 Vector3 newPos = __instance._target.localPosition;
                 if (__instance.name != "CharacteristicsPanel")
                 {
-                    //newPos.x -= ((RectTransform)__instance._target.transform).sizeDelta.x / 2;
                     newPos.y -= ((RectTransform)__instance._target.transform).sizeDelta.y / 2;
                 }
                 else {
                     newPos.x -= ((RectTransform)__instance._target.transform).sizeDelta.x / 2;
-                    //newPos.x -= ((RectTransform)__instance._target.transform).sizeDelta.y / 2;
                 }
-                //newPos.z = 0f;
                 __instance._target.localPosition = newPos;
 
             }
@@ -726,14 +644,13 @@ namespace TarkovVR.Patches.Misc
 
         }
 
-        //Inspect window position fix, doesn't seem needed anymore
+        // Places the item inspect window on the canvas. It may no longer be needed.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(InfoWindow), "Show")]
         private static bool PositionItemDisplayWindow(InfoWindow __instance, out WindowContext __result, ItemContext itemContext, IItemOwner itemController, Trader trader, ItemUiContext itemUiContext, global::EFT.UI.ContextInteractions<EItemInfoButton> contextInteractions)
         {
             __instance.Show();
             __instance.ShowGameObject();
-            //__instance.action_1 = onSelectedAction; This doesn't seem to be used anymore
             __instance._itemContext = itemContext.CreateChild(itemContext.Item);
             __instance.UI.AddDisposable(__instance._itemContext);
             __instance._item = __instance._itemContext.Item;
@@ -750,10 +667,8 @@ namespace TarkovVR.Patches.Misc
             __instance.transform.position = new Vector3(0f, -999.9333f, 1f);
             __instance.transform.localPosition = new Vector3(random.Next(-200, 201), random.Next(-200, 201), 0f);
             __instance._itemContext.OnCloseDependentWindow += __instance.Close;
-            //CorrectPosition();
             __instance.WaitOneFrame(delegate
             {
-                //CorrectPosition();
                 System.Random rnd = new System.Random();
                 __instance.transform.position = new Vector3(0f, -999.9333f, 1f);
                 __instance.transform.localPosition = new Vector3(rnd.Next(-200, 201), rnd.Next(-200, 201), 0f);
@@ -839,10 +754,6 @@ namespace TarkovVR.Patches.Misc
                     if (__instance.transform.parent.name == "ScavPlayerMV")
                     {
                         __instance.transform.Find("Camera_matchmaker").GetComponent<Camera>().fieldOfView = 45;
-                        //Transform camBodyViewer = __instance.transform.FindChild("Camera_matchmaker");
-                        //camBodyViewer.position = new Vector3(-0.41f, -999.2792f, 4.68f);
-                        //Transform scavBody = __instance.PlayerBody.transform;
-                        //scavBody.position = new Vector3(0.0818f, -1000.139f, 5.9f);
                     }
                     else if (__instance.transform.parent.name == "PMCPlayerMV")
                     {
@@ -863,24 +774,10 @@ namespace TarkovVR.Patches.Misc
                         Transform camera = __instance.transform.Find("Camera_matchmaker");
                         camera.GetComponent<Camera>().fieldOfView = 35;
                     }
-                    //else if (__instance.transform.parent.parent.name == "UsecPanel")
-                    //{
-                    //    Transform camera = __instance.transform.FindChildRecursive("Camera_matchmaker");
-                    //    camera.localEulerAngles = new Vector3(353, 356, 0);
-                    //    camera.GetComponent<Camera>().fieldOfView = 41;
-                    //    Transform pmcBody = __instance.PlayerBody.transform;
-                    //    pmcBody.localPosition = new Vector3(0.4f,0,0);
-                    //}
-                    //else if (__instance.transform.parent.parent.name == "BearPanel")
-                    //{
-                    //    Transform camera = __instance.transform.FindChildRecursive("Camera_matchmaker");
-                    //    camera.GetComponent<Camera>().fieldOfView = 41;
-                    //}
                 }
             }, TaskScheduler.FromCurrentSynchronizationContext());
 
         }
-        // 0 20.9346 0
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TMP_InputField), "OnPointerClick")]
@@ -1015,7 +912,6 @@ namespace TarkovVR.Patches.Misc
             }
             __instance.WaitOneFrame(delegate
             {
-                //CorrectPosition();
                 System.Random random = new System.Random();
                 __instance.transform.position = new Vector3(0f, -999.9333f, 1f);
                 __instance.transform.localPosition = new Vector3(random.Next(-200, 201), random.Next(-200, 201), 0f);
@@ -1024,10 +920,10 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
-        // The sorting table window: Tarkov keeps it on screen with RectTransform.CorrectPositionResolution (its
-        // OnRectTransformDimensionsChange, and its drag component's OnEnable), which compares the WORLD position with Screen.width /
-        // height in pixels and drops z - on our world-space canvas that throws it off the canvas. Placed on the canvas a frame after
-        // it opens (after the OnEnable clamp), like GridWindow, and the resize clamp skipped.
+        // Tarkov keeps the sorting table window on screen with RectTransform.CorrectPositionResolution (called from its
+        // OnRectTransformDimensionsChange and its drag component's OnEnable). That compares the world position with Screen.width /
+        // height in pixels and drops z, which throws it off our world-space canvas. So the window is placed on the canvas again a frame
+        // after it opens (after the OnEnable clamp), like GridWindow, and the resize clamp is skipped.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SortingTableWindow), nameof(SortingTableWindow.Show), new Type[] { typeof(ItemContext), typeof(SortingTable), typeof(BackEndInventoryController), typeof(ItemUiContext) })]
         private static void PositionSortingTableWindow(SortingTableWindow __instance)
@@ -1047,7 +943,7 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
-        //Dunno what this is for
+        // Centers generic windows when they are shown. Which windows need it is unknown.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Window<WindowContext>), "Show")]
         private static void PositionSomeWindow(Window<WindowContext> __instance)
@@ -1068,7 +964,6 @@ namespace TarkovVR.Patches.Misc
             __instance.transform.parent.gameObject.layer = 5;
             if (VRGlobals.camRoot == null)
             {
-                //Plugin.MyLog.LogWarning("\n\n CharacterControllerSpawner Spawn " + __instance.gameObject + "\n");            
                 VRGlobals.camRoot = new GameObject("camRoot");
                 VRGlobals.camHolder = new GameObject("camHolder");
                 VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
@@ -1098,7 +993,6 @@ namespace TarkovVR.Patches.Misc
             __instance.transform.parent.gameObject.layer = 5;
             if (VRGlobals.camRoot == null)
             {
-                //Plugin.MyLog.LogWarning("\n\n CharacterControllerSpawner Spawn " + __instance.gameObject + "\n");
                 GameObject.Destroy(VRGlobals.camRoot);
                 VRGlobals.camRoot = new GameObject("camRoot");
                 VRGlobals.camHolder = new GameObject("camHolder");
@@ -1129,20 +1023,18 @@ namespace TarkovVR.Patches.Misc
             PositionMenuEnvironmentProps();
             PositionMainMenuUi();
             UIPatches.ShowUiScreens();
-            //VRGlobals.vrPlayer.enabled = false;
             VRGlobals.menuVRManager.enabled = true;
             VRGlobals.menuOpen = true;
-            // Move the right hand over so its synced up with the env UI cam
+            // The right hand goes under the menu camera's parent so it lines up with the menu environment camera
             VRGlobals.vrPlayer.RightHand.transform.parent = mainMenuCam.parent;
 
-            // The FPS cam messes with UI selection so disable it temporarily
-            if (Camera.main.name == "FPS Camera") { 
+            // The FPS camera interferes with UI selection, so it's disabled while the menu is open
+            if (Camera.main.name == "FPS Camera") {
                 VRGlobals.VRCam = Camera.main;
                 Camera.main.enabled = false;
             }
 
-            //Plugin.MyLog.LogWarning("Opening menu in raid");
-            
+
         }
 
         [HarmonyPostfix]
@@ -1150,11 +1042,10 @@ namespace TarkovVR.Patches.Misc
         private static void CloseOverlayWindows(ScreenManager<EFT.UI.Screens.EEftScreenType>.ScreenController<MainMenuBaseScreenController, MenuScreen> __instance)
         {
             UIPatches.HideUiScreens();
-            //VRGlobals.vrPlayer.enabled = true;
             VRGlobals.menuVRManager.enabled = false;
             VRGlobals.menuOpen = false;
             VRGlobals.vrPlayer.RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
-            // Disabling the FPS cam stops it being main so we need to re-enable it another way
+            // A disabled FPS camera is no longer Camera.main, so it's re-enabled through VRCam
             VRGlobals.VRCam.enabled = true;
         }
 
@@ -1165,33 +1056,15 @@ namespace TarkovVR.Patches.Misc
             if (!VRGlobals.inGame || VRGlobals.vrPlayer is HideoutVRPlayerManager)
                 return;
             UIPatches.HideUiScreens();
-            //VRGlobals.vrPlayer.enabled = true;
             VRGlobals.menuVRManager.enabled = false;
             VRGlobals.menuOpen = false;
             VRGlobals.vrPlayer.RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
-            // Disabling the FPS cam stops it being main so we need to re-enable it another way
+            // A disabled FPS camera is no longer Camera.main, so it's re-enabled through VRCam
             VRGlobals.VRCam.enabled = true;
         }
 
-        //[HarmonyPostfix]
-        //[HarmonyPatch(typeof(ReconnectionScreen), "method_5")]
-        //private static void CloseInGameMenuFromDisconnectWindow(ReconnectionScreen __instance)
-        //{
-        //    if (!VRGlobals.inGame || VRGlobals.vrPlayer is HideoutVRPlayerManager)
-        //        return;
-        //    UIPatches.HideUiScreens();
-        //    VRGlobals.vrPlayer.enabled = true;
-        //    VRGlobals.menuVRManager.enabled = false;
-        //    VRGlobals.menuOpen = false;
-        //    Camera.main.enabled = false;
-        //    VRGlobals.vrPlayer.RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
-        //    // Disabling the FPS cam stops it being main so we need to re-enable it another way
-        //    VRGlobals.VRCam.enabled = true;
-
-        //}
-
-        // Edit build / weapon modding screen: places the gun model, drag to rotate with the laser pointer, UI selection fixes,
-        // and a line renderer sync so the lines pointing to attachments sit right in VR
+        // Edit build / weapon modding screen: places the gun model, rotates it by dragging with the laser pointer, fixes UI selection,
+        // and syncs the line renderers so the lines pointing to attachments line up in VR
         //----------------------------------------------------------------------
 
         [HarmonyPostfix]
@@ -1269,19 +1142,6 @@ namespace TarkovVR.Patches.Misc
             }
             return false;
         }
-        /*
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(ModdingScreenSlotView), "Show")]
-        private static void FixModdingLineRenderersForVR(ModdingScreenSlotView __instance)
-        {
-            foreach (var lr in __instance.GetComponentsInChildren<LineRenderer>(true))
-            {
-                lr.useWorldSpace = false;
-                lr.startWidth = lr.startWidth * 0.0015f;
-                lr.endWidth = lr.endWidth * 0.0015f;
-            }
-        }
-        */
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ModdingScreenSlotView), "Show")]
         private static void AttachVRLineSync(ModdingScreenSlotView __instance)
@@ -1303,25 +1163,7 @@ namespace TarkovVR.Patches.Misc
                 sync.endNode = end;
             }
         }
-        /*
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeaponPreview), "Init")]
-        private static void PositionWeaponPreviewForVR(WeaponPreview __instance)
-        {
-            Transform parent = __instance.Rotator?.parent;
-            if (parent == null) return;
 
-            Vector3 delta = __instance.transform.position - parent.position;
-
-            parent.position = __instance.transform.position;
-            parent.rotation = __instance.transform.rotation;
-            parent.localScale = Vector3.one * 1.5f;
-
-            if (Camera.main != null)
-                Camera.main.cullingMask |= (1 << LayerMaskClass.WeaponPreview);
-        }
-        */
-        
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EditBuildScreen), nameof(EditBuildScreen.Show), new Type[] { typeof(EditBuildScreenController) })]
         private static void PositionWeaponPreviewEditBuild(EditBuildScreen __instance)
@@ -1329,7 +1171,7 @@ namespace TarkovVR.Patches.Misc
             PlaceWeaponPreview(__instance._weaponPreview);
         }
 
-        // The preview's rotator parent onto the preview itself, 1.5x, and the preview layer on the camera
+        // Moves the preview's rotator parent onto the preview itself at 1.5x scale, and adds the preview layer to the camera
         private static void PlaceWeaponPreview(WeaponPreview weaponPreview)
         {
             Transform parent = weaponPreview.Rotator?.parent;
@@ -1514,7 +1356,7 @@ namespace TarkovVR.Patches.Misc
             __instance.MainImage.transform.localRotation = Quaternion.Euler(0, 0, __instance.MainImage.transform.localEulerAngles.z);
         }
 
-        // Icons get rotated when loading mags and other stuff
+        // Icons get rotated when loading magazines and in other cases
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GridItemView), "OnRefreshItem")]
         private static void ResetRotationOnInvIcons(ItemView __instance)
@@ -1612,12 +1454,10 @@ namespace TarkovVR.Patches.Misc
                 {
                     // Scale the offset by how far the angle is above 50
                     float rotOffsetMultiplier = (weaponAngleOffset - 50) / 100;
-                    weaponOffset += new Vector3(-0.01f, -0.01f, +0.04f) * rotOffsetMultiplier; 
+                    weaponOffset += new Vector3(-0.01f, -0.01f, +0.04f) * rotOffsetMultiplier;
                 }
-                //weaponOffset += new Vector3(0.05f, 0, -0.05f);
                 VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
-                //Plugin.MyLog.LogError($"[OffsetApply] Final weapon offset: {weaponOffset}");
-            }    
+            }
             
         }
 
@@ -1629,7 +1469,6 @@ namespace TarkovVR.Patches.Misc
                 VRSettings.ShowVRSettings();
 
             Camera.main.useOcclusionCulling = false;
-            //Camera.main.useOcclusionCulling = true;          
             Camera.main.farClipPlane = 5000f;
         }
 
@@ -1752,6 +1591,6 @@ namespace TarkovVR.Patches.Misc
 }
 
 
-// In game menu CommonUI pos -0.0795 -999.9302 0.4915 rot 0,0,0, same for preloaddergggg
+// In-game menu: CommonUI position -0.0795 -999.9302 0.4915, rotation 0,0,0; the same for the preloader UI
 
 

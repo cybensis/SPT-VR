@@ -13,27 +13,13 @@ namespace TarkovVR.Patches.Core.Player
     [HarmonyPatch]
     internal class IKPatches
     {
-        /*
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player), "MouseLook")]
-        private static void StabilizeGunHeight(EFT.Player __instance)
-        {
-            if (!__instance.IsYourPlayer || __instance.UsedSimplifiedSkeleton ||
-                VRGlobals.VRCam == null || __instance.HandsController?.ControllerGameObject == null)
-                return;
-
-            var t = __instance.HandsController.ControllerGameObject.transform;
-            Vector3 p = t.position;
-            p.y = VRGlobals.VRCam.transform.position.y - 0.4f; // tune offset
-            t.position = p;
-        }
-        */
-        // Body-stance vertical smoothing, body model only. The stance steps ~15cm at idle<->walk and at joystick-crouch start/stop,
-        // which bounces the torso/arms under the fixed headset view. We low-pass it by offsetting PlayerBones.AnimatedTransform;
-        // the offset decays to ~0 once the stance is steady. Seconds; 0 = off (raw snap). Weapon bob is EFT's WalkEffector, not this.
+        // s. Smooths the body's stance height (the body model only, not the view). The stance jumps ~15 cm between idle and walk and
+        // when a joystick crouch starts or stops, which bounces the torso and arms under the fixed headset view. It is low-passed by
+        // offsetting PlayerBones.AnimatedTransform; the offset decays to ~0 once the stance is steady. 0 = off (no smoothing).
+        // Weapon walk bob is EFT's WalkEffector, not this.
         public static float bodyStanceSmoothTime = 0.12f;
-        // Headset vertical speed above which the smooth time drops to near zero, so a physical crouch stays 1:1.
-        // Joystick crouch/locomotion doesn't move VRCam.localPosition.y, so only real head motion trips this.
+        // m/s. Headset vertical speed above which the smooth time drops to near zero, so a physical crouch stays 1:1.
+        // Joystick crouch and locomotion don't move VRCam.localPosition.y, so only real head motion triggers this.
         public static float physMoveBypassSpeed = 0.12f;
         private const float BODY_STANCE_CLAMP = 0.2f;      // matches EFT's own clamp
         private static float bodyStanceVel = 0f;
@@ -64,7 +50,7 @@ namespace TarkovVR.Patches.Core.Player
             var bones = __instance.PlayerBones;
             var at = bones?.AnimatedTransform; // BifacialTransform (same one EFT's HeightInterpolation writes)
 
-            // Disabled or not ready -> no body offset (raw snap)
+            // Smoothing off or bones not ready: clear the body offset (no smoothing)
             if (bodyStanceSmoothTime <= 0f || at == null || at.Original == null || bones.Ribcage?.Original == null || Mathf.Approximately(timeDeltatime, 0f))
             {
                 smoothedStanceY = float.NaN;
@@ -77,8 +63,8 @@ namespace TarkovVR.Patches.Core.Player
                 return false;
             }
 
-            // Stance height = ribcage world Y minus the body root world Y; both share our offset and global
-            // movement, so this is purely the animator's stance + gait bob (feedback-free, no world motion).
+            // Stance height = ribcage world Y minus the body root's world Y. Both include our offset and the world movement,
+            // so the difference is only the animator's stance and gait bob, with no feedback from our offset.
             float stanceY = bones.Ribcage.Original.position.y - at.Original.position.y;
             if (float.IsNaN(smoothedStanceY))
                 smoothedStanceY = stanceY;
@@ -87,13 +73,13 @@ namespace TarkovVR.Patches.Core.Player
             if (Mathf.Abs(stanceY - smoothedStanceY) > BODY_STANCE_CLAMP * 4f)
                 smoothedStanceY = stanceY;
 
-            // Physical crouch stays 1:1: a fast-moving headset gets a tiny smooth time
+            // A physical crouch stays 1:1: a fast-moving headset gets a tiny smooth time
             float camLocalY = VRGlobals.VRCam != null ? VRGlobals.VRCam.transform.localPosition.y : 0f;
             float camSpeed = float.IsNaN(prevCamLocalY) ? 0f : Mathf.Abs(camLocalY - prevCamLocalY) / timeDeltatime;
             prevCamLocalY = camLocalY;
             float smoothTime = camSpeed > physMoveBypassSpeed ? 0.04f : bodyStanceSmoothTime;
 
-            // Rendered body Y = stanceY + offset, and it should track the low-passed value: offset = smoothedStanceY - stanceY
+            // The rendered body Y is stanceY + offset and should follow the low-passed value, so offset = smoothedStanceY - stanceY
             smoothedStanceY = Mathf.SmoothDamp(smoothedStanceY, stanceY, ref bodyStanceVel, smoothTime, Mathf.Infinity, timeDeltatime);
 
             float offset = Mathf.Clamp(smoothedStanceY - stanceY, -BODY_STANCE_CLAMP, BODY_STANCE_CLAMP);
@@ -103,23 +89,23 @@ namespace TarkovVR.Patches.Core.Player
             return false;
         }
 
-        // Body crouch tracks the head 1:1. EFT eases SmoothedPoseLevel toward PoseLevel_1 (MovementContext.SmoothPoseLevel, a Lerp
-        // at POSE_CHANGING_SPEED) and SmoothedPoseLevel drives the crouch animation, so the body and arms trail the view and
-        // jitter while catching up. We snap it to the target for our player. false = vanilla smoothing.
-        // Note: this skips the original's stance-change stamina drain (ConsumePoseLevelChange).
+        // Makes the body's crouch follow the head 1:1. EFT eases SmoothedPoseLevel toward PoseLevel_1 (MovementContext.SmoothPoseLevel,
+        // a Lerp at POSE_CHANGING_SPEED), and SmoothedPoseLevel drives the crouch animation, so the body and arms trail the view and
+        // jitter while catching up. For our player it is snapped to the target.
+        // This also skips the original's stance-change stamina drain (ConsumePoseLevelChange).
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MovementContext), nameof(MovementContext.SmoothPoseLevel))]
         private static bool InstantBodyPoseLevel(MovementContext __instance)
         {
             if (__instance._player == null || !__instance._player.IsYourPlayer)
-                return true; // bots / other players / disabled -> vanilla smoothing
+                return true; // bots / other players keep vanilla smoothing
 
             __instance.SmoothedPoseLevel = __instance._poseLevel;
             return false; // skip the per-frame Lerp -> body is 1:1 with the head
         }
 
-        //This disables the gun shifting closer to the camera when aiming down sights on certains guns, specifically ones without a stock
+        // Stops the gun moving closer to the camera when aiming down sights on some guns (those without a stock)
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ProceduralWeaponAnimation), "CheckShouldMoveWeaponCloser")]
         private static bool DisableGunShift(ProceduralWeaponAnimation __instance)
@@ -135,9 +121,9 @@ namespace TarkovVR.Patches.Core.Player
             return VRSettings.GetWalkEffectorOn();
         }
 
-        // Physical weapon collision replaces EFT's turn-away pose. Zero the effector's pose outputs for the local player
-        // after Process so nothing consumes them; OverlapValue keeps its vanilla dynamics (aim-stop/resume and blindfire
-        // gating read it). WeaponCollision supplies the actual response. Bots/other players keep vanilla.
+        // Physical weapon collision replaces EFT's turn-away pose. For the local player the effector's pose outputs are zeroed
+        // after Process, so nothing uses them. OverlapValue keeps its vanilla behavior (aim stop/resume and blindfire gating
+        // read it). WeaponCollision supplies the actual response. Bots and other players keep vanilla.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TurnAwayEffector), "Process")]
         private static void DisableTurnAwayPose(TurnAwayEffector __instance)
@@ -153,10 +139,10 @@ namespace TarkovVR.Patches.Core.Player
             __instance._cameraZShift = 0f;
         }
 
-        // Consumption side of the same pose: AvoidObstacles (Player.VisualPass, LateUpdate, after the mod's Update-phase writes)
-        // applies TurnAway.Position/Rotation to WeaponRootAnim, whose locals ride PlayerBones.Offset/DeltaRotation into
-        // ShiftWeaponRoot and move the weapon-root bone chain _markers[1] hangs off: the marker the VR gun is anchored to.
-        // The apply is gated on TurnAway.IsDirty, so clear it around the call for the local player and restore it after.
+        // Where that pose gets applied: AvoidObstacles (in Player.VisualPass, LateUpdate, after the mod's Update writes) applies
+        // TurnAway.Position/Rotation to WeaponRootAnim. Its local pose goes through PlayerBones.Offset/DeltaRotation into
+        // ShiftWeaponRoot, which moves the weapon-root bone chain that _markers[1] (the marker the VR gun is anchored to) hangs off.
+        // The apply only runs when TurnAway.IsDirty, so for the local player the flag is cleared around the call and restored after.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ProceduralWeaponAnimation), "AvoidObstacles")]
         private static void SuppressTurnAwayApply(ProceduralWeaponAnimation __instance, ref bool __state)
@@ -212,10 +198,10 @@ namespace TarkovVR.Patches.Core.Player
             Vector3 neckBase = headPos - (headForwardFlat * NeckLength * Mathf.Sin(headPitch));
             neckBase.y = headPos.y;
 
-            // Body-relative directions. The shoulders normally yaw with the body (Player.Transform.y). In JoyStickOnly turning
-            // the body faces the stick direction, so a head-turned aim reaches across from a mis-yawed shoulder and the IK
-            // twists (GetBodyRotation in MovementPatches only snaps the body to the head past 50-80 deg). So yaw the shoulders
-            // toward the head, eased so ADS doesn't pop them. No-op when head~=body (head-based turning).
+            // The shoulders normally turn with the body (Player.Transform yaw). With JoyStickOnly turning the body faces the stick
+            // direction, so aiming with the head turned reaches across from a wrongly turned shoulder and twists the arm IK
+            // (GetBodyRotation in MovementPatches only snaps the body to the head past 50-80 deg). So the shoulders are turned toward
+            // the head's yaw, eased so aiming doesn't pop them. With head-based turning the head and body agree and this changes nothing.
             float bodyYaw = __instance.Player.Transform.eulerAngles.y;
             float shoulderYaw = bodyYaw;
             if (VRGlobals.VRCam != null)
@@ -232,7 +218,7 @@ namespace TarkovVR.Patches.Core.Player
                     shoulderYaw = bodyYaw + Mathf.DeltaAngle(bodyYaw, headYaw) * shoulderFollowLerp;
                 }
             }
-            // Export for DriveElbowBendNormals so the elbow reference frame turns with the head-follow.
+            // Stored for DriveElbowBendNormals, so the elbow reference frame turns with the shoulders.
             lastShoulderYaw = shoulderYaw;
             shoulderYawFrame = Time.frameCount;
 
@@ -257,9 +243,9 @@ namespace TarkovVR.Patches.Core.Player
             Vector3 leftTarget = neckBase + leftOffset;
             Vector3 rightTarget = neckBase + rightOffset;
 
-            // Shoulder rotation comes from the animated Shoulders_Anim. While sprinting with the run anim disabled it pumps with
-            // the still-running base-layer sprint gait and flares the elbows, so low-pass it during that sprint only
-            // (smooth time 0 otherwise = exact 1:1). The smoothed value tracks continuously, so entering the sprint doesn't pop.
+            // The shoulder rotation comes from the animated Shoulders_Anim. While sprinting with the run animation disabled, it pumps
+            // with the base-layer sprint gait (still running) and flares the elbows, so it is low-passed during that sprint only
+            // (otherwise the smooth time is 0 = exact 1:1). The smoothed value always tracks, so entering the sprint doesn't pop.
             Quaternion leftAnimRot = __instance.Shoulders_Anim[0].rotation;
             Quaternion rightAnimRot = __instance.Shoulders_Anim[1].rotation;
             float rotSmoothTime = (isSprinting) ? sprintShoulderRotSmoothTime : 0f;
@@ -288,38 +274,36 @@ namespace TarkovVR.Patches.Core.Player
                 shoulderYawDelta * smoothedShoulderRotR,
                 0.65f);
 
-            // The 0.65 lerp leaves 35% of the shoulder on the body crouch animation, which drops the shoulders ~3-5cm further
-            // than the head and hands when crouching and tilts the elbow/forearm. Pin the shoulder height to the head-tracked
-            // target (Y only; X/Z keep the animation blend). false = the 0.65-blended Y.
+            // The 0.65 lerp leaves 35% of the shoulder on the body's crouch animation, which drops the shoulders ~3-5 cm further
+            // than the head and hands when crouching and tilts the elbow and forearm. So the shoulder height is pinned to the
+            // head-tracked target (Y only; X/Z keep the animation blend).
             Vector3 ls = __instance.Shoulders[0].position; ls.y = leftTarget.y; __instance.Shoulders[0].position = ls;
             Vector3 rs = __instance.Shoulders[1].position; rs.y = rightTarget.y; __instance.Shoulders[1].position = rs;
 
             return false;
         }
-        // Shoulder height from the head only, instead of the 65% blend with the crouch animation (over-drops when crouched)
 
         // --- Shoulder yaw follows the head (JoyStickOnly-turning aim fix) ---------------------------
-        // With JoyStickOnly turning the body faces the stick direction, not the head, so a head-turned aim leaves the
-        // shoulders mis-yawed and the arm IK twists. Yaw the shoulders toward the head so the arm root squares up with the
-        // sight line. OnlyWhenAiming = follow only while aiming (hip-holding/empty, the hands sit at body yaw and following
-        // the head pulls the shoulders off them). Amount 0..1 (1 = fully at head yaw). No-op in head-based turning.
+        // With JoyStickOnly turning the body faces the stick direction, not the head, so aiming with the head turned leaves the
+        // shoulders turned wrong and the arm IK twists. The shoulders are turned toward the head so the arm root lines up with the
+        // sight line. Amount 0..1 (1 = fully at the head's yaw). Has no effect with head-based turning.
         public static float shoulderHeadYawFollowAmount = 1f;
-        public static float shoulderFollowEaseTime = 0.15f;  // ease in/out so ADS doesn't pop the shoulders
+        public static float shoulderFollowEaseTime = 0.15f;  // s, ease in/out so aiming doesn't pop the shoulders
         private static float shoulderFollowLerp = 0f;
         internal static float lastShoulderYaw = 0f;          // shoulder yaw OverrideShoulders used this frame
         internal static int shoulderYawFrame = -1;
 
         // --- Custom elbow bend (we own the pole; replaces the Goal/Arm bend modifiers) ---------------
-        // BendModifier.Goal flips the elbow when shoulder->goal goes near-parallel to shoulder->hand (moving the goal only moves
-        // the bad cone); BendModifier.Arm is unusable on this rig (hints resolve in the collarbone's local frame, mirrored on the
-        // right). So we set solver.bendNormal each frame: a shoulder-yaw-relative rest direction projected onto the plane
-        // perpendicular to shoulder->hand, held at the previous direction where the projection degenerates, then low-passed.
-        // Left-handed mode keeps vanilla Goal. naturalElbow=false = vanilla Goal.
+        // BendModifier.Goal flips the elbow when shoulder->goal is nearly parallel to shoulder->hand (moving the goal only moves the
+        // bad zone). BendModifier.Arm doesn't work on this rig (its hints resolve in the collarbone's local frame, which is mirrored on
+        // the right). So solver.bendNormal is set every frame: a rest direction relative to the shoulder yaw, projected onto the plane
+        // perpendicular to shoulder->hand, kept at the previous direction where the projection degenerates, then low-passed.
+        // Left-handed mode keeps vanilla Goal.
         public static Vector3 elbowRestDirRight = new Vector3(1.35f, -0.81f, -0.40f); // out/down/slightly back
         public static Vector3 elbowRestDirLeft = new Vector3(-1.8f, -0.96f, -0.20f);
         public static float elbowDirSmoothTime = 0.06f;  // seconds; 0 = raw projection
-        // Wrist roll -> elbow deflection: DynamicElbowPositioner's published X delta scaled onto the unit rest direction.
-        // This is the elbow-roll sensitivity (wristTwistW1/W2 only distribute skin roll). Its input is the measured full hand roll.
+        // How much wrist roll moves the elbow: DynamicElbowPositioner's X delta is scaled by this and added to the unit rest direction.
+        // Its input is the measured full hand roll. (wristTwistW1/W2 only spread the roll over the forearm skin.)
         public static float elbowTwistGain = -0.04f;
         private static Vector3 lastElbowDirL, lastElbowDirR;
         private static bool elbowDirInitL, elbowDirInitR;
@@ -338,8 +322,8 @@ namespace TarkovVR.Patches.Core.Player
             TarkovVR.Source.Player.VR.ArmLength.Apply();
 
             bool on = !Handedness.MirrorLeftHanded;
-            // Elbow reference frame: the yaw OverrideShoulders placed the shoulders with this frame
-            // (head-follow aware); body yaw when it didn't run (e.g. mounted/vanilla path).
+            // Elbow reference frame: the yaw OverrideShoulders used for the shoulders this frame,
+            // or the body yaw when it didn't run (e.g. a mounted gun or the vanilla path).
             float yaw = shoulderYawFrame == Time.frameCount ? lastShoulderYaw : __instance.Transform.eulerAngles.y;
 
             DriveElbow(VRGlobals.ikManager.leftArmIk, elbowRestDirLeft,
@@ -367,8 +351,8 @@ namespace TarkovVR.Patches.Core.Player
             arm.solver.bendModifier = IKSolverLimb.BendModifier.Custom;
 
             Vector3 shoulder = arm.solver.bone1.transform.position;
-            // This frame's hand target: solver.target wins inside solver.Update (empty hands/foregrip);
-            // otherwise method_20 just wrote IKPosition from the weapon markers.
+            // This frame's hand target: solver.target takes priority inside solver.Update (empty hands / foregrip);
+            // otherwise method_20 has just written IKPosition from the weapon markers.
             Vector3 hand = arm.solver.target != null ? arm.solver.target.position : arm.solver.IKPosition;
             Vector3 shoulderToHand = hand - shoulder;
             float dMag = shoulderToHand.magnitude;
@@ -376,7 +360,7 @@ namespace TarkovVR.Patches.Core.Player
                 return; // degenerate reach; last frame's normal stays in the solver
             shoulderToHand /= dMag;
 
-            // Rest direction + the wrist-roll deflection (already outward-clamped/sprint-frozen upstream).
+            // Rest direction plus the wrist-roll deflection (DynamicElbowPositioner already clamps it outward and freezes it while sprinting).
             Vector3 rest = restDir.normalized;
             rest.x += twistDeltaX * elbowTwistGain;
             Vector3 e = Quaternion.Euler(0f, yaw, 0f) * rest.normalized;
@@ -402,30 +386,29 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         // --- Deterministic forearm/wrist twist (owns the twist chain like DriveElbow owns the pole) ---
-        // The wrist bone (solver.bone3) is IK-driven, but the twist chain between elbow and wrist (Forearm1 = solver bone2, plus
-        // Forearm2) re-captures its roll from the animated pose every frame and TwistRelax is stateful, so a bad roll wanders.
-        // Post-solve we rebuild the forearm frame from the forearm axis + our bend normal and spread the wrist's measured roll
-        // over the twist bones with fixed weights. Bind offsets come from the rest pose at rig spawn (bone axes are arbitrary on
-        // this rig). Authority scales with the solver's IK weight, so reload/interaction anims (weight < 1) keep their hand pose.
-        // false = TwistRelax / sprint-freeze behavior.
+        // The wrist bone (solver.bone3) is driven by the IK, but the twist chain between elbow and wrist (Forearm1 = solver bone2,
+        // plus Forearm2) takes its roll from the animated pose every frame, and TwistRelax keeps state, so a bad roll drifts.
+        // After the solve, the forearm frame is rebuilt from the forearm axis and our bend normal, and the wrist's measured roll is
+        // spread over the twist bones with fixed weights. Bind offsets come from the rest pose at rig spawn (bone axes are arbitrary
+        // on this rig). The effect scales with the solver's IK weight, so reload and interaction animations (weight < 1) keep their hand pose.
         public static float wristTwistW1 = 0.35f;       // share of the wrist roll on Forearm1 (elbow side)
         public static float wristTwistW2 = 0.70f;       // share on Forearm2 (nearer the wrist = more roll)
         public static float wristTwistClampDeg = 200f;  // wrap-around safety on the measured roll
-        // Constant roll trim (deg) added to the measured twist: corrects a bind captured with the hand slightly rolled
-        // (forearm twisted a few degrees at neutral; w1/w2 only scale the roll response).
+        // deg, a constant roll added to the measured twist. Corrects a bind captured with the hand slightly rolled
+        // (the forearm twisted a few degrees at neutral); w1/w2 only scale the roll response.
         public static float wristTwistTrimL = 0f;
         public static float wristTwistTrimR = 0f;
-        // Measured physical hand roll (deg, post-trim), published for DynamicElbowPositioner. Independent of w1/w2
-        // (the bone's local euler only carries the 1-w2 residual).
+        // Measured physical hand roll (deg, after the trim), read by DynamicElbowPositioner. Independent of w1/w2
+        // (the bone's local euler only carries the 1-w2 remainder).
         internal static float wristTauL, wristTauR;
         private static bool wristBindInitL, wristBindInitR;
         private static Quaternion wristOff1L, wristOff2L, wristOff3L;
         private static Quaternion wristOff1R, wristOff2R, wristOff3R;
 
-        // Capture the twist-chain bind (the zero-roll reference for the arbitrary bone axes) from the current pose of
-        // whichever arms are wired. Called from SetupIK at rig spawn, before any weapon is drawn: the same rest pose in
-        // hideout and raid. A capture on a gameplay pose (e.g. the gun draw) would keep a wrong zero all session.
-        // Also callable live from UnityExplorer to re-zero against the pose you're holding.
+        // Captures the twist-chain bind (the zero-roll reference for the arbitrary bone axes) from the current pose of whichever
+        // arms are set up. Called from SetupIK at rig spawn, before any weapon is drawn, so hideout and raid get the same rest pose.
+        // A capture on a gameplay pose (e.g. the gun draw) would keep a wrong zero all session.
+        // Can also be called from UnityExplorer to re-zero against the pose you're holding.
         public static void RecaptureWristBind()
         {
             if (VRGlobals.ikManager == null)
@@ -434,9 +417,9 @@ namespace TarkovVR.Patches.Core.Player
             wristBindInitR = CaptureWristBind(VRGlobals.ikManager.rightArmIk, ref wristOff1R, ref wristOff2R, ref wristOff3R);
         }
 
-        // SetupIK re-fires on every LimbIK disable (weapon equips disable rightArmIk), so an unconditional capture there would
-        // re-zero on live gameplay poses. The fresh-rig add-block clears, and each collarbone block captures its own arm only
-        // if unset: one capture per arm per rig, at the spawn rest pose.
+        // SetupIK runs again on every LimbIK disable (equipping a weapon disables rightArmIk), so capturing there every time would
+        // re-zero on gameplay poses. SetupIK's new-rig branch clears the bind, and each collarbone branch captures its own arm only
+        // if it is unset: one capture per arm per rig, at the spawn rest pose.
         internal static void ClearWristBind() { wristBindInitL = wristBindInitR = false; }
         internal static void CaptureWristBindLeftIfNeeded()
         {
@@ -449,10 +432,10 @@ namespace TarkovVR.Patches.Core.Player
                 wristBindInitR = CaptureWristBind(VRGlobals.ikManager.rightArmIk, ref wristOff1R, ref wristOff2R, ref wristOff3R);
         }
 
-        // The forearm frame the twist is measured in: forearm axis + an elbow-plane normal. With the elbow driver on (Custom)
-        // that is its bendNormal, well-conditioned even with the arm fully extended. Otherwise (the spawn capture, or
-        // naturalElbow off) the geometric normal Cross(upperarm, forearm): parallel to the driver's for any bent arm;
-        // a near-straight arm gets a deterministic fallback.
+        // The forearm frame the twist is measured in: the forearm axis plus an elbow-plane normal. With the elbow driver on
+        // (BendModifier.Custom) that is its bendNormal, which stays well-defined even with the arm fully extended. Otherwise (e.g. the
+        // spawn capture) it is the geometric normal Cross(upperarm, forearm), parallel to the driver's for any bent arm;
+        // a near-straight arm gets a fixed fallback.
         private static bool ForearmFrame(LimbIK arm, out Transform f1, out Transform f2, out Transform wrist,
                                          out Vector3 axis, out Quaternion F)
         {
@@ -495,7 +478,7 @@ namespace TarkovVR.Patches.Core.Player
             return true;
         }
 
-        // method_19 ran the limb solves + TwistRelax; we overwrite the twist bones after all of it.
+        // method_19 has run the limb solves and TwistRelax by now; the twist bones are overwritten after all of it.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player), "IkApply")]
         private static void DriveWristTwist(EFT.Player __instance)
@@ -512,8 +495,8 @@ namespace TarkovVR.Patches.Core.Player
         private static void ApplyWristTwist(LimbIK arm, float trimDeg, ref float tauOut, bool bindInit,
                                             Quaternion off1, Quaternion off2, Quaternion off3)
         {
-            // No bind captured: leave the vanilla twist alone rather than guess a zero off a gameplay pose.
-            // RecaptureWristBind() re-arms.
+            // No bind captured: leave the vanilla twist alone rather than guess a zero from a gameplay pose.
+            // RecaptureWristBind() captures one.
             if (!bindInit || arm == null || arm.solver == null)
                 return;
             float w = arm.solver.IKPositionWeight;
@@ -527,8 +510,8 @@ namespace TarkovVR.Patches.Core.Player
             twist = Mathf.Clamp(twist + trimDeg, -wristTwistClampDeg, wristTwistClampDeg);
             tauOut = twist;
 
-            // Re-pose the twist bones: hinge-locked base frame + their share of the wrist roll. Writing
-            // f1 moves its children, so the IK-solved wrist orientation is saved and re-asserted.
+            // Re-pose the twist bones: the hinge-locked base frame plus their share of the wrist roll. Writing
+            // f1 moves its children, so the IK-solved wrist rotation is saved and restored.
             Quaternion wristRot = wrist.rotation;
             Quaternion target1 = Quaternion.AngleAxis(twist * wristTwistW1, axis) * F * off1;
             f1.rotation = w >= 1f ? target1 : Quaternion.Slerp(f1.rotation, target1, w);
@@ -555,9 +538,9 @@ namespace TarkovVR.Patches.Core.Player
         // --- Sprint (run-anim-disabled) shoulder/arm steadying ---------------------------------------
         // RemoveSprintAnimFromHands pins the hands while running, but the sprint gait still drives the arm root above them:
         // the shoulder rotation pumps and flares the elbows. These hold the shoulders in their standing VR pose during a
-        // run-anim-disabled sprint.
-        public static float sprintShoulderForward = 0f;        // forward/out shoulder push while sprinting
-        public static float sprintShoulderRotSmoothTime = 0.15f; // higher = steadier but laggier into a sprint
+        // sprint with the run animation disabled.
+        public static float sprintShoulderForward = 0f;        // m, forward/out shoulder push while sprinting
+        public static float sprintShoulderRotSmoothTime = 0.15f; // s, higher = steadier but laggier into a sprint
         private static Quaternion smoothedShoulderRotL = Quaternion.identity;
         private static Quaternion smoothedShoulderRotR = Quaternion.identity;
         private static bool shoulderRotInit = false;
@@ -569,8 +552,8 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.IsYourPlayer)
                 return;
-            // Change the elbow bend from the weapons left arm goal to the player bodies bend goal, otherwise the left arms bend goal acts like its
-            // still attached to the gun even when its not
+            // Point the left elbow at the body's bend goal instead of the weapon's left-arm goal. Otherwise the left elbow
+            // bends as if the arm were still on the gun after it lets go.
 
             __instance._elbowBends[0] = __instance.PlayerBones.BendGoals[0];
         }
@@ -586,23 +569,22 @@ namespace TarkovVR.Patches.Core.Player
             __instance.RibcageScaleCurrent = 1f;
         }
 
-        // This can also be used to disable hand animations when needed
+        // The hands' IK marker stays zeroed (no sprint / jump animation) for ZERO_OUT_DURATION s after the sprint or jump ends
         private static float zeroOutEndTime = 0f;
         private const float ZERO_OUT_DURATION = 1f;
         private static bool wasSprinting = false;
 
 
-        // Seconds continuously off the ground before the hands go to VR control. Higher = fewer false trips on edges, more lag
-        // into a jump. 0 = no air path (sprint only).
+        // s continuously off the ground before the hands go to VR control. Higher = fewer false triggers on ledges, more lag
+        // into a jump. 0 = no air handling (sprint only).
         public static float airborneFreefallTime = 0.20f;
-        // A jump counts as airborne from its first frame. EFT's JumpPlayerState starts in PushingFromTheGround: still on the
-        // ground for its lift delay (JUMP_DELAY_BY_SPEED, longer the faster you go) with the jump animation already playing,
+        // A jump counts as airborne from its first frame. EFT's JumpPlayerState starts in PushingFromTheGround: the player is still
+        // on the ground for its lift delay (JUMP_DELAY_BY_SPEED, longer the faster you go) while the jump animation already plays,
         // and FreefallTime only counts once off the ground. A fall without a jump still waits airborneFreefallTime.
-        // False = the timer alone.
 
-        // Freeze both arms at their pre-sprint grip pose during a run-anim-disabled sprint. While a gun is held the right-arm IK
-        // (_limbs[1] == rightArmIk) is off, so the right arm is pure body animation and the sprint clip twists the wrist off the
-        // grip. Snapshot the arm-bone local rotations every non-sprint frame and re-apply the last snapshot during the run.
+        // Both arms are frozen at their pre-sprint grip pose during a sprint with the run animation disabled. While a gun is held the
+        // right-arm IK (_limbs[1] == rightArmIk) is off, so the right arm is pure body animation and the sprint clip twists the wrist
+        // off the grip. The arm bones' local rotations are saved every non-sprint frame and the last save is re-applied during the run.
 
         // Right Arm State
         private static Transform[] rightArmBones;        // [collarbone, upperarm, forearm1, forearm2, forearm3/wrist, palm]
@@ -616,10 +598,10 @@ namespace TarkovVR.Patches.Core.Player
 
         private static bool armPoseFrozen = false;
 
-        // The forearm/upperarm bones each carry a FinalIK TwistRelax (set up in InitVRPatches, weights 3/1.8/1/1) that re-rolls
-        // the forearm twist every LateUpdate, after our freeze. On the left arm it intermittently rolls the frozen forearm
-        // while the IK keeps the hand pinned to the gun. While the freeze holds we zero these weights, then restore them.
-        // Twist bones only, never the IK hand pin. false = leave TwistRelax alone.
+        // The upperarm and forearm bones each carry a FinalIK TwistRelax (set up in InitVRPatches, weights 3/1.8/1/1) that re-rolls
+        // the forearm twist every LateUpdate, after our freeze. On the left arm it sometimes rolls the frozen forearm while the IK
+        // keeps the hand pinned to the gun. While the freeze holds, these weights are zeroed, then restored.
+        // Only the twist bones are touched, never the IK hand pin.
         // Indices into the arm-bone chain that own a TwistRelax (upperarm, forearm1, forearm2, forearm3/wrist).
         private static readonly int[] twistRelaxBoneIdx = { 1, 2, 3, 4 };
         private static TwistRelax[] rightTwistRelax;
@@ -651,7 +633,7 @@ namespace TarkovVR.Patches.Core.Player
                 if (trs[i] != null) trs[i].weight = frozen ? 0f : weights[i];
         }
 
-        // Resolve both arm bone chains off the wrists. Returns true if AT LEAST ONE arm resolves successfully.
+        // Resolve both arm bone chains from the wrists. Returns true if at least one arm resolves.
         private static bool ResolveArmBones()
         {
             // Resolve Right Arm
@@ -663,7 +645,7 @@ namespace TarkovVR.Patches.Core.Player
                     Transform rForearm2 = rWrist.parent;
                     Transform rForearm1 = rForearm2 != null ? rForearm2.parent : null;
                     Transform rUpperarm = rForearm1 != null ? rForearm1.parent : null;
-                    Transform rCollar = rUpperarm != null ? rUpperarm.parent : null; // Base HumanRCollarbone - freeze the arm ROOT too or the elbow still swings
+                    Transform rCollar = rUpperarm != null ? rUpperarm.parent : null; // Base HumanRCollarbone - the arm root is frozen too, or the elbow still swings
 
                     if (rForearm2 != null && rForearm1 != null && rUpperarm != null)
                     {
@@ -691,7 +673,7 @@ namespace TarkovVR.Patches.Core.Player
                     Transform lForearm2 = lWrist.parent;
                     Transform lForearm1 = lForearm2 != null ? lForearm2.parent : null;
                     Transform lUpperarm = lForearm1 != null ? lForearm1.parent : null;
-                    Transform lCollar = lUpperarm != null ? lUpperarm.parent : null; // Base HumanLCollarbone - freeze the arm ROOT too or the elbow still swings
+                    Transform lCollar = lUpperarm != null ? lUpperarm.parent : null; // Base HumanLCollarbone - the arm root is frozen too, or the elbow still swings
 
                     if (lForearm2 != null && lForearm1 != null && lUpperarm != null)
                     {
@@ -724,7 +706,7 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.IsYourPlayer)
                 return true;
-            // A mounted gun: the hands on its handles, or on their controllers (MountedGun); none of the sprint / air hold below
+            // On a mounted gun, MountedGun drives the hands (on its handles or on their controllers) and the sprint / air hold below doesn't apply
             bool onMountedGun = Source.Player.Interactions.MountedGun.DriveArms(__instance);
             if (__instance.HandsIsEmpty)
                 return false;
@@ -746,14 +728,14 @@ namespace TarkovVR.Patches.Core.Player
 
             bool shouldStayZeroed = disableAnim || (currentTime < zeroOutEndTime);
 
-            // The gun's marker even while slung: then _markers[1] is the freed hand's IK target, whose grandparent is the VR rig
+            // Use the gun's own marker even while it is slung: then _markers[1] is the freed hand's IK target, whose grandparent is the VR rig
             Transform gunRightMarker = TarkovVR.Source.Player.Interactions.ChestHang.GunRightMarker(__instance);
             if (shouldStayZeroed && gunRightMarker?.parent?.parent != null)
             {
                 var ik = gunRightMarker.parent.parent;
                 ik.localPosition = Vector3.zero;
                 ik.localEulerAngles = Vector3.zero;
-                // The jump / run animation gone, not the gun's recoil (Tarkov put it on this same bone earlier in the pass)
+                // Remove the jump / run animation but keep the gun's recoil, which Tarkov put on this same bone earlier in the pass
                 TarkovVR.Source.Weapons.RecoilPose.PutBackOnZeroed(ik);
             }
 
@@ -827,52 +809,5 @@ namespace TarkovVR.Patches.Core.Player
         {
             __instance.Animator.SetLayerWeight(4, 0);
         }
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(EFT.Player), "method_22")]
-        //private static bool SetHandIKPosition(EFT.Player __instance, float distance2Camera)
-        //{
-        //    for (int i = 0; i < 2; i++)
-        //    {
-        //        if (i == 1)
-        //            __instance._markers[i].localPosition += new Vector3(-0.06f, 0, 0);
-        //        else { 
-        //            __instance._markers[i].localPosition += VRGlobals.test;
-        //            __instance._markers[i].localEulerAngles += VRGlobals.testRot;
-        //        }
-
-        //        if (!(__instance._markers[i] == null) && !(Math.Abs(__instance._limbs[i].solver.IKPositionWeight) < float.Epsilon))
-        //        {
-        //            if (__instance._ikTargets[i] != null && distance2Camera < 40f)
-        //            {
-        //                float value = Vector3.Distance(__instance._markers[i].position, __instance._gripReferences[i].position);
-        //                float num = Mathf.InverseLerp(0.1f, 0f, value);
-        //                __instance.HandPosers[i].GripWeight = num;
-        //                __instance._ikPosition = Vector3.Lerp(__instance._markers[i].position, __instance._ikTargets[i].position, num);
-        //                __instance._ikRotation = Quaternion.Lerp(__instance._markers[i].rotation, __instance._ikTargets[i].rotation, num);
-        //            }
-        //            else
-        //            {
-        //                __instance._ikPosition = __instance._markers[i].position;
-        //                __instance._ikRotation = __instance._markers[i].rotation;
-        //            }
-        //            if (__instance.LeftHandInteractionTarget != null && i == 0)
-        //            {
-        //                __instance._ikPosition = Vector3.Lerp(__instance._ikPosition, __instance.LeftHandInteractionTarget.transform.position, __instance.ThirdIkWeight.Value);
-        //                __instance._ikRotation = Quaternion.Slerp(__instance._ikRotation, __instance.LeftHandInteractionTarget.transform.rotation, __instance.ThirdIkWeight.Value);
-        //            }
-        //            __instance._limbs[i].solver.SetIKPosition(__instance._ikPosition);
-        //            __instance._limbs[i].solver.SetIKRotation(__instance._ikRotation);
-        //        }
-        //    }
-        //    return false;
-        //}
-
-
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(FirearmsAnimator), "SetSprint")]
-        //private static bool DisableSprintAnimation(FirearmsAnimator __instance)
-        //{
-        //    return false;
-        //}
     }
 }

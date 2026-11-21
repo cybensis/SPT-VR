@@ -9,23 +9,21 @@ using UnityEngine;
 
 namespace TarkovVR.ModSupport.ORBIT
 {
-    // Compiled into both SPT-VR.dll (OrbitSupport: single player / the VR player hosting) and SPT-VR-FikaSync.dll (OrbitSync: the
-    // host / headless), linked from FikaSync.csproj. Only ever touched from their NoInlining paths behind the ORBIT check, and held
-    // as `object` in their static dictionaries (a typed static field would load ORBIT's types).
+    // Compiled into both SPT-VR.dll (OrbitSupport: single player, or the VR player hosting) and SPT-VR-FikaSync.dll (OrbitSync: the
+    // host or headless), linked from FikaSync.csproj. Only used from their NoInlining paths behind the ORBIT check.
     //
-    // A dragged corpse's ORBIT waypoint is pulled on the grab and a new one made where the body comes to rest (Waypoint.Position is
-    // readonly). The new one gets a new id on purpose: ORBIT refuses a claim on a removed id (WaypointSystem.TryClaim), so anything
-    // still holding the old object (a bot already sent to the death spot) fails safe; reusing the old id would make that stale
-    // object claimable again. ORBIT 3.x keeps more about a corpse than the waypoint and its killer tag, by id or by that object,
-    // so this carries it from the old waypoint to the new one:
-    //   - the killer squad tag (loot right without line of sight)
-    //   - its killers' own-kill loot queue (Agent.OwnKillCorpseIds: ORBIT drops an id it no longer tracks - the killer gave up on it)
+    // When a corpse is dragged, its ORBIT waypoint is removed on the grab and a new one is made where the body comes to rest
+    // (Waypoint.Position is readonly). The new waypoint gets a new id on purpose: ORBIT refuses a claim on a removed id
+    // (WaypointSystem.TryClaim), so a bot still holding the old object fails safely. ORBIT also keeps other data about a corpse,
+    // by id or by waypoint object, and this class moves it to the new waypoint:
+    //   - the killer squad tag (lets them loot without line of sight)
+    //   - the killers' own-kill loot queue (Agent.OwnKillCorpseIds; ORBIT drops an id it no longer tracks)
     //   - the squads that already looted it and the bots that judged it not worth it (CompletedPoiIds / ValueSkippedPoiIds)
-    //   - a boss body Boss Rush squads look for (_rushCorpses, keyed by the waypoint object) and the squads' boss-loot memory of it
+    //   - a boss body that Boss Rush squads look for (_rushCorpses, keyed by the waypoint object) and the squads' boss-loot memory of it
     //
-    // No field of an ORBIT type, here or in a closure (a lambda capturing an ORBIT-typed local makes one): Assembly.GetTypes() on
-    // SPT-VR.dll loads every type's fields, so without ORBIT installed it throws ReflectionTypeLoadException for any mod that scans
-    // assemblies. Held as object, cast where used; ORBIT types only in method signatures and bodies, which load when they run.
+    // No field may have an ORBIT type, here or in a closure (a lambda capturing an ORBIT-typed local creates one). Assembly.GetTypes()
+    // on SPT-VR.dll loads every type's fields, and without ORBIT installed that throws ReflectionTypeLoadException for any mod that
+    // scans assemblies. ORBIT objects are held as object and cast where used; ORBIT types appear only in method signatures and bodies.
     internal sealed class OrbitCorpseCarry
     {
         private object pulled;                                          // Waypoint
@@ -40,8 +38,8 @@ namespace TarkovVR.ModSupport.ORBIT
         public int PulledId => pulled != null ? Pulled.Id : -1;
         public int KillerSquad => killerSquad;
 
-        // Everything ORBIT knows about the corpse's waypoint, just before it's removed. Each part apart: one that fails (an ORBIT
-        // update renamed what it reads) loses only itself - its own NoInlining method, compiled when it's called, inside the try.
+        // Captures what ORBIT knows about the corpse's waypoint, just before it's removed. Each part is its own NoInlining method,
+        // compiled only when called inside its try, so a part that fails (an ORBIT update renamed what it reads) loses only itself.
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static OrbitCorpseCarry Capture(WaypointSystem waypoints, Waypoint waypoint, Action<string> warn)
         {
@@ -52,7 +50,7 @@ namespace TarkovVR.ModSupport.ORBIT
             return carry;
         }
 
-        // The new waypoint takes over what the old one had
+        // Gives the new waypoint everything the old one had
         [MethodImpl(MethodImplOptions.NoInlining)]
         public void Restore(WaypointSystem waypoints, Waypoint moved, Action<string> warn)
         {
@@ -83,8 +81,8 @@ namespace TarkovVR.ModSupport.ORBIT
             waypoints.RegisterRushCorpse(moved, rushRole);
         }
 
-        // Where the body can't be a loot waypoint: ORBIT doesn't register a corpse inside a minefield / border zone (it would lure
-        // looters into the mines), so neither do we when it's dragged into one
+        // ORBIT doesn't register a corpse inside a minefield or border zone (it would lure looters into the mines),
+        // so a body dragged into one doesn't get a waypoint either
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static bool InDangerZone(Vector3 position)
         {
@@ -105,7 +103,7 @@ namespace TarkovVR.ModSupport.ORBIT
             if (waypoints._rushCorpses != null && waypoints._rushCorpses.TryGetValue(waypoint, out string role))
             {
                 rushRole = role;
-                // Not found by Boss Rush while it's being carried, like the waypoint itself
+                // Boss Rush must not find the body while it's being carried, the same as the waypoint
                 waypoints._rushCorpses.Remove(waypoint);
             }
         }
@@ -153,7 +151,7 @@ namespace TarkovVR.ModSupport.ORBIT
                 ((Squad)completedSquads[i])?.CompletedPoiIds.Add(id);
         }
 
-        // Squads that killed a boss remember its body (BossRushLoot): what pointed at the old waypoint points at the new one
+        // Squads that killed a boss remember its body (BossRushLoot). Every reference to the old waypoint is moved to the new one.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void RestoreBossLoot(Waypoint moved)
         {

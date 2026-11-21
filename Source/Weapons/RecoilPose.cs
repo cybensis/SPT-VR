@@ -4,14 +4,14 @@ using UnityEngine;
 namespace TarkovVR.Source.Weapons
 {
     // Tarkov puts all of a gun's recoil on HandsContainer.WeaponRootAnim (ProceduralWeaponAnimation.ApplyPosition / ApplyComplexRotation):
-    // the kick added to its position, the climb turned about the gun's RecoilPivot. Two things of ours used to take it out again: the grip
-    // anchor (GunInteractionController.UpdateWeaponPosition) pinned the gun's grip marker, which hangs under that bone, to your hand - the
-    // kick cancelled, the climb turned about the grip; and the airborne / no-run-animation zeroing of that bone (IKPatches) wiped it all.
-    // Here: the recoil as a step from the bone's recoiled pose back to its recoil-free one, so the anchor can land the recoil-free grip on
-    // your hand (the recoil shows on top) and the zeroing can put it back.
+    // the kick is added to its position and the climb turns it about the gun's RecoilPivot. Two things of ours would remove it. The grip
+    // anchor (GunInteractionController.UpdateWeaponPosition) pins the gun's grip marker, which hangs under that bone, to the hand: that
+    // cancels the kick and turns the climb about the grip. And the airborne / no-run-animation zeroing of that bone (IKPatches) wipes it.
+    // This class stores the recoil as a step from the bone's recoiled pose back to its recoil-free one, so the anchor can put the
+    // recoil-free grip on the hand (the recoil shows on top) and the zeroing can put the recoil back.
     internal static class RecoilPose
     {
-        public static float kickShare = 1f;     // of Tarkov's recoil the gun shows against your hand: 1 = all of it, 0 = the grip pinned to the hand
+        public static float kickShare = 1f;     // share of Tarkov's recoil the gun shows against the hand: 1 = all of it, 0 = the grip pinned to the hand
 
         private static Transform stepRoot;
         private static Matrix4x4 stepToFree = Matrix4x4.identity;  // the bone's recoiled frame -> its recoil-free one, in the bone's own frame
@@ -19,12 +19,12 @@ namespace TarkovVR.Source.Weapons
 
         private static ProceduralWeaponAnimation OurAnimation => VRGlobals.player != null ? VRGlobals.player.ProceduralWeaponAnimation : null;
 
-        // ProceduralWeaponAnimation.ApplyComplexRotation postfix: the bone has its final pose for the frame, recoil and all
+        // Called from a ProceduralWeaponAnimation.ApplyComplexRotation postfix, when the bone has its final pose for the frame, recoil included
         public static void Capture(ProceduralWeaponAnimation animation)
         {
             if (animation == null || animation != OurAnimation || animation.HandsContainer == null || animation.HandsContainer.WeaponRootAnim == null)
                 return;
-            // A mounted machine gun adds its kick its own way (ApplyStationaryWeaponPosition): left out, the anchor as it was
+            // A mounted machine gun adds its kick its own way (ApplyStationaryWeaponPosition): skipped, so the anchor uses the bone as it is
             if (VRGlobals.player.MovementContext != null && VRGlobals.player.MovementContext.StationaryWeapon != null)
                 return;
             Transform root = animation.HandsContainer.WeaponRootAnim;
@@ -32,9 +32,9 @@ namespace TarkovVR.Source.Weapons
             Vector3 recoiledPosition = root.position;
             Quaternion recoiledRotation = root.rotation;
             Quaternion scopeRotation = animation._scopeRotation;
-            // The climb undone: Tarkov turned the pose about the pivot by Euler(pose * rotationRecoil) (DeferredRotate), the pose being the one
-            // before the turn, found by one fixed-point step from the turned one. The sight alignment after it (ApplyAimingAlignment, a
-            // fraction of a degree while aiming) is left in.
+            // Undo the climb. Tarkov turned the pose about the pivot by Euler(pose * rotationRecoil) (DeferredRotate), where pose is the pose
+            // before the turn; it is found here with one fixed-point step from the turned pose. The sight alignment applied after it
+            // (ApplyAimingAlignment, a fraction of a degree while aiming) is left in.
             Quaternion turned = recoiledRotation * Quaternion.Inverse(scopeRotation);
             Quaternion turn = Quaternion.Euler(turned * rotationRecoil);
             Quaternion unturned = Quaternion.Inverse(turn) * turned;
@@ -42,14 +42,14 @@ namespace TarkovVR.Source.Weapons
             unturned = Quaternion.Inverse(turn) * turned;
             Vector3 pivotArm = unturned * pivotInRoot;
             Vector3 unturnedPosition = recoiledPosition + turn * pivotArm - pivotArm;
-            // The kick undone (added to the bone's local position before the turn)
+            // Undo the kick (Tarkov adds it to the bone's local position before the turn)
             Vector3 freePosition = unturnedPosition - (root.parent != null ? root.parent.TransformVector(positionRecoil) : positionRecoil);
             Quaternion freeRotation = unturned * scopeRotation;
             StoreStep(root, recoiledPosition, recoiledRotation, freePosition, freeRotation);
         }
 
-        // IKPatches' airborne / no-run-animation path, the bone just zeroed: Tarkov's recoil put back on it, as ApplyPosition / ApplyComplexRotation
-        // do, and the step back to the zeroed pose kept for the anchor
+        // Called from IKPatches' airborne / no-run-animation path right after the bone is zeroed. Puts Tarkov's recoil back on it the way
+        // ApplyPosition / ApplyComplexRotation do, and keeps the step back to the zeroed pose for the anchor.
         public static void PutBackOnZeroed(Transform root)
         {
             ProceduralWeaponAnimation animation = OurAnimation;
@@ -115,7 +115,8 @@ namespace TarkovVR.Source.Weapons
 
         private static void StoreStep(Transform root, Vector3 recoiledPosition, Quaternion recoiledRotation, Vector3 freePosition, Quaternion freeRotation)
         {
-            // World: a point riding the recoiled bone -> where it rides the recoil-free one; into the bone's frame (scale-safe: the mirrored gun)
+            // In world space this maps a point on the recoiled bone to the same point on the recoil-free bone. It is then moved into the
+            // bone's frame, which also keeps scale right (the mirrored gun).
             Matrix4x4 worldStep = Matrix4x4.Translate(freePosition) * Matrix4x4.Rotate(freeRotation * Quaternion.Inverse(recoiledRotation)) * Matrix4x4.Translate(-recoiledPosition);
             stepToFree = root.worldToLocalMatrix * worldStep * root.localToWorldMatrix;
             stepRoot = root;

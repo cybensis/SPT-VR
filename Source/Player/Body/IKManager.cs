@@ -15,9 +15,9 @@ namespace TarkovVR.Source.Player.VR
         public LimbIK leftArmIk;
         public LimbIK rightArmIk;
 
-        // The elbow bend solve is in IKPatches.DriveElbowBendNormals (BendModifier.Custom). Don't use BendModifier.Arm on this
-        // rig: the LimbIK sits on the collarbone, so the Arm axis hints resolve in the collarbone's local frame (the right elbow
-        // solves backwards, the left misaligned).
+        // The elbow bend is solved in IKPatches.DriveElbowBendNormals (BendModifier.Custom). Don't use BendModifier.Arm on this
+        // rig: the LimbIK sits on the collarbone, so the Arm axis hints resolve in the collarbone's local frame. The right elbow
+        // then bends backwards and the left one is misaligned.
 
         private void Awake()
         {
@@ -41,10 +41,10 @@ namespace TarkovVR.Source.Player.VR
             
         }
 
-        // The body under the head (BodyFollow)
+        // Keeps the body under the headset (BodyFollow)
         public void MatchLegsToArms()
         {
-            // On a mounted gun the body stays where Tarkov sat it (Interactions.MountedGun)
+            // On a mounted gun the body stays where Tarkov placed it (Interactions.MountedGun)
             if (VRGlobals.vrPlayer.initPos.y == 0 || Interactions.MountedGun.Active)
                 return;
 
@@ -70,7 +70,7 @@ namespace TarkovVR.Source.Player.VR
             if (rightUpperArm)
                 rightUpperArm.localPosition = upperArmPos;
             
-            // (every frame in every hands state: the other callers in the same frame are no-ops)
+            // Runs every frame in every hands state. BodyFollow steps once a frame, so other callers in the same frame do nothing.
             MatchLegsToArms();
         }
     }

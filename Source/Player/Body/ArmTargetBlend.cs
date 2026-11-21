@@ -4,14 +4,14 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Body
 {
-    // A jump in where the off hand's arm reaches, eased (else the hand flickers as it connects or disconnects). Whenever what the left
-    // arm's IK aims at changes - another transform (the controller, a reload part's latch, our point on a pump) or none (Tarkov's own
-    // goal: the foregrip it two-hands on, a reload clip's hand) - its goal goes from where it was reaching to the new one over
-    // switchBlendTime, eased in and out, carried in the body's frame meanwhile so walking doesn't drag it. One source moving on its
-    // own is never touched.
-    // Hooked on the arm's own solver, so every switch anywhere goes through it: OnPreUpdate, before the solver reads its target (FinalIK
-    // IKSolverTrigonometric.OnUpdate: target -> IKPosition), stands the blended goal in for it; OnPostUpdate puts the target back.
-    // Off with the gun in the left hand: that arm is the gun's then, its grip has to stay on the gun.
+    // Eases sudden changes in where the off hand's arm reaches, so the hand doesn't flicker as it connects to or lets go of something.
+    // Whenever the left arm IK's target changes - to another transform (the controller, a reload part's latch, our point on a pump) or
+    // to none (Tarkov's own goal: the foregrip, a reload clip's hand) - the goal moves from where it was to the new one over
+    // switchBlendTime, eased in and out. During the blend it is carried in the body's frame, so walking doesn't drag it behind.
+    // A target that moves on its own is never touched.
+    // It hooks the arm's own solver, so every target switch goes through it. OnPreUpdate runs before the solver reads its target
+    // (FinalIK IKSolverTrigonometric.OnUpdate copies target into IKPosition) and puts the blended goal in its place; OnPostUpdate
+    // restores the target. Off while the gun is in the left hand: that arm holds the gun then, and its grip has to stay on it.
     internal static class ArmTargetBlend
     {
         public static bool enabled = true;
@@ -29,7 +29,7 @@ namespace TarkovVR.Source.Player.Body
         private static Transform heldTarget;
         private static bool targetHeld;
 
-        // Every tick (VRReloadController.Tick): on the arm the rig has now
+        // Called every tick from VRReloadController.Tick. Moves the hooks onto the left arm the rig currently has.
         public static void EnsureHooked()
         {
             LimbIK arm = VRGlobals.ikManager != null ? VRGlobals.ikManager.leftArmIk : null;
@@ -52,7 +52,7 @@ namespace TarkovVR.Source.Player.Body
             }
         }
 
-        // The arm's root's parent (the spine): the body the goal is carried with during a blend
+        // The parent of the arm's root (the spine). The goal is carried in this frame during a blend.
         private static Transform Body => hookedArm != null && hookedArm.transform.parent != null ? hookedArm.transform.parent : null;
 
         private static void BeforeSolve()
@@ -66,9 +66,9 @@ namespace TarkovVR.Source.Player.Body
             Quaternion goalRotation = source != null ? source.rotation : solver.IKRotation;
             if (body == null)
                 return;
-            // Not initiated yet: the solver skips its post-update, which is what puts the target back
-            // Eating pins the wrist onto its own targets after the IK (EatingInteractionController.PinLeftAfterIk): a blended arm under a pinned
-            // wrist would stretch it
+            // A solver that isn't initiated yet skips its post-update, which is what restores the target.
+            // Eating pins the wrist onto its own targets after the IK (EatingInteractionController.PinLeftAfterIk), so a blended arm
+            // would be stretched by the pinned wrist.
             if (!enabled || Handedness.GunInLeftHand || switchBlendTime <= 0f || !solver.initiated
                 || TarkovVR.Source.Player.Interactions.EatingInteractionController.ManualActive)
             {
@@ -78,8 +78,8 @@ namespace TarkovVR.Source.Player.Body
             }
             if (hasLast && source != lastSource)
             {
-                // From where it was reaching (mid-blend: where the blend had it). Switching back and forth every frame (two things setting
-                // the target) carries on the same blend instead of starting over, so it can't stall.
+                // Start from where the arm was reaching (mid-blend, where the blend had it). When two things switch the target back and
+                // forth every frame, the running blend continues instead of restarting, so it can't stall.
                 if (blendStartTime < 0f || Time.frameCount - lastSwitchFrame > 2)
                 {
                     fromInBody = lastGoalInBody;

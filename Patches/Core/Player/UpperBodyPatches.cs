@@ -3,8 +3,8 @@ using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Patches.Core.Player
 {
-    // The local upper body follows the headset (LocalUpperBody) right before Player.VisualPass places the shoulders: first among the
-    // SetShoulders prefixes, so IKPatches.OverrideShoulders and the arm IK after it build on the turned and bent torso
+    // Turns and bends the local player's upper body toward the headset (LocalUpperBody) right before Player.VisualPass places the
+    // shoulders. It runs first among the SetShoulders prefixes, so IKPatches.OverrideShoulders and the arm IK start from the solved torso.
     [HarmonyPatch]
     internal static class UpperBodyPatches
     {
@@ -15,7 +15,7 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (__instance.Player == null || !__instance.Player.IsYourPlayer)
                 return;
-            // (a throw here would break Tarkov's VisualPass every frame: the body and arms would stop)
+            // An exception here would break Tarkov's VisualPass every frame and freeze the body and arms.
             try
             {
                 LocalUpperBody.Solve(__instance);

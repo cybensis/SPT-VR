@@ -6,18 +6,18 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Physical hand collision: the free hands (and everything anchored to them - arms IK, held items)
-    // can't reach through geometry. Swept-sphere collide-and-slide from last frame's resolved position
-    // toward the controller-desired one, so fast swings can't tunnel and release is instant. Exempt: the
-    // gun hand while a firearm is up (WeaponCollision owns that side), the support hand while gripping the
-    // gun, both hands during manual eating. The enactment is stripped before each rewrite, so nothing
-    // accumulates however Update order falls against the SteamVR pose callbacks (which rewrite the raw pose).
+    // Physical hand collision: the free hands (and everything anchored to them, like the arm IK and held items)
+    // can't reach through geometry. A swept sphere collides and slides from last frame's resolved position toward
+    // the controller's, so fast swings can't tunnel through and letting go is instant. Exempt: the gun hand while a
+    // firearm is up (WeaponCollision handles it), the support hand while gripping the gun, and both hands during
+    // manual eating. Last frame's correction is removed before each new one, so nothing accumulates whatever order
+    // Update runs in relative to the SteamVR pose callbacks (which rewrite the raw pose).
     public static class HandCollision
     {
         // ---- live-tunable knobs (UnityExplorer) ----
         public static float handRadius = 0.05f;           // m; collision sphere around the hand point
         public static float hapticStrength = 0.4f;
-        public static float teleportReset = 1.5f;         // m; a desired-position jump past this resets continuity
+        public static float teleportReset = 1.5f;         // m; a controller jump further than this restarts the sweep from it
 
         private class HandState
         {
@@ -55,12 +55,12 @@ namespace TarkovVR.Source.Player.Interactions
             }
             bool leftHanded = VRSettings.GetLeftHandedMode();
 
-            // With a firearm up, the gun hand is constrained inside the gun pipeline (WeaponCollision):
-            // clamping it from here races GunInteractionController's anchor read (Update order is
-            // nondeterministic). The support hand is exempt while gripping: its physical position drives
-            // two-handed aim, and clamping it would steer the aim near walls.
-            // A hand on a door (PhysicalDoors) isn't clamped either: the controller pushes it through where the door is.
-            // The gun hand is free (clamped) while the gun is slung or held by the support hand alone (ChestHang.Detached).
+            // With a firearm up, the gun hand is constrained in the gun pipeline (WeaponCollision). Clamping it here
+            // would race GunInteractionController's anchor read, since the Update order isn't fixed. The support hand
+            // is exempt while gripping: its physical position drives two-handed aim, and clamping it would steer the
+            // aim near walls. A hand holding a door (PhysicalDoors) isn't clamped either: the controller has to push
+            // through where the door is. While the gun is slung or held by the support hand alone (ChestHang.Detached),
+            // the gun hand is free, so it is clamped.
             Transform rightHand = VRGlobals.vrPlayer.RightHand ? VRGlobals.vrPlayer.RightHand.transform : null;
             Transform leftHand = VRGlobals.vrPlayer.LeftHand ? VRGlobals.vrPlayer.LeftHand.transform : null;
             bool gunInRightHand = firearm && !ChestHang.Detached;
@@ -69,7 +69,7 @@ namespace TarkovVR.Source.Player.Interactions
                 physRight: leftHanded);
         }
 
-        // A rig hand's position as the controller has it, this frame's clamp left out (whichever ran first this frame)
+        // A rig hand's position as the controller has it, without this frame's clamp (whether or not the clamp has run yet)
         internal static Vector3 RawPosition(Transform hand)
         {
             if (hand == null)
@@ -106,8 +106,8 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            // Strip last frame's enactment - unless the pose callback (or an equip path) already rewrote
-            // the transform, in which case the fresh value is the raw pose.
+            // Undo last frame's correction, unless the pose callback (or an equip path) has already rewritten
+            // the transform, in which case the new value is the raw pose.
             if (state.enacted)
             {
                 state.enacted = false;
@@ -145,8 +145,8 @@ namespace TarkovVR.Source.Player.Interactions
                 Vector3 direction = move / distance;
                 if (!SweepSphere(resolved, direction, distance, out RaycastHit hit, out bool startBlocked))
                 {
-                    // A cast that starts in contact reports "free": only allow the move if it escapes
-                    // the overlap (else pressing pushes through).
+                    // A cast that starts in contact reports no hit. Only allow the move if it gets out of
+                    // the overlap, otherwise pressing pushes through.
                     if (startBlocked && OverlappingWorld(resolved + move, handRadius * 0.6f))
                         break;
                     resolved += move;
@@ -162,13 +162,13 @@ namespace TarkovVR.Source.Player.Interactions
                     continue;
                 }
                 hitAny = true;
-                // Shrunk cast (0.8 r) stopping 0.2 r short: the cast sphere never starts a frame
-                // overlapping a collider (start-overlapped colliders are silently omitted by casts).
+                // The cast uses a smaller sphere (0.8 r) and stops 0.2 r short, so it never starts a frame
+                // overlapping a collider (casts silently skip colliders they start inside).
                 float safe = Mathf.Max(0f, hit.distance - handRadius * 0.2f);
                 resolved += direction * safe;
                 move = Vector3.ProjectOnPlane(move - direction * safe, hit.normal);
                 if (Vector3.Dot(move, intended) <= 0f)
-                    break;                                 // slide reversing against the intent = wrapping an edge
+                    break;                                 // the slide turned against the intended move: it's wrapping an edge
             }
             state.lastResolved = resolved;
 
@@ -181,7 +181,7 @@ namespace TarkovVR.Source.Player.Interactions
                 state.enacted = true;
             }
 
-            // One light tick on first contact (edge + re-arm), nothing while pressing.
+            // One light haptic tick on first contact (re-armed 0.2 s after a contact ends), nothing while pressing.
             bool contactNow = (hitAny && offset.sqrMagnitude > 1e-8f) || pushedDoor;
             if (!contactNow && state.inContact)
                 state.contactEndStamp = Time.time;
@@ -195,8 +195,8 @@ namespace TarkovVR.Source.Player.Interactions
             state.inContact = contactNow;
         }
 
-        // The gun's world (CollisionWorld: trunks not branches, triggers only for glass), own body ignored.
-        // startBlocked = the cast began already in contact.
+        // Sweeps against the same world as the gun (CollisionWorld: tree trunks but not branches, triggers only for glass),
+        // ignoring the player's own body. startBlocked = the cast began already in contact.
         private static bool SweepSphere(Vector3 origin, Vector3 direction, float distance, out RaycastHit best,
             out bool startBlocked)
         {
@@ -208,7 +208,7 @@ namespace TarkovVR.Source.Player.Interactions
             for (int i = 0; i < hitCount; i++)
             {
                 RaycastHit hit = castHits[i];
-                // Branches, triggers (glass excepted), window blockers: the gun's world (CollisionWorld)
+                // Skip branches, triggers (except glass) and window blockers, as the gun's world does (CollisionWorld)
                 if (!CollisionWorld.Solid(hit.collider))
                     continue;
                 if (ignoredDoor != null && hit.collider.transform.IsChildOf(ignoredDoor.transform))
@@ -217,7 +217,7 @@ namespace TarkovVR.Source.Player.Interactions
                     continue;
                 Transform weaponRoot = VRGlobals.firearmController?.WeaponRoot;
                 if (weaponRoot != null && hit.collider.transform.IsChildOf(weaponRoot))
-                    continue;                              // the held gun's own colliders ride the hand
+                    continue;                              // the held gun's own colliders move with the hand
                 if (hit.distance <= 0f)
                 {
                     startBlocked = true;
@@ -237,7 +237,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             int overlapCount = Physics.OverlapSphereNonAlloc(position, radius, overlapBuf,
                 CollisionWorld.Mask(WeaponCollision.GetOcclusionMask()), QueryTriggerInteraction.Ignore);
-            // (a full buffer may have missed something solid)
+            // A full buffer may have missed something solid
             if (overlapCount >= overlapBuf.Length)
                 return true;
             for (int i = 0; i < overlapCount; i++)

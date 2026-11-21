@@ -6,8 +6,8 @@ using UnityEngine.XR.OpenXR.Features;
 namespace TarkovVR.Source.XR
 {
     // Haptic frequency under OpenXR. Unity's legacy XR haptics (InputDevice.SendHapticImpulse) take no frequency, so its OpenXR plugin
-    // calls xrApplyHapticFeedback with the frequency unspecified and every buzz feels the same. This feature hooks that call through the
-    // function lookup Unity lets every feature hook, and fills in the frequency OpenXRInput asked for on that hand.
+    // calls xrApplyHapticFeedback with the frequency unspecified and every vibration feels the same. This feature hooks that call through
+    // the function lookup that Unity lets every feature hook, and fills in the frequency OpenXRInput set for that hand.
     public class OpenXRHapticFrequency : OpenXRFeature
     {
 
@@ -29,7 +29,7 @@ namespace TarkovVR.Source.XR
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         private delegate int StringToPathDelegate(ulong instance, [MarshalAs(UnmanagedType.LPStr)] string pathString, out ulong path);
 
-        // Native code holds pointers to these, so they're kept for good. The lookup's type is the shared one (OpenXRFunctions).
+        // Native code holds pointers to these delegates, so they must never be collected. The lookup's type is the shared one (OpenXRFunctions).
         private static readonly OpenXRFunctions.GetInstanceProcAddrDelegate ourGetInstanceProcAddr = LookUpFunction;
         private static readonly ApplyHapticFeedbackDelegate ourApplyHapticFeedback = ApplyHapticFeedback;
         private static OpenXRFunctions.GetInstanceProcAddrDelegate nextGetInstanceProcAddr;
@@ -40,7 +40,7 @@ namespace TarkovVR.Source.XR
         private static readonly float[] handFrequencies = new float[2];
         private static float lastFrequency;
 
-        // Hz the next vibration on this hand goes out at; 0 = the runtime's own
+        // Hz for the next vibration on this hand; 0 = the runtime's default
         public static void SetFrequency(int hand, float frequency)
         {
             handFrequencies[hand] = frequency;
@@ -57,11 +57,11 @@ namespace TarkovVR.Source.XR
 
         protected override bool OnInstanceCreate(ulong xrInstanceHandle)
         {
-            // Never fail the session over haptics: an exception here stops the whole OpenXR start. Without the hand paths
-            // each vibration takes the last frequency set.
+            // Never fail the session over haptics: an exception here stops the whole OpenXR start. Without the hand paths,
+            // each vibration uses the last frequency set.
             try
             {
-                // The two hands' paths, to tell which one a vibration is for
+                // The two hands' paths, to tell which hand a vibration is for
                 IntPtr functionPointer = OpenXRFunctions.Find(xrGetInstanceProcAddr, xrInstanceHandle, "xrStringToPath", out _);
                 if (functionPointer != IntPtr.Zero)
                 {
@@ -78,8 +78,8 @@ namespace TarkovVR.Source.XR
             return true;
         }
 
-        // Every OpenXR function Unity looks up comes through here: xrApplyHapticFeedback is answered with ours. Called from native code,
-        // where an exception would take the game down: anything going wrong leaves the runtime's own answer.
+        // Every OpenXR function Unity looks up comes through here, and xrApplyHapticFeedback is answered with ours. This is called from
+        // native code, where an exception would crash the game, so on any error the runtime's own function is kept.
         private static int LookUpFunction(ulong instance, IntPtr name, IntPtr function)
         {
             int result = nextGetInstanceProcAddr(instance, name, function);
@@ -99,7 +99,7 @@ namespace TarkovVR.Source.XR
             return result;
         }
 
-        // A copy of Unity's vibration with our frequency in it: theirs is the caller's, not ours to write
+        // Sends a copy of Unity's vibration with our frequency in it; the original struct belongs to the caller and must not be written
         private static int ApplyHapticFeedback(ulong session, IntPtr hapticActionInfo, IntPtr hapticFeedback)
         {
             try
@@ -118,7 +118,7 @@ namespace TarkovVR.Source.XR
                 || ((XrHapticVibration*)hapticFeedback)->type != XR_TYPE_HAPTIC_VIBRATION)
                 return runtimeApplyHapticFeedback(session, hapticActionInfo, hapticFeedback);
 
-            // The hand from the action's path; without one, the last asked for (OpenXRInput sends each hand right after setting it)
+            // The hand comes from the action's path. Without one, use the last frequency set (OpenXRInput sends each hand right after setting it).
             ulong path = ((XrHapticActionInfo*)hapticActionInfo)->subactionPath;
             float frequency = path != XR_NULL_PATH && path == handPaths[OpenXRInput.LEFT_HAND] ? handFrequencies[OpenXRInput.LEFT_HAND]
                 : path != XR_NULL_PATH && path == handPaths[OpenXRInput.RIGHT_HAND] ? handFrequencies[OpenXRInput.RIGHT_HAND]

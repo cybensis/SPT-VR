@@ -2,8 +2,8 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Misc
 {
-    // A haptic blip on a hand coming into reach of something, once. It re-arms only after the hand has been out of reach for rearmTime:
-    // a hand resting on the reach's edge flips in and out every few frames with tracking jitter, which re-armed at once buzzes on and on.
+    // Fires a haptic blip once when a hand comes into reach of something. It re-arms only after the hand has been out of reach for
+    // rearmTime: a hand resting on the edge flips in and out every few frames with tracking jitter, and re-arming at once would buzz nonstop.
     internal sealed class ZoneEntryBlip
     {
         public static float rearmTime = 0.3f;   // s out of reach before coming back in blips again
@@ -12,7 +12,7 @@ namespace TarkovVR.Source.Misc
         private bool armed = true;
         private float leftAt = float.NegativeInfinity;
 
-        // This frame's in / out; true on the frame to blip
+        // Call every frame with whether the hand is in reach; returns true on the frame to blip
         public bool Enter(bool nowInside)
         {
             float now = Time.time;
@@ -32,14 +32,14 @@ namespace TarkovVR.Source.Misc
             return blip;
         }
 
-        // Already there without a blip (the grip was taken another way)
+        // Marks the hand as already in reach, without a blip (the grip was taken another way)
         public void MarkInside()
         {
             inside = true;
             armed = false;
         }
 
-        // Out, and the next coming into reach blips (the hand was taken off for something else)
+        // Marks the hand as out of reach so its next entry blips (the hand was taken off for something else)
         public void Rearm()
         {
             inside = false;

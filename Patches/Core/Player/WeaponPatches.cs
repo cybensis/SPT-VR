@@ -37,13 +37,9 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.Player.IsYourPlayer)
                 return;
-            /*
-            if (__instance.Weapon_0.MalfState.State != 0)
-                VRGlobals.vrPlayer.ForceUnlockHand();
-            */
         }
 
-        // This removed the sway/tilt of the gun when turning and walking
+        // Removes the gun's sway/tilt when turning and walking, unless the weapon inertia setting is on
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MotionEffector), "Process")]
         private static bool RemoveGunTilt(MotionEffector __instance)
@@ -53,35 +49,6 @@ namespace TarkovVR.Patches.Core.Player
             else
                 return false;
         }
-       /*
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.Player.FirearmController), "IsAiming", MethodType.Setter)]
-        private static bool BypassADSAnimation(EFT.Player.FirearmController __instance, ref bool value)
-        {
-            var player = __instance._player;
-            if (player == null)
-                return true;
-
-            if (!value)
-            {
-                player.Physical.HoldBreath(false);
-            }
-
-            __instance._isAiming = value;
-
-            player.Skills.FastAimTimer.Target = value ? 0f : 2f;
-            player.MovementContext.SetAimingSlowdown(__instance.IsAiming, 0.33f + __instance.gclass2250_0.AimMovementSpeed);
-
-            float mass = (!value || player.MovementContext.StationaryWeapon != null) ? 0f : __instance.ErgonomicWeight;
-            player.Physical.Aim(mass);
-
-            __instance.weaponManagerClass.SetAiming(value);
-            __instance.UpdateSensitivity();
-            __instance.AimingChanged(value);
-
-            return false;
-        }
-       */
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.EmptyHandsController), "Spawn")]
@@ -90,17 +57,15 @@ namespace TarkovVR.Patches.Core.Player
             if (!__instance._player.IsYourPlayer)
                 return;
             VRGlobals.firearmController = null;
-            // (GunInteractionController calls this for empty hands that never spawned: their object may not be there)
+            // Also called (through RepairUnspawnedEmptyHands) for empty hands that never spawned, whose object may not exist
             if (__instance.ControllerGameObject != null)
                 VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
             if (Handedness.MirrorLeftHanded && VRGlobals.emptyHands != null)
                 VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             VRGlobals.player = __instance._player;
 
-            //if (!__instance.WeaponRoot.parent.GetComponent<GunInteractionController>())
-            //    currentGunInteractController = __instance.WeaponRoot.parent.gameObject.AddComponent<GunInteractionController>();
-            // Empty hands must put a VR-held weapon back on its original parent: Escape/cancel gets here without the
-            // switch-out event (IEventsConsumerOnWeapOut). No-op if that already cleaned up.
+            // Going to empty hands must put a VR-held weapon back on its original parent: Escape/cancel gets here without the
+            // switch-out event (IEventsConsumerOnWeapOut). Does nothing if that event already cleaned up.
             if (VRGlobals.oldWeaponHolder != null && VRGlobals.weaponHolder.transform.childCount > 0)
             {
                 VRGlobals.weaponHolder.transform.GetChild(0).SetParent(VRGlobals.oldWeaponHolder.transform, false);
@@ -135,9 +100,10 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
-        // Empty hands Tarkov didn't spawn (FIKA rolling back a hands change the host refused): the right marker and arm still on the item
-        // that left, its model back in the pool far away = the right hand stuck. What EmptyHandsController.Spawn's patch does, now. Every
-        // frame (VRPlayerManager.LateUpdate) and from the gun's own update; true = repaired.
+        // Repairs empty hands that Tarkov didn't spawn (FIKA rolling back a hands change the host refused). The right marker and arm are
+        // still on the item that left, whose model is back in the pool far away, so the right hand is stuck. Runs what the
+        // EmptyHandsController.Spawn patch does. Called every frame (VRPlayerManager.LateUpdate) and from the gun's own update;
+        // returns true when it repaired the hands.
         internal static bool RepairUnspawnedEmptyHands()
         {
             EFT.Player player = VRGlobals.player;
@@ -194,13 +160,10 @@ namespace TarkovVR.Patches.Core.Player
                     HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
                     handsPositioner.rightHandIk = rightHandPositioner.transform;
                 }
-                //__instance.WeaponRoot.transform.parent.GetComponent<Animator>().updateMode = AnimatorUpdateMode.AnimatePhysics;
 
                 instance.WeaponRoot.transform.SetParent(VRGlobals.weaponHolder.transform, false);
-                //__instance.WeaponRoot.localPosition = Vector3.zero;
                 VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(37, 267, 55);
 
-                //weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(__instance.weaponPrefab_0.name, __instance.Weapon.WeapClass);
 
                 VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.23f, 0.0689f, -0.23f);
             }
@@ -229,7 +192,6 @@ namespace TarkovVR.Patches.Core.Player
             if (!__instance._player.IsYourPlayer )
                 return;
 
-            //Plugin.MyLog.LogWarning("PortableRangeFinderController::IEventsConsumerOnWeapOut  " + VRGlobals.emptyHands + "   |   " + VRGlobals.weaponHolder + "   |   " + VRGlobals.oldWeaponHolder);
             if (VRGlobals.oldWeaponHolder != null && VRGlobals.weaponHolder.transform.childCount > 0)
             {
                 VRGlobals.weaponHolder.transform.GetChild(0).SetParent(VRGlobals.oldWeaponHolder.transform, false);
@@ -249,8 +211,6 @@ namespace TarkovVR.Patches.Core.Player
         {
             // Set every frame: setting it once in SetCompassState doesn't work
             if (__instance.IsYourPlayer && __instance._propActive && __instance._compassArrow) {
-                //__instance._compassArrow.transform.parent.localPosition = new Vector3(0.1851f, -0.4271f, -0.0684f);
-                //__instance._compassArrow.transform.parent.localEulerAngles = new Vector3(55, 40, 11);
 
                 __instance._compassArrow.transform.parent.localPosition = new Vector3(-0.09f, -0.04f, 0);
                 __instance._compassArrow.transform.parent.localEulerAngles = new Vector3(85, 304, 10);
@@ -271,10 +231,6 @@ namespace TarkovVR.Patches.Core.Player
 
             if (InitVRPatches.leftPalm && __instance._player._compassArrow) {
                 __instance._player._compassArrow.transform.parent.SetParent(InitVRPatches.leftPalm, false);
-                //__instance.WaitFrames(5, delegate {
-                //    __instance._player._compassArrow.transform.parent.localPosition = new Vector3(0.1851f, -0.4271f, -0.0684f);
-                //    __instance._player._compassArrow.transform.parent.localEulerAngles = new Vector3(55, 40, 11);
-                //});
             }
         }
 
@@ -288,19 +244,15 @@ namespace TarkovVR.Patches.Core.Player
             if (InitVRPatches.leftPalm && __instance._player._compassArrow)
             {
                 __instance._player._compassArrow.transform.parent.SetParent(InitVRPatches.leftPalm, false);
-                //__instance.WaitFrames(5, delegate { 
-                //    __instance._player._compassArrow.transform.parent.localPosition = new Vector3(0.1851f, -0.4271f, -0.0684f);
-                //    __instance._player._compassArrow.transform.parent.localEulerAngles = new Vector3(55, 40, 11);
-                //});
             }
         }
 
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------       
         // Tarkov's skip of a draw or put-away (FastForwardCurrentState) finishes the op without the clip's WeapIn / WeapOut events
-        // (the draw's plays IDLE and calls WeaponAppeared, the put-away's calls HideWeaponComplete). Every VR skip goes through
-        // here to do that event work first: else the old gun stays on its holder, the drawn one's GunInteractionController stays
-        // off (not anchored to the hand) and switchingWeapon stays set (FireHandler bails).
+        // (the draw's skip plays IDLE and calls WeaponAppeared, the put-away's calls HideWeaponComplete). Every VR skip goes through here
+        // to run our event handlers first. Otherwise the old gun stays on its holder, the drawn gun's GunInteractionController stays off
+        // (not anchored to the hand), and switchingWeapon stays set (FireHandler bails).
         internal static void SkipDrawOrPutAway(EFT.Player.FirearmController firearmController)
         {
             if (firearmController.IsInSpawnOperation())
@@ -360,7 +312,6 @@ namespace TarkovVR.Patches.Core.Player
                     {
                         firearmController.IEventsConsumerOnWeapIn();
 
-                        //VRGlobals.switchingWeapon = false;
                     }
                 }
             }
@@ -463,7 +414,6 @@ namespace TarkovVR.Patches.Core.Player
             {
                 previousLeftHandMarker = VRGlobals.player._markers[0];
                 VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
-                //VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
             }
             if (VRSettings.GetLeftHandedMode())
             {
@@ -531,8 +481,6 @@ namespace TarkovVR.Patches.Core.Player
 
                 }
             }
-            //Plugin.MyLog.LogWarning(__instance.transform.root+"\n\n\n");
-            //Plugin.MyLog.LogWarning(new StackTrace());
 
         }
 
@@ -607,7 +555,7 @@ namespace TarkovVR.Patches.Core.Player
 
                 if (scopeTransform == null) continue;
 
-                // Check if deep scope was found (likely modded scope), if so set that as scopeTransform
+                // If the deep search found the scope (likely a modded scope), use the sight's first child as scopeTransform
                 Transform deepScopeChild = TryGetDeepScopeTransform(sightController.transform);
                 if (scopeTransform == deepScopeChild && deepScopeChild != null)
                 {
@@ -698,23 +646,8 @@ namespace TarkovVR.Patches.Core.Player
             return child2.Find("mod_aim_camera_000");
         }
 
-        // MoveWeaponToIKHands adds HighLightMesh to the camera, so its Awake runs before a material is attached (null on entering
-        // a raid): give it a dummy invisible Material
-        /*
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(HighLightMesh), "Awake")]
-        private static void HandleHighLightMeshAwake(HighLightMesh __instance)
-        {
-
-            if (__instance.Mat == null && VRGlobals.player && (VRGlobals.vrPlayer is HideoutVRPlayerManager || VRGlobals.vrPlayer is RaidVRPlayerManager))
-            {
-                var shader = Shader.Find("Hidden/HighLightMesh");
-                __instance.Mat = new Material(shader);
-                __instance.Mat.SetColor(HighLightMesh.int_2, Color.clear);
-                __instance.Mat.SetTexture(HighLightMesh.int_4, __instance.renderTexture_0);
-            }
-        }
-        */
+        // HandleHighLightMeshAwake below: MoveWeaponToIKHands adds HighLightMesh to the camera, so its Awake runs before a material is
+        // attached (null on entering a raid). It gets a dummy invisible material.
         private static readonly Dictionary<HighLightMesh, System.Action> _highLightHandlers
             = new Dictionary<HighLightMesh, System.Action>();
         private static bool _highLightAllowUpdate = false;
@@ -767,13 +700,13 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPrefix]
         private static void CleanupHighlightMesh(EFT.Player.FirearmController __instance)
         {
-            // Our own weapon switch only: else a bot drawing a gun takes our weapon-part highlight off the camera
+            // Only for our own weapon switch: otherwise a bot drawing a gun would remove our weapon-part highlight from the camera
             if (__instance == null || __instance._player == null || !__instance._player.IsYourPlayer)
                 return;
             RemoveHighlightFromCamera();
         }
 
-        // The weapon-part highlight's command buffer off the headset camera
+        // Removes the weapon-part highlight's command buffer from the headset camera
         private static void RemoveHighlightFromCamera()
         {
             if (VRGlobals.VRCam == null)
@@ -794,23 +727,24 @@ namespace TarkovVR.Patches.Core.Player
             { "weapon_toz_tt_gold_762x25tt_container", new Vector3(-0.058f, -0.416f, -0.187f) },
         };
 
-        // The same for the right-grip marker (weapon_R_hand_marker, HandsHierarchy.Transforms[8]): the Sako's sits 58 cm out to the side
-        // in all its clips, which throws off its gun spot on the back / hip, the reach to take it back and the stock length. A sound
-        // marker sits on the right palm in the gun's idle pose, so this is the Sako's palm there (sako_idle_armed, Weapon_root frame).
+        // The same for the right-grip marker (weapon_R_hand_marker, HandsHierarchy.Transforms[8]). The Sako's sits 58 cm out to the side
+        // in all its clips, which breaks its gun spot on the back / hip, the reach to take it back, and the stock length. A correct marker
+        // sits on the right palm in the gun's idle pose, so this is the Sako's palm there (sako_idle_armed, Weapon_root frame).
         private static readonly Dictionary<string, Vector3> RightHandMarkerOverrides = new()
         {
             { "weapon_sako_trg_m10_86x70_container", new Vector3(0.047f, -0.150f, -0.103f) },
         };
         private const string RIGHT_MARKER_OVERRIDE = "VR_RightHandMarker_Override";
 
-        // A right-grip marker further than this from the gun's right IK marker is off the gun, and the IK marker (_markers[1], where the
-        // gun in hands is anchored) is used instead. Of the game's and the Content Backport's guns: the Sako and the backport's P226R,
-        // QBZ-191 and MXLR 55-59 cm (the IK marker on the gun), every other gun under 22 (the M4's 21, both on the gun).
+        // m. A right-grip marker further than this from the gun's right IK marker is treated as off the gun, and the IK marker
+        // (_markers[1], where the held gun is anchored) is used instead. Among the game's and the Content Backport's guns, the Sako and the
+        // backport's P226R, QBZ-191 and MXLR are 55-59 cm apart (the IK marker on the gun); every other gun is under 22 cm (the M4: 21).
         public static float offGunGripMarkerDistance = 0.45f;
         private static readonly HashSet<string> offGunGripMarkersLogged = new HashSet<string>();
 
-        // A gun's right-grip marker: its own, or for a gun above a stand-in child of its Weapon_root at the right spot, or its right IK marker
-        // when its own is off the gun. weaponPrefab is the gun in hands' (_weaponPrefab) or a model on the body's; null = its own marker.
+        // A gun's right-grip marker: its own; for a gun in RightHandMarkerOverrides, a stand-in child of its Weapon_root at the right spot;
+        // or its right IK marker when its own is off the gun. weaponPrefab is the held gun's (_weaponPrefab) or a body model's; null skips
+        // the override.
         internal static Transform RightGripMarker(WeaponPrefab weaponPrefab, TransformLinks links, Transform weaponRoot)
         {
             if (weaponPrefab != null && weaponRoot != null && RightHandMarkerOverrides.TryGetValue(weaponPrefab.name.Replace("(Clone)", ""), out Vector3 localPosition))
@@ -845,8 +779,9 @@ namespace TarkovVR.Patches.Core.Player
             return controller != null ? RightGripMarker(controller._weaponPrefab, controller.HandsHierarchy, controller.WeaponRoot) : null;
         }
 
-        // The support hand's grip point (VRPlayerManager.leftHandGunIK: the two-handed grab's reach and the left arm's target): a stand-in
-        // for a gun above, else weapon_L_hand_marker, or its left IK marker when the hand marker is off the gun (the backport's P226R: 55 cm)
+        // The support hand's grip point (VRPlayerManager.leftHandGunIK, used for the two-handed grab's reach and the left arm's target):
+        // a stand-in for a gun in LeftHandIKOverrides, else weapon_L_hand_marker, or the left IK marker when the hand marker is off the
+        // gun (the backport's P226R: 55 cm).
         internal static Transform LeftGripMarker(EFT.Player.FirearmController controller)
         {
             if (controller == null || controller.HandsHierarchy == null)
@@ -885,7 +820,7 @@ namespace TarkovVR.Patches.Core.Player
 
             if (!__instance._player.IsYourPlayer || __instance._player == null)
                 return;
-            // A mounted gun: Tarkov keeps it on its mount, none of the held-gun setup (MountedGun)
+            // A mounted gun stays on its mount (handled by MountedGun): skip the held-gun setup
             if (MountedGun.IsMountedGun(__instance))
             {
                 MountedGun.OnGunInHands(__instance);
@@ -948,8 +883,8 @@ namespace TarkovVR.Patches.Core.Player
                     }
                 }
 
-                // Only reassign if we found a valid deep scope child AND it matches
-                if (deepScopeChild != null) //&& scopeTransform == deepScopeChild)
+                // When the deep scope child exists, use the sight's first child
+                if (deepScopeChild != null)
                     scopeTransform = baseTransform.GetChild(0);
 
                 // If not found, try in the first child's children
@@ -984,15 +919,6 @@ namespace TarkovVR.Patches.Core.Player
             VRPlayerManager.leftHandGunIK = LeftGripMarker(__instance);
 
 
-            // after the leftHandGunIK assignment in MoveWeaponToIKHands
-            /*
-            var dbg = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            GameObject.Destroy(dbg.GetComponent<Collider>());
-            dbg.transform.SetParent(VRPlayerManager.leftHandGunIK, false);
-            dbg.transform.localPosition = Vector3.zero;
-            dbg.transform.localScale = Vector3.one * 0.03f;
-            dbg.GetComponent<Renderer>().material.color = Color.magenta;
-            */
 
             if (__instance.WeaponRoot.parent.name != "weaponHolder")
             {
@@ -1141,15 +1067,15 @@ namespace TarkovVR.Patches.Core.Player
 
         // The optic camera renders the whole scene into a square RT (GClass3687.RenderTexture_0, vanilla 1024) bound as the global
         // _CamTex the lens samples. We shrink that camera's own target; redirecting it to a different target breaks GPU-Instancer grass.
-        // decoupleOpticReticle = true: _CamTex points at a separate full-res lensTex, and OpticReticleDecoupler upscales RenderTexture_0
-        // into it and re-draws the reticle sharp each frame. false: the lens samples the shrunk RT directly (cheapest, soft reticle).
-        public static int opticLensResolution = 1024;     // lens/reticle texture size when decoupling (sharp).
+        // _CamTex is pointed at a separate full-res lensTex instead, and OpticReticleDecoupler upscales RenderTexture_0 into it and
+        // re-draws the reticle sharp each frame.
+        public static int opticLensResolution = 1024;     // px, size of the full-res lens/reticle texture
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(OpticCameraManager), "SetResolution")]
         private static void ScaleOpticResolution(ref int resolution)
         {
-            // The VR menu's "Scope Render Resolution" (Graphics): same target object, just smaller (grass-safe)
+            // The VR menu's "Scope Render Resolution" (Graphics): the same target object, only smaller, which is safe for the grass
             int res = VRSettings.GetOpticRenderResolution();
             if (res > 0)
                 resolution = Mathf.Clamp(res, 256, 1024);
@@ -1187,8 +1113,8 @@ namespace TarkovVR.Patches.Core.Player
             UnityEngine.Shader.SetGlobalTexture("_CamTex", decoupler.lensTex);
         }
 
-        // When decoupling, OpticReticleDecoupler draws the reticle sharp into the full-res _CamTex. Vanilla OpticRetrice also draws
-        // it low-res into the scene RT, which upscales to a blurry halo under the sharp one: suppress the vanilla draw.
+        // OpticReticleDecoupler draws the reticle sharp into the full-res _CamTex. Vanilla OpticRetrice would also draw it low-res into
+        // the scene RT, which upscales to a blurry halo under the sharp one, so the vanilla draw is suppressed.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.CameraControl.OpticRetrice), "OnPreCull")]
         private static bool SuppressLowResReticle(EFT.CameraControl.OpticRetrice __instance)
@@ -1210,7 +1136,6 @@ namespace TarkovVR.Patches.Core.Player
             __instance.transform.position = __instance.cameraPivot.position;
             __instance.transform.rotation = __instance.cameraPivot.rotation;
 
-            //__instance.opticCamera.useOcclusionCulling = __instance.MainCamera.useOcclusionCulling;
             if (__instance.undithering != null && __instance.mainUndithering != null)
             {
                 __instance.undithering.enabled = __instance.mainUndithering.enabled;
@@ -1362,13 +1287,6 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Collimators try to do some stupid shit which stops them from displaying so disable it here
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(CameraClass), "method_12")]
-        //private static bool FixCollimatorSights(CameraClass __instance)
-        //{
-        //    return false;
-        //}
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1573,7 +1491,7 @@ namespace TarkovVR.Patches.Core.Player
                         worldSpaceVelocity = worldSpaceVelocity.normalized * 10f;
 
                     val._rigidBody.velocity = worldSpaceVelocity;
-                    val._rigidBody.angularVelocity = angularVelocity; // Angular velocity might also need transformation if it's not working right
+                    val._rigidBody.angularVelocity = angularVelocity; // not transformed to world space like the velocity above
                 }
             }
 
@@ -1623,60 +1541,12 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPrefix]
         private static void CleanupHighlightMeshMeds(MedsController __instance)
         {
-            // Our own meds only: else a bot healing takes our weapon-part highlight off the camera
+            // Only for our own meds: otherwise a bot healing would remove our weapon-part highlight from the camera
             if (__instance == null || __instance._player == null || !__instance._player.IsYourPlayer)
                 return;
             RemoveHighlightFromCamera();
         }
 
-        /*
-        private static int lastStateHash = 0;
-        private static FieldInfo delayedEventsField;
-        private static FieldInfo animEventField;
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(AnimationEventSystem.AnimationEventsEmitter), "EmitEvents")]
-        public static bool logItemAnimationEvents = false;   // every arms-animator state change and event while using an item ("[EatLog]")
-        public static void LogEvents(AnimationEventSystem.AnimationEventsEmitter __instance)
-        {
-            if (!logItemAnimationEvents || !VRGlobals.usingItem) return;
-
-            var animator = VRGlobals.player.ArmsAnimatorCommon;
-            if (animator == null) return;
-            var state = animator.GetCurrentAnimatorStateInfo(1);
-
-            if (state.fullPathHash != lastStateHash)
-            {
-                Plugin.MyLog.LogInfo(
-                    $"[EatLog] STATE: {lastStateHash} -> {state.fullPathHash} (t={state.normalizedTime:F3})");
-                lastStateHash = state.fullPathHash;
-            }
-
-            if (delayedEventsField == null)
-            {
-                delayedEventsField = __instance.GetType().GetField(
-                    "DelayedEvents",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (delayedEventsField == null) return;
-            }
-
-            var queue = delayedEventsField.GetValue(__instance) as System.Collections.IEnumerable;
-            if (queue == null) return;
-
-            foreach (var entry in queue)
-            {
-                if (entry == null) continue;
-                if (animEventField == null)
-                {
-                    animEventField = entry.GetType().GetField(
-                        "AnimationEvent",
-                        BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
-                }
-                var ev = animEventField?.GetValue(entry);
-                Plugin.MyLog.LogInfo($"[EatLog] EVENT @ t={state.normalizedTime:F3}: {ev}");
-            }
-        }
-        */
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MedsController), "Spawn")]
@@ -1726,7 +1596,6 @@ namespace TarkovVR.Patches.Core.Player
                 
                 VRGlobals.usingItem = true;
 
-                // Safely handle player marker
                 if (VRGlobals.player?._markers != null && VRGlobals.player._markers.Length > 0)
                 {
                     previousLeftHandMarker = VRGlobals.player._markers[0];
@@ -1736,8 +1605,7 @@ namespace TarkovVR.Patches.Core.Player
             {
                 Plugin.MyLog.LogError($"Error in MedsControllerSpawnPatch: {exception.Message}");
             }
-            //Plugin.MyLog.LogError($"[SpawnMedsController] Spawning meds controller for {player} with item {item}");
-        }      
+        }
         
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CollimatorSight), "OnEnable")]
@@ -1745,8 +1613,8 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.CollimatorMaterial.HasProperty("_MarkScale"))
                 return;
-            // Mark scale pulls the red dot/holo closer to the lens the higher it is, which makes it shift around when looking
-            // as this value decreases it gets pushed further away from the lens, gets smaller, but it stops shifting around
+            // A higher _MarkScale pulls the red dot/holo closer to the lens, which makes it shift around as you look through it.
+            // A lower value pushes it further from the lens and makes it smaller, but it stops shifting.
             float markScale = __instance.CollimatorMaterial.GetFloat("_MarkScale");
             if (markScale != 1) {
                 __instance.CollimatorMaterial.SetFloat("_MarkScale", 1f);

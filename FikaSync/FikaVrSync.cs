@@ -15,16 +15,16 @@ using UnityEngine;
 namespace SptVrFikaSync
 {
     // ============================================================================================
-    //  The public API + networking core of the FIKA sync module.
+    //  The public API and networking core of the FIKA sync module.
     //
-    //  SEND: the VR mod produces the data (it needs the VR rig / the local grab); this module only
-    //  packetizes + sends.
-    //  REGISTER + RELAY + RECEIVE: all here, so a peer that has only this module (a flatscreen player /
-    //  headless host) registers the packets (no "Undefined packet" crash), relays them as host and
-    //  applies them.
+    //  Sending: the VR mod produces the data (it needs the VR rig and the local grab state); this module
+    //  only builds the packets and sends them.
+    //  Registering, relaying and receiving all happen here, so a peer that has only this module (a
+    //  flatscreen player or a headless host) still registers the packets (no "Undefined packet" crash),
+    //  relays them as host and applies them.
     //
-    //  Handlers run inside FIKA's NetPacketProcessor.ReadAllPackets, which has no try/catch: a throw
-    //  would drop the rest of the datagram (incl. weapon packets). Every handler is wrapped.
+    //  Handlers run inside FIKA's NetPacketProcessor.ReadAllPackets, which has no try/catch: an exception
+    //  would drop the rest of the datagram, weapon packets included. So every handler is wrapped.
     // ============================================================================================
     public static class FikaVrSync
     {
@@ -41,14 +41,14 @@ namespace SptVrFikaSync
         // true = relocate the downed teammate on every drag packet (their view follows). false = one teleport when the drag
         // ends (the downed player is in a death cam and doesn't see their body mid-drag).
         public static bool downedRelocateContinuous = false;
-        // Relocate the downed teammate to where their body was dragged, applied at revive (see DownedDragApply / RevivePatch):
-        // teleporting the root while still downed drags the decoupled ragdoll bones past the drop spot on observers.
-        // false = they revive at the fall spot. Must match on both clients.
+        // Move the downed teammate to where their body was dragged when they are revived (see DownedDragApply and
+        // FikaPlayer_ToggleDowned_RevivePatch). Teleporting the root while they are still downed drags the decoupled ragdoll bones
+        // past the drop spot on observers. false = they revive where they fell. Must match on both clients.
         public static bool relocateDownedTeammate = true;
 
         // ---- body-drag steal arbitration: read-hooks into the VR mod's local grab state ---------
-        // Callbacks set once by the VR mod, so this module never references the VR assembly. Unset on a flatscreen peer =
-        // "not dragging".
+        // Callbacks set once by the VR mod, so this module never references the VR assembly. On a flatscreen peer they stay
+        // unset, which means "not dragging".
         public static Func<int> getLocalDraggedCorpseNetId;   // -> HandsInteractionController.localDraggedCorpseNetId
         public static Func<float> getLocalBodyGrabTime;        // -> HandsInteractionController.bodyGrabTime
         public static Action onYieldBodyDrag;                  // -> RelinquishBodyDrag (yield a contested body)
@@ -249,7 +249,8 @@ namespace SptVrFikaSync
         // ===== DOORS BY HAND (the angle and the handle; FIKA syncs open / shut) =====
         public static bool enableDoorSync = true;
 
-        // SPT-VR's PhysicalDoors: true while the local VR player's hand moves that door (theirs wins on this machine)
+        // Set by SPT-VR's PhysicalDoors: true while the local VR player's hand moves that door. Incoming door packets are then
+        // ignored on this machine.
         public static Func<WorldInteractiveObject, bool> isDoorDrivenLocally;
 
         public static void SendDoor(string doorId, float angle, float handleTurn, bool final)
@@ -301,9 +302,9 @@ namespace SptVrFikaSync
         private static int[] _eaHash = new int[0];
         private static float[] _eaTime = new float[0];
 
-        // Send the local eater's wrist poses + food-animator layer states + prop poses/visibility.
-        // names/pos/rot/vis are parallel (body-local), count props taken; animHashes/animTimes are
-        // parallel per layer. Capped at 255 props / 8 anim layers.
+        // Sends the local eater's wrist poses, the food animator's layer states, and each prop's pose and visibility.
+        // names/pos/rot/vis are parallel lists (body-local) of which the first count are sent; animHashes/animTimes are
+        // parallel, one entry per layer. Capped at 255 props and 8 animator layers.
         public static void SendEatingPose(int netId,
             Vector3 lPos, Quaternion lRot, Vector3 rPos, Quaternion rRot,
             System.Collections.Generic.List<int> animHashes,
@@ -387,7 +388,7 @@ namespace SptVrFikaSync
         }
 
         // ===== MANUAL RELOAD (hands on parts, magazines, bolt / handle; ReloadSyncApply draws it) =====
-        // Reusable send buffers, as the eating's (one local VR player per peer, sent synchronously)
+        // Reusable send buffers, like the eating ones (one local VR player per peer, sent synchronously).
         private static int[] _rPropItems = new int[0];
         private static Vector3[] _rPropPos = new Vector3[0];
         private static Quaternion[] _rPropRot = new Quaternion[0];
@@ -452,8 +453,8 @@ namespace SptVrFikaSync
             SendUnreliableBroadcast(ref p);
         }
 
-        // No gun in hands any more (or running with it): observers put their copy of the gun back. Reliable: a lost stop would leave
-        // it overridden until the stale timeout.
+        // Sent when no gun is in hands any more, or the player is running with it: observers put their copy of the gun back.
+        // Reliable, because a lost stop would leave the gun overridden until the stale timeout.
         public static void SendReloadStop(int netId)
         {
             if (!enableReloadSync)
@@ -553,10 +554,10 @@ namespace SptVrFikaSync
         }
 
         // ===== CORPSE LOOT SYNC (keep the host's bots/AI honest about a dragged body) =====
-        // Sent by the dragger (a client) so the host/headless, which runs the bots + looting AI but not the VR mod, pulls the
-        // body's ORBIT waypoint on grab and re-adds it (+ relocates the server ragdoll for live scanners like LootingBots) at
-        // the rest spot on settle. Reliable: a dropped marker would leave the body lootable in the wrong place or stuck
-        // unlootable. Only clients send: the host handles its own drags locally (SPT-VR.dll's OrbitSupport).
+        // Sent by the dragger (a client) to the host or headless, which runs the bots and looting AI but not the VR mod. On grab
+        // the host removes the body's ORBIT waypoint. On settle it re-adds it at the rest spot and moves the server ragdoll there
+        // for live scanners like LootingBots. Reliable: a dropped marker would leave the body lootable in the wrong place, or
+        // stuck unlootable. Only clients send; the host handles its own drags locally (SPT-VR.dll's OrbitSupport).
         public static void SendCorpseLootGrab(string profileId)
         {
             if (string.IsNullOrEmpty(profileId) || !FikaBackendUtils.IsClient)
@@ -625,8 +626,8 @@ namespace SptVrFikaSync
             return -1;
         }
 
-        // Broadcast a downed teammate's ragdoll pose (+ a ground-projected centroid as the relocate
-        // anchor). The downed player's own client teleports there; observers drive their ragdoll copy.
+        // Broadcasts a downed teammate's ragdoll pose, plus the body's centroid on the ground as the point to move them to.
+        // The downed player's own client teleports there; observers drive their ragdoll copy.
         public static void SendDownedDrag(int netId, CorpseRagdoll ragdoll)
         {
             if (!enableDownedDragSync || netId < 0)
@@ -643,8 +644,8 @@ namespace SptVrFikaSync
             SendUnreliableBroadcast(ref p);
         }
 
-        // Drag ended: send the final relocate spot (reliable, so a dropped packet can't strand the teammate). No bones:
-        // observers reactivate + settle their ragdoll locally from its last pose.
+        // The drag ended: sends the final spot to move the teammate to (reliable, so a dropped packet can't strand them). No
+        // bones are sent: observers reactivate their ragdoll and let it settle locally from its last pose.
         public static void SendDownedDragReleased(int netId, CorpseRagdoll ragdoll)
         {
             if (!enableDownedDragSync || netId < 0)
@@ -660,8 +661,8 @@ namespace SptVrFikaSync
             SendReliableBroadcast(ref p);
         }
 
-        // Read fresh world pose per ragdoll bone, plus a relocate anchor = body centroid in XZ at the
-        // lowest bone Y (≈ ground contact, so teleporting the downed player's root there keeps them grounded).
+        // Reads each ragdoll bone's current world pose, plus the point to move the player to: the body's centroid in XZ at the
+        // lowest bone's Y (about where it touches the ground, so teleporting the root there keeps them grounded).
         private static bool ReadRagdollWorld(CorpseRagdoll ragdoll, out Vector3[] pos, out Quaternion[] rot, out Vector3 root)
         {
             pos = null; rot = null; root = Vector3.zero;

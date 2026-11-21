@@ -5,13 +5,13 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // The MP5's and the AUG A1's bolt never locks back on its own (Tarkov's ManualBoltCatch): the handle does it, pulled all the way back and
-    // turned up into a notch (<gun>_bolt_open), where it stays when let go. Slapped out of it, it runs forward (<gun>_reload_catch_0). How
-    // far it turns comes from the gun's clips. The lift only counts from full pull on, so a plain rack can't end up in the notch.
+    // The MP5's and AUG A1's bolt never locks back on its own (Tarkov's ManualBoltCatch). Instead the handle is pulled all the way back and
+    // turned up into a notch (<gun>_bolt_open), where it stays when let go. Slapped out of the notch, it runs forward (<gun>_reload_catch_0).
+    // How far it turns comes from the gun's clips. The lift only counts from full pull onward, so a plain rack can't end up in the notch.
     public static partial class VRReloadController
     {
         public static float handleNotchLift = 0.03f;        // m the hand lifts from full pull to turn the handle all the way into the notch
-        public static float handleNotchHold = 0.6f;         // share of that it has to be turned when let go to stay there
+        public static float handleNotchHold = 0.6f;         // fraction of that turn needed at the let-go for the handle to stay in the notch
 
         private sealed class HandleNotch
         {
@@ -24,7 +24,7 @@ namespace TarkovVR.Source.Weapons
         private static float notchTurn;                     // 0 to 1
         private static bool notchClicked;
         private static float notchStartHeight;
-        private static Vector3 notchPointOnHand;            // the handle where the hand took it, in the controller's frame, so a wrist roll lifts it too
+        private static Vector3 notchPointOnHand;            // the grab point on the handle in the controller's frame, so a wrist roll lifts it too
         private static Quaternion handleCarrierRestLocalRotation;
 
         private static HandleNotch HandleNotchOf(FirearmController firearmController)
@@ -37,7 +37,7 @@ namespace TarkovVR.Source.Weapons
             return notch;
         }
 
-        // A bolt already held back has the handle in the notch: this pull only takes it out
+        // A bolt already held back has its handle in the notch, so this pull can only take it out
         private static void StartHandleNotch(FirearmController firearmController, Vector3 backWorld)
         {
             notchTurn = 0f;
@@ -74,7 +74,7 @@ namespace TarkovVR.Source.Weapons
             handleRider.localRotation = Quaternion.AngleAxis(heldNotch.angle * notchTurn, heldNotch.axis);
         }
 
-        // LateUpdate, with the carrier: the animator's held pose turns the handle with the pull, this turns it with the hand
+        // LateUpdate, together with the carrier: the animator's held pose turns the handle with the pull, and this adds the hand's turn
         private static void ApplyHandleNotch()
         {
             if (heldNotch != null)

@@ -4,12 +4,12 @@ using TarkovVR.Source.Settings;
 namespace TarkovVR.Patches.Core.Player
 {
     // Firing while sprinting. Tarkov refuses a trigger pull from the idle gun while the player's state is in
-    // EFTHardSettings.UnsuitableStates (FirearmController.Idling.SetTriggerPressed -> Player.StateIsSuitableForHandInput), and a
-    // sprint starting releases the trigger (FirearmController.SprintStateChangedEvent). Your player only: the pull goes through with
-    // Sprint read as a fine state (every other unsuitable state still refuses it), and an automatic burst carries on when a sprint
-    // starts. The gun's sprint pose is already off in VR (IKPatches: the hands animator's sprint layer at weight 0).
-    // Only with the sprint animation off (VR tab "Disable Run Animation", VRSettings.GetDisableRunAnim): with it on the arms play the
-    // run, and firing stays blocked as in Tarkov.
+    // EFTHardSettings.UnsuitableStates (FirearmController.Idling.SetTriggerPressed -> Player.StateIsSuitableForHandInput), and
+    // starting a sprint releases the trigger (FirearmController.SprintStateChangedEvent). For your player only, Sprint counts as a
+    // suitable state during the pull (every other unsuitable state still refuses it), and an automatic burst keeps going when a
+    // sprint starts. The gun's sprint pose is already off in VR (IKPatches sets the hands animator's sprint layer weight to 0).
+    // Only active with the run animation off (VR tab "Disable Run Animation", VRSettings.GetDisableRunAnim). With it on, the arms
+    // play the run and firing stays blocked as in Tarkov.
     [HarmonyPatch]
     public static class SprintFirePatches
     {
@@ -47,8 +47,8 @@ namespace TarkovVR.Patches.Core.Player
             __state = __instance != null && __instance.IsTriggerPressed;
         }
 
-        // Tarkov let go of the trigger as the sprint started: held again for a burst under way (only automatic fire - a semi-auto shot
-        // in progress would queue a second one off the press)
+        // Tarkov released the trigger as the sprint started; press it again if a burst was under way. Only for automatic fire:
+        // re-pressing during a semi-auto shot would queue a second shot.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "SprintStateChangedEvent")]
         private static void KeepBurstIntoSprint(EFT.Player.FirearmController __instance, bool value, bool __state)

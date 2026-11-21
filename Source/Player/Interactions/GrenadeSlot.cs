@@ -16,25 +16,26 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // The grenade on the chest: the grenade Tarkov would throw next, shown on the chest in the body's frame and taken by either hand's
-    // grip. The pick is Tarkov's own for its throw key (PlayerInputTranslator.vmethod_1: TopPriorityGrenade, else a random reachable
-    // one, not the type thrown last), made here once so the grab takes the one shown (SetItemInHands, as the key does).
-    // What's shown is our own copy of the grenade's meshes (Look), placed by the grenade's middle: Tarkov's model is the hands prefab,
-    // whose root sits ~40 cm off the grenade and which shares a pool with the grenade in the hand (the VR hold may have rebuilt it).
-    // The grab is Tarkov's own switch with the gun's put-away and the grenade's draw skipped; the left hand holds it the way it holds
-    // a gun (Handedness.GunInLeftHand). Put back, its put-away is skipped too and the hands go back as they were.
-    // The trigger held holdSeconds at the slot moves it (saved like a gun spot).
+    // A grenade slot on the chest. It shows the grenade Tarkov would throw next, placed in the body's frame, and either hand's grip
+    // takes it. The choice follows Tarkov's own throw key (PlayerInputTranslator.vmethod_1: TopPriorityGrenade, else a random
+    // reachable one, avoiding the type thrown last). It is made here once, so the grab takes the grenade shown (SetItemInHands, as
+    // the key does).
+    // The grenade shown is our own copy of its meshes (Look), placed by the grenade's middle. Tarkov's model is the hands prefab: its
+    // root sits ~40 cm off the grenade, and it shares a pool with the grenade in the hand (which the VR hold may have rebuilt).
+    // The grab is Tarkov's own hands switch with the gun's put-away and the grenade's draw skipped. The left hand holds it the way it
+    // holds a gun (Handedness.GunInLeftHand). Putting it back also skips its put-away and returns the hands to what they held.
+    // Holding the trigger at the slot for holdSeconds moves the slot (saved like a gun spot).
     public static class GrenadeSlot
     {
         public static bool enabled = true;
         public static Vector3 slotFromNeck = new Vector3(-0.12f, -0.20f, 0.14f);    // m, body frame (x right, y up, z forward): the grenade's middle, top left of the chest
-        public static Vector3 slotEuler = new Vector3(278.5f, 132.7f, 166f);        // the grenade body's turn there, body frame
-        public static float grabRadius = 0.08f;     // m any point of the hand (palm, knuckles, fingertips) to the grenade's middle
-        public static float holdSeconds = 1f;       // trigger held at the slot: moving the slot
-        public static float switchTimeout = 3f;     // s before a grab whose switch never lands is given up
-        public static float rehangSeconds = 3f;     // s a gun that hung before the grenade has, once it's back in the hands, to hang again
-        public static float throwReturnTimeout = 8f;    // s after a throw Tarkov's draw of the gun that hung before still counts as its return
-        public static float returnRetryDelay = 1f;      // co-op client: s between asks for a gun's return the host refused (once it's free)
+        public static Vector3 slotEuler = new Vector3(278.5f, 132.7f, 166f);        // the grenade body's rotation there, body frame
+        public static float grabRadius = 0.08f;     // m from any point of the hand (palm, knuckles, fingertips) to the grenade's middle
+        public static float holdSeconds = 1f;       // s the trigger is held at the slot to start moving it
+        public static float switchTimeout = 3f;     // s before a grab whose hands switch never completes is given up
+        public static float rehangSeconds = 3f;     // s, once a gun that hung before the grenade is back in the hands, for it to hang again
+        public static float throwReturnTimeout = 8f;    // s after a throw that Tarkov's draw of the previously hung gun still counts as its return
+        public static float returnRetryDelay = 1f;      // co-op client: s between requests for a gun's return the host refused (once it's free)
         public static int returnRetries = 4;
         public static float refusedTakeHold = 2f;       // co-op client: s the slot waits after the host refused a take
         public static bool debugLog = true;         // one line per grab / pick / placement
@@ -55,8 +56,8 @@ namespace TarkovVR.Source.Player.Interactions
         private static MongoID? lastThrownTemplate;
         private static readonly List<ThrowWeap> reachable = new List<ThrowWeap>(10);
 
-        // What's shown: one copy per grenade type, in the grenade body's frame (GrenadePrefab.ThrowingParts[0]), with the middle of
-        // what's visible in that frame
+        // The grenade shown: one copy per grenade type, in the grenade body's frame (GrenadePrefab.ThrowingParts[0]), with the middle
+        // of its visible meshes in that frame
         private sealed class Look
         {
             public GameObject root;
@@ -72,18 +73,18 @@ namespace TarkovVR.Source.Player.Interactions
 
         // A grab under way
         private static ThrowWeap switchingTo;
-        private static bool switchFromHand;     // a grenade in hand swapped for another (GrenadePicker): no stand-in at the hand, the hung gun kept
+        private static bool switchFromHand;     // a grenade in hand swapped for another (GrenadePicker): no stand-in at the hand, hungGun kept
         private static float switchStarted;
         private static Hand switchHand;
         private static Vector3 inHandPosition;
         private static Quaternion inHandRotation = Quaternion.identity;
         private static Item handsBefore;
         private static bool gunHungBefore;
-        // Co-op as a client: when the last take was asked for (until the host has had time to answer it), and the wait after a refusal
+        // Co-op as a client: when the last take was requested (kept until the host has had time to answer), and the wait after a refusal
         private static float takeAskedAt = -1f;
         private static float takeRefusedUntil = -1f;
-        // What Tarkov draws once the grenade in hand is thrown: the item before it (PlayerOwner.PreviousItem as it came in), the one before
-        // the first through picker swaps
+        // What Tarkov draws once the grenade in hand is thrown: the item before it (PlayerOwner.PreviousItem when it came in). After
+        // picker swaps, it stays the item before the first grenade.
         private static Item afterThrowItem;
 
         // The last grab: which grenade, and with which hand
@@ -92,7 +93,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool grabbedLeft;
         private static bool grabbedByHold;
 
-        // Put back: its put-away, and the gun the hands go back to
+        // Putting it back: the grenade's put-away, and the gun the hands go back to
         private static EFT.Player.GrenadeHandsController puttingAway;
         private static float putAwayStarted;
         private static Item returningGun;
@@ -101,7 +102,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static float returnTimeout;
         private static int returnTries;
         private static float lastReturnTry;
-        // The gun that hung on its spot when this grenade came into the hands (the grab saw it, or ChestHang still said so at its spawn)
+        // The gun that hung on its spot when this grenade came into the hands (seen by the grab, or ChestHang still reported it at spawn)
         private static Item hungGun;
 
         // Moving the slot
@@ -112,13 +113,13 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static bool hooked;
 
-        // This frame's press was a grenade grab (BodyWeapons / ChestHang leave it alone)
+        // This frame's grip press was a grenade grab, so BodyWeapons and ChestHang ignore it
         public static bool TookPress { get; private set; }
-        // The off hand at the grenade (the chest pouch's magazine grab yields to it; read a frame late by VRReloadController)
+        // The off hand is at the grenade (the chest pouch's magazine grab gives way to it; VRReloadController reads it a frame late)
         public static bool OffHandAtSlot { get; private set; }
         public static bool Busy => placing != null || switchingTo != null;
 
-        // A grenade the left hand took is held left: ChestHang leaves the left-hand hold on while it's in the hands
+        // A grenade the left hand took is held in the left hand: ChestHang keeps the left-hand hold on while it's in the hands
         public static bool KeepsLeftHand => grabbedLeft && (GrabbedInHands
             || (switchFromHand && switchingTo != null && VRGlobals.player?.HandsController is EFT.Player.BaseGrenadeHandsController));
 
@@ -126,7 +127,7 @@ namespace TarkovVR.Source.Player.Interactions
             && VRGlobals.player.HandsController is EFT.Player.BaseGrenadeHandsController grenade && grenade.Item == grabbedItem;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // From HandsInteractionController.Update, before BodyWeapons / ChestHang (a grab here takes the press from them)
+        // Called from HandsInteractionController.Update before BodyWeapons and ChestHang, so a grab here takes the press from them
 
         public static void UpdateInput()
         {
@@ -180,7 +181,7 @@ namespace TarkovVR.Source.Player.Interactions
                     hand.triggerHeldAtSlot = 0f;
                     continue;
                 }
-                // The grip takes it; the trigger held at it moves the slot (as the guns' spots)
+                // The grip takes it; holding the trigger at it moves the slot (like the guns' body spots)
                 if (gripPressed)
                 {
                     Grab(hand);
@@ -241,7 +242,7 @@ namespace TarkovVR.Source.Player.Interactions
                 Plugin.MyLog.LogInfo($"[GrenadeSlot] showing {(picked != null ? picked.LocalizedShortName() : "nothing")}");
         }
 
-        // Tarkov's: a random one, up to three tries at a type other than the one thrown last
+        // Tarkov's rule: a random one, with up to three tries to get a type other than the one thrown last
         private static ThrowWeap RandomPick()
         {
             ThrowWeap choice = reachable[UnityEngine.Random.Range(0, reachable.Count)];
@@ -250,11 +251,11 @@ namespace TarkovVR.Source.Player.Interactions
             return choice;
         }
 
-        // GrenadeHold: one thrown, the next pick avoids its type (Tarkov's _prevGrenadeId)
+        // Called by GrenadeHold when a grenade is thrown: the next pick avoids its type (Tarkov's _prevGrenadeId)
         public static void NoteThrown(Item item)
         {
-            // What Tarkov draws after the throw (the item before the grenade): its draw skipped, as after a put-back - straight into the
-            // hand, or back on its spot if it hung
+            // Tarkov draws the item from before the grenade after the throw. Its draw is skipped, as after a put-back: it goes straight
+            // into the hand, or back on its spot if it was hanging.
             Item back = afterThrowItem ?? hungGun;
             takeAskedAt = -1f;
             if (InInventory(back))
@@ -303,8 +304,9 @@ namespace TarkovVR.Source.Player.Interactions
             VRGlobals.player.SetItemInHands(picked, delegate { });
         }
 
-        // Co-op as a client: the host's answer to the last take. FIKA asks it once the grenade is in the hand here, and a refusal puts it
-        // away again into empty hands: the hands go back to what they held (a gun that hung hangs again), and the slot waits a moment.
+        // Co-op as a client: the host's answer to the last take. FIKA asks the host once the grenade is in the hand here, and a refusal
+        // puts it away into empty hands. Then the hands go back to what they held (a gun that was hanging hangs again), and the slot
+        // waits a moment.
         private static void UpdateTakeAnswer()
         {
             if (takeAskedAt < 0f)
@@ -337,7 +339,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!goesBack)
                 return;
             ExpectGunBack(handsBefore, gunHungBefore, switchTimeout);
-            // Asked now if FIKA has already left empty hands; else RetryRefusedReturn asks once it has
+            // Request it now if FIKA has already gone to empty hands; otherwise RetryRefusedReturn requests it once it has
             if (ReturnRefused && !CoopHost.StillAnswering)
                 VRInputManager.ForceCommand(BodyWeapons.SelectCommand(slot));
         }
@@ -369,7 +371,7 @@ namespace TarkovVR.Source.Player.Interactions
                 EndSwitch();
                 return;
             }
-            // The gun going away: Tarkov's own skip of its put-away (BodyWeapons' fast switch)
+            // The gun being put away: skip its put-away with Tarkov's own skip (BodyWeapons' fast switch)
             if (player.HandsController is FirearmController firearmController && firearmController.IsInRemoveOperation())
                 WeaponPatches.SkipDrawOrPutAway(firearmController);
             if (player.HandsController is EFT.Player.BaseGrenadeHandsController grenade && grenade.Item == switchingTo)
@@ -389,14 +391,14 @@ namespace TarkovVR.Source.Player.Interactions
             switchFromHand = false;
         }
 
-        // GrenadePicker: the grenade in hand swapped for another quick-access one, by the same hand and grip - Tarkov's switch, the held
-        // one's put-away (SkipPutAway) and the next one's draw (OnGrenadeSpawned) skipped. A put-back later still returns the hands to
-        // what they held before the first.
+        // GrenadePicker: swaps the grenade in hand for another quick-access one, held by the same hand and grip. Uses Tarkov's switch
+        // with the held grenade's put-away (SkipPutAway) and the next one's draw (OnGrenadeSpawned) skipped. A later put-back still
+        // returns the hands to what they held before the first grenade.
         internal static void SwapHeldTo(EFT.Player.GrenadeHandsController current, ThrowWeap next)
         {
             if (current == null || next == null || VRGlobals.player == null || switchingTo != null)
                 return;
-            // Co-op as a client: not before the host has answered the last move (a hands change sent sooner is refused)
+            // Co-op as a client: wait until the host has answered the last move (a hands change sent sooner is refused)
             if (CoopHost.StillAnswering)
             {
                 if (debugLog)
@@ -415,8 +417,8 @@ namespace TarkovVR.Source.Player.Interactions
             grabbedByHold = true;
             puttingAway = current;
             putAwayStarted = Time.time;
-            // Tarkov draws the item a grenade came in after once it's thrown (PlayerOwner.SetHandsController keeps PreviousItem for its
-            // after-use callback): after this swap that would be the grenade swapped from. The item before the first one instead.
+            // After a throw, Tarkov draws the item the grenade replaced (PlayerOwner.SetHandsController keeps PreviousItem for its
+            // after-use callback). After this swap that would be the grenade swapped out, so set it to the item before the first one.
             EFT.PlayerOwner owner = VRGlobals.player.GetComponent<EFT.PlayerOwner>();
             if (owner != null)
                 owner.PreviousItem = afterThrowItem;
@@ -426,27 +428,27 @@ namespace TarkovVR.Source.Player.Interactions
             VRGlobals.player.SetItemInHands(next, delegate { });
         }
 
-        // GrenadeHandsController.Spawn (VRGrenadeController): the grenade a grab asked for, its draw just started. Skipped (its own
-        // FastForward = the draw's end), its clip played through; in the left hand if the left took it.
+        // From GrenadeHandsController.Spawn (VRGrenadeController), as the draw of the grenade a grab requested starts. The draw is
+        // skipped (its own FastForward = the draw's end) and its clip played through; it goes in the left hand if the left took it.
         public static void OnGrenadeSpawned(EFT.Player.GrenadeHandsController grenade)
         {
             try
             {
                 if (grenade?._player == null || !grenade._player.IsYourPlayer)
                     return;
-                // Any grenade: was the gun hanging (ChestHang hasn't seen the switch yet - Tarkov sets the hands, then Spawn)
+                // For any grenade: was the gun hanging? ChestHang hasn't seen the switch yet (Tarkov sets the hands, then calls Spawn).
                 bool fromSlot = switchingTo != null && grenade.Item == switchingTo;
-                // (swapped in the hand: the gun that hung when the first came out still did)
+                // When swapped in the hand, hungGun stays the gun that hung when the first grenade came out.
                 if (!(fromSlot && switchFromHand))
                 {
                     hungGun = fromSlot ? (gunHungBefore ? handsBefore : null)
                         : ChestHang.Hanging && VRGlobals.firearmController != null ? VRGlobals.firearmController.Item : null;
-                    // Still the item before this one: Tarkov moves it on when the draw ends (the FastForward below)
+                    // Still the item before this one here: Tarkov updates it when the draw ends (the FastForward below)
                     afterThrowItem = grenade._player.GetComponent<EFT.PlayerOwner>()?.PreviousItem;
                 }
                 if (!fromSlot)
                 {
-                    // Not asked for by a grab or the picker: who drew it
+                    // Not requested by a grab or the picker: log what drew it
                     if (debugLog)
                         Plugin.MyLog.LogInfo($"[GrenadeDiag] {grenade.Item?.LocalizedShortName()} drawn without a grab (process {grenade._player.ProcessStatus}, next {grenade._player.ScheduledProcess?.GetType().Name ?? "none"}): {TarkovVR.Patches.Core.VR.VRGrenadeController.ShortStack()}");
                     return;
@@ -465,8 +467,8 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // GrenadeHold's hand swap: this grenade held by that hand's grip now (ChestHang keeps a left-hand hold on through KeepsLeftHand; letting
-        // go before the pin's out still puts it back), also a grenade drawn another way
+        // GrenadeHold's hand swap, also used for a grenade drawn another way: this grenade is now held by that hand's grip. ChestHang
+        // keeps a left-hand hold on through KeepsLeftHand, and letting go before the pin is out still puts it back.
         public static void HoldIn(Item grenade, bool left)
         {
             grabbedItem = grenade;
@@ -474,7 +476,7 @@ namespace TarkovVR.Source.Player.Interactions
             grabbedByHold = true;
         }
 
-        // GrenadeHold: is this grenade held by the button that took it (so letting that go puts it back)
+        // GrenadeHold: whether this grenade is held by the button that took it (so letting go of that button puts it back)
         public static bool TakenByHold(Item item)
         {
             return grabbedByHold && item != null && item == grabbedItem;
@@ -484,8 +486,8 @@ namespace TarkovVR.Source.Player.Interactions
         private static EFT.Player.GrenadeHandsController pendingReturn;
         private static float pendingReturnSince;
 
-        // GrenadeHold, let go before the pin was out: the hands back as they were - once the host has answered the grenade's own move
-        // (co-op as a client: sent sooner, the host refuses it and the hands stay broken)
+        // GrenadeHold, released before the pin was out: returns the hands to what they held, once the host has answered the grenade's
+        // own move (co-op as a client: if sent sooner, the host refuses it and the hands stay broken)
         public static void ReturnHands(EFT.Player.GrenadeHandsController grenade)
         {
             if (CoopHost.StillAnswering)
@@ -502,7 +504,7 @@ namespace TarkovVR.Source.Player.Interactions
             ReturnHandsNow(grenade);
         }
 
-        // Every frame: a held put-back goes once the host has answered (or after CoopHost.waitLimit), or never if the grenade left another way
+        // Every frame: a held put-back is sent once the host has answered (or after CoopHost.waitLimit), or dropped if the grenade left another way
         private static void UpdatePendingReturn()
         {
             if (pendingReturn == null)
@@ -522,11 +524,11 @@ namespace TarkovVR.Source.Player.Interactions
             ReturnHandsNow(grenade);
         }
 
-        // The hands back as they were (the grenade's on the slot again: it's in the bag). Its put-away is skipped (SkipPutAway), the gun's
-        // draw too (OnGunDrawStarted); a gun that hung on its spot goes back there.
+        // Returns the hands to what they held (the grenade goes back in the inventory and shows on the slot again). Its put-away is
+        // skipped (SkipPutAway), and so is the gun's draw (OnGunDrawStarted); a gun that was hanging on its spot goes back there.
         private static void ReturnHandsNow(EFT.Player.GrenadeHandsController grenade)
         {
-            // Taken here: what the hands held before. Drawn another way (the radial menu): Tarkov's own last weapon.
+            // Taken from the slot: what the hands held before. Drawn another way (the radial menu): Tarkov's own last weapon.
             bool fromHere = grenade != null && grenade.Item == takenFromSlot;
             Item back = fromHere ? handsBefore : VRGlobals.player.LastEquippedWeaponOrKnifeItem;
             takeAskedAt = -1f;
@@ -543,12 +545,12 @@ namespace TarkovVR.Source.Player.Interactions
             }
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[GrenadeSlot] {grenade?.Item?.LocalizedShortName()} back on the slot, hands back to {(InInventory(back) ? back.LocalizedShortName() : "empty")}{(back != null && back == hungGun ? " (hanging)" : "")}");
-            // grabbedItem stays until it's out of the hands (UpdateInput): a left-hand grenade stays left for its put-away
+            // grabbedItem stays set until it's out of the hands (UpdateInput), so a left-hand grenade stays left for its put-away
             grabbedByHold = false;
         }
 
-        // The grenade put back: Tarkov's put-away (Remove: the hide clip) ended as it starts, by the clip's own end event (WeapOut: our
-        // VRGrenadeController cleanup, then Tarkov's next hands)
+        // For a grenade put back: ends Tarkov's put-away (the Remove operation, the hide clip) as soon as it starts, by firing the clip's
+        // own end event (WeapOut: our VRGrenadeController cleanup runs, then Tarkov's next hands controller)
         private static void SkipPutAway()
         {
             if (puttingAway == null)
@@ -574,8 +576,8 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // The gun coming back into the hands: after a put-back (the hands as they were), or Tarkov's own draw after a throw of the gun that
-        // hung before
+        // Expects a gun to come back into the hands: after a put-back, or Tarkov's own draw after a throw of the gun that was hanging
+        // before
         private static void ExpectGunBack(Item gun, bool hangs, float timeout)
         {
             returningGun = gun;
@@ -586,16 +588,17 @@ namespace TarkovVR.Source.Player.Interactions
             lastReturnTry = Time.time;
         }
 
-        // Still in the inventory. Item.Parent throws for an item that's in none: a thrown grenade, the empty hands' own item (what FIKA
-        // leaves in the hands after a refused hands change)
+        // Whether the item is still in the inventory. Item.Parent throws for an item that's in none: a thrown grenade, or the empty hands'
+        // own item (what FIKA leaves in the hands after a refused hands change)
         private static bool InInventory(Item item) => item != null && item.CurrentAddress != null;
 
-        // Co-op as a client: the host refused the gun's return (its copy of you still playing a move at full length: "Default Inventory
-        // is currently being modified") and FIKA left the hands empty without Tarkov's empty-hands spawn
+        // Co-op as a client: the host refused the gun's return (its copy of you was still playing a move at full length: "Default
+        // Inventory is currently being modified"), and FIKA left the hands empty without Tarkov's empty-hands spawn
         private static bool ReturnRefused => returningGun != null && CoopHost.IsClient && VRGlobals.player != null
             && VRGlobals.player.HandsController is EFT.Player.EmptyHandsController;
 
-        // ...asked again once the host has answered everything, a few times; no grab meanwhile (it would take those broken hands)
+        // Requests the refused return again once the host has answered everything, a few times. No grab is allowed meanwhile
+        // (it would act on those broken hands).
         private static void RetryRefusedReturn()
         {
             if (!ReturnRefused || CoopHost.StillAnswering || Time.time - lastReturnTry < returnRetryDelay)
@@ -613,8 +616,8 @@ namespace TarkovVR.Source.Player.Interactions
             VRInputManager.ForceCommand(BodyWeapons.SelectCommand(slot));
         }
 
-        // FirearmController.Spawn (BodyWeaponPatches.SkipDraw): that gun, its draw skipped as it starts; one that hung goes back on its spot
-        // (ChestHang.HangOnArrival: hung once it's idle)
+        // From FirearmController.Spawn (BodyWeaponPatches.SkipDraw): skips the returning gun's draw as it starts. A gun that was hanging
+        // goes back on its spot (ChestHang.HangOnArrival hangs it once it's idle).
         internal static void OnGunDrawStarted(FirearmController firearmController)
         {
             try
@@ -683,14 +686,14 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Drawing it
 
-        // After every LateUpdate: where the grenade is (BodyYaw read live, as the guns on the body)
+        // Runs after every LateUpdate and places the grenade (BodyYaw read live, like the guns on the body)
         private static void OnBeforeRender()
         {
             try
             {
                 bool standIn = switchingTo != null && !switchFromHand;
                 ThrowWeap shown = Allowed() ? (standIn ? switchingTo : picked) : null;
-                // In the hands already (not a switch's stand-in): Tarkov's own model there
+                // Already in the hands (and not a switch's stand-in): Tarkov's own model shows it there
                 if (shown != null && !standIn && HandsItem() == shown)
                     shown = null;
                 Look look = shown != null ? LookOf(shown) : null;
@@ -726,7 +729,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // The look's root at the slot: its middle where it was placed (or the default), its body turned as placed
+        // The look's root pose at the slot: its middle where it was placed (or the default), its body rotated as placed
         private static void SlotPose(Look look, out Vector3 position, out Quaternion rotation)
         {
             Quaternion body = ChestHang.BodyYaw(out Vector3 neck);
@@ -772,9 +775,10 @@ namespace TarkovVR.Source.Player.Interactions
             placingLook = null;
         }
 
-        // The grenade's model out of Tarkov's pool for a moment: its visible meshes copied (in the frame of its body, GrenadePrefab
-        // .ThrowingParts[0] - a model the VR hold rebuilt keeps the grenade's own parts in place relative to it), then it goes straight
-        // back. Hidden throwing parts count (a thrown grenade's model comes back with them off); other hidden parts and lower LODs don't.
+        // Takes the grenade's model out of Tarkov's pool for a moment, copies its visible meshes, and returns it straight away. The copy
+        // is in the frame of the grenade's body (GrenadePrefab.ThrowingParts[0]); a model the VR hold rebuilt keeps the grenade's own
+        // parts in place relative to it. Hidden throwing parts are included (a thrown grenade's model comes back with them off); other
+        // hidden parts and lower LODs are not.
         private static Look MakeLook(ThrowWeap grenade)
         {
             ObjectsFactory factory = Singleton<ObjectsFactory>.Instance;
@@ -786,7 +790,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 poppedBySlot.Add(pooled.GetInstanceID());
                 bool rebuiltByVrHold = pooled.GetComponentInChildren<HandsPositioner>(true) != null;
-                // Its animator's pose now (TurnOldPlacement measures the model in that pose)
+                // Evaluate its animator's pose now (TurnOldPlacement measures the model in that pose)
                 foreach (Animator animator in pooled.GetComponentsInChildren<Animator>())
                 {
                     if (animator.isActiveAndEnabled && animator.runtimeAnimatorController != null)
@@ -873,7 +877,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Every switched-off node from it up to the model's root must be a throwing part
+        // Visible if every inactive node from it up to the model's root is a throwing part
         private static bool Shown(Transform node, Transform top, HashSet<Transform> throwingParts)
         {
             for (Transform current = node; current != null; current = current.parent)
@@ -886,8 +890,8 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // The old setting (grenadeSlot) holds the model root's pose: converted, on a model the VR hold never had, to the grenade's middle
-        // and body turn, so the slot stays where it was placed
+        // The legacy setting (GetOldGrenadeSlot) stores the model root's pose. On a model the VR hold never rebuilt, it is converted to the
+        // grenade's middle and body rotation, so the slot stays where it was placed.
         private static void TurnOldPlacement(Transform top, Transform body, Vector3 middle)
         {
             if (VRSettings.GetGrenadeSlot(out _, out _) || !VRSettings.GetOldGrenadeSlot(out Vector3 rootPosition, out Quaternion rootRotation))
@@ -901,7 +905,7 @@ namespace TarkovVR.Source.Player.Interactions
             Plugin.MyLog.LogInfo($"[GrenadeSlot] the placed slot kept: middle {middleFromNeck.ToString("F3")} from the neck, turn {turn.eulerAngles.ToString("F1")} (body frame)");
         }
 
-        // GrenadeHold's spawn line: did a look come from this very object
+        // For GrenadeHold's spawn log: whether a look was copied from this object
         internal static bool CameFromSlot(GameObject handsObject)
         {
             return handsObject != null && poppedBySlot.Contains(handsObject.GetInstanceID());
@@ -912,7 +916,8 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static bool IsGunHand(Hand hand) => hand.left == Handedness.GunHandIsLeft;
 
-        // Free to take it: the gun hand with nothing it would let go of (empty, a knife, the gun hanging), the off hand off the gun and holding nothing
+        // Free to take it: the gun hand holds nothing it would have to let go of (empty, a knife, or the gun hanging); the off hand is off
+        // the gun and holds nothing
         private static bool HandFree(Hand hand)
         {
             var hands = VRGlobals.handsInteractionController;
@@ -925,14 +930,15 @@ namespace TarkovVR.Source.Player.Interactions
                 && !VRReloadController.OffHandAtBolt && hands.scopeTransform == null;
         }
 
-        // The rendered hand's points (palm, knuckles, fingertips) to the grenade's middle, over grabRadius: under 1 = in reach
+        // Distance from the nearest rendered hand point (palm, knuckles, fingertips) to the grenade's middle, divided by grabRadius:
+        // under 1 = in reach
         private static float ReachOf(Hand hand)
         {
             if (shownLook == null || shownLook.root == null)
                 return float.MaxValue;
             Transform root = shownLook.root.transform;
             Vector3 middle = root.position + root.rotation * shownLook.middle;
-            // The physical right controller draws the right arm (the gun in the left hand frees it onto the right controller)
+            // The physical right controller drives the right arm (with the gun in the left hand, the right arm follows the right controller)
             VRGlobals.handsInteractionController.GetHandTouchPoints(!hand.left, hand.touchPoints);
             if (hand.touchPoints.Count == 0)
                 hand.touchPoints.Add(ControllerPosition(hand));
@@ -959,7 +965,7 @@ namespace TarkovVR.Source.Player.Interactions
             return pressed;
         }
 
-        // The controller's pose in the world: its tracking pose through the rig (GunSpots.HandPose)
+        // The controller's world pose: its tracking pose transformed by the rig (like GunSpots.HandPose)
         private static void ControllerPose(Hand hand, out Vector3 position, out Quaternion rotation)
         {
             VRPose pose = hand.left ? VRInput.LeftHandPose : VRInput.RightHandPose;

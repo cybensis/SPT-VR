@@ -19,7 +19,7 @@ namespace TarkovVR.Source.Settings
         public TextMeshProUGUI valueText;     // SelectSlider._valueText (the live number label)
         public float min = 0f;
         public float max = 1f;
-        public Func<float> getValue;          // reads the CURRENT stored setting (kept live by onChange)
+        public Func<float> getValue;          // reads the current stored setting (onChange keeps it up to date)
         public Action<float> onChange;
         public Func<float, string> format;
 
@@ -30,7 +30,7 @@ namespace TarkovVR.Source.Settings
             Apply();
         }
 
-        // Strips EFT's stepping, keeps the notch ticks as a track, drives our own float callback + label. Idempotent.
+        // Removes EFT's stepping, keeps the notch ticks as the track, and drives our own float callback and label. Safe to repeat.
         public void Apply()
         {
             if (slider == null || onChange == null || getValue == null)
@@ -46,8 +46,8 @@ namespace TarkovVR.Source.Settings
             if (notchContainer != null)
                 notchContainer.gameObject.SetActive(true);
 
-            // Reseed from the live stored value: Awake's wholeNumbers rounded the handle (0.10 -> 0). Set while no listener
-            // is attached, so the reseed can't write a rounded value back over the setting.
+            // Reset the handle from the stored value, because Awake's wholeNumbers rounded it (0.10 -> 0). This runs while no
+            // listener is attached, so it can't write a rounded value back over the setting.
             slider.value = Mathf.Clamp(getValue(), min, max);
             if (valueText != null)
                 valueText.text = format(slider.value);

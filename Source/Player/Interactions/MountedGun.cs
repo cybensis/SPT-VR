@@ -15,48 +15,48 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Mounted guns (the AGS-30, the NSV "Utyos") by hand. Tarkov's side: Player.OperateStationaryWeapon(Occupy) walks you to the gun's
-    // OperatorPosition (ApproachState) into StationaryPlayerState, which swaps your hands item for a FirearmController of the mounted gun
-    // and every frame turns that gun about the world Hinge to MovementContext.Rotation, clamped to the mount's limits
-    // (MovementContext.UtesRotationFunction / AGSRotationFunction); the world gun follows it (StationaryWeapon.ManualUpdate). FIKA syncs
-    // Occupy / Leave (FikaPlayer.OperateStationaryWeapon) and the rotation is your look rotation.
-    // Ours: both grips closed on its handles takes it, the Utyos's right alone (both hands free: empty, or the gun on the sling); the body
-    // faces the aim and stays under your head (no step clips); the hands turn it about the
-    // hinge; a holding hand's trigger fires it; the eye at its sight aims it; both hands open lets go of it, back to what you had.
-    // The view is the headset's throughout, still in the world while Tarkov moves the body onto the gun.
+    // Mounted guns (the AGS-30 and the NSV "Utyos") operated by hand.
+    // In Tarkov, Player.OperateStationaryWeapon(Occupy) walks you to the gun's OperatorPosition (ApproachState) and enters
+    // StationaryPlayerState. That state swaps your hands item for a FirearmController of the mounted gun, and every frame turns the gun
+    // about the world Hinge to MovementContext.Rotation, clamped to the mount's limits (MovementContext.UtesRotationFunction /
+    // AGSRotationFunction). The world gun follows it (StationaryWeapon.ManualUpdate). FIKA syncs Occupy / Leave
+    // (FikaPlayer.OperateStationaryWeapon), and the rotation is your look rotation.
+    // Here, closing both grips on its handles takes the gun (the Utyos only needs the right one), if both hands are free: empty, or the
+    // gun on the sling. The body faces the aim and stays under your head (no step clips). The hands turn the gun about the hinge, a
+    // holding hand's trigger fires it, and your eye at its sight aims it. Opening both hands lets go and returns what you held before.
+    // The view stays the headset's the whole time, still in the world while Tarkov moves the body onto the gun.
     internal static class MountedGun
     {
         public static bool enabled = true;
-        public static float grabRadius = 0.13f;     // m controller wrist to a handle for its grip to take the gun
-        public static float regrabRadius = 0.18f;   // m on the gun: a hand that let go takes its handle again
-        // The Utyos is held by its right handle alone (Tarkov's left hand only rests on its stock): the left hand stays on your controller.
-        // false = the left takes a handle too, both grips to take it, like the AGS.
-        // The body on the gun faces its aim (Tarkov's step clips play off the aim turning away from the body, so none play) and stands
-        // under your head instead of where its steps take it. false = Tarkov's steps.
+        public static float grabRadius = 0.13f;     // m, controller wrist to a handle for its grip to take the gun
+        public static float regrabRadius = 0.18f;   // m, on the gun: a hand that let go within this of its handle takes it again
+        // The Utyos is held by its right handle alone (Tarkov's left hand only rests on its stock), so the left hand stays on your controller.
+        // The body on the gun faces its aim, so none of Tarkov's step clips play (they play when the aim turns away from the body), and it
+        // stands under your head instead of where its steps would take it. false = Tarkov's steps.
         public static bool bodyFollowsHead = true;
         public static float bodyFollowDeadZone = 0.2f;  // m your head may be off the body's own head before the body moves (leaning)
         public static float bodyFollowTime = 0.12f;     // s the body takes to catch up past that
-        public static float leaveDelay = 0.3f;      // s both hands open before you let go of the gun
-        public static float takeTimeout = 8f;       // s a take may take before it's called off (Tarkov's walk onto it is 1.5 s at most)
-        // Co-op as a client: s on the gun before letting go takes effect. The host's copy of you gets onto it later than you (its walk onto
-        // it, then the gun's spawn from your packets); let go before it's on, it never finishes the hands change off it and every later
-        // move waits on an answer that doesn't come (no shooting, no reload). Open hands before then leave once the time's up.
+        public static float leaveDelay = 0.3f;      // s both hands must be open before you let go of the gun
+        public static float takeTimeout = 8f;       // s a take may last before it's called off (Tarkov's walk onto the gun is 1.5 s at most)
+        // As a co-op client: s on the gun before letting go takes effect. The host's copy of you gets onto the gun later than you (it walks
+        // there, then spawns the gun from your packets). Letting go before that means the host never finishes the hands change off the gun,
+        // and every later move waits for an answer that never comes (no shooting, no reload). Hands opened earlier let go once the time is up.
         public static float coopMinMounted = 2.5f;
-        public static float aimEyeReach = 0.2f;     // m headset to the sight to aim through it
-        public static float aimEyeAngle = 25f;      // deg headset forward off the barrel to aim through it
-        public static float aimExitReach = 0.28f;   // m / deg out of the aim again (wider: no flicker on the edge)
+        public static float aimEyeReach = 0.2f;     // m, headset to the sight to aim through it
+        public static float aimEyeAngle = 25f;      // deg, headset forward off the barrel to aim through it
+        public static float aimExitReach = 0.28f;   // m / deg to stop aiming again (wider, so it doesn't flicker at the edge)
         public static float aimExitAngle = 35f;
-        // The turn the hands give it, filtered (One Euro: tracking noise held still at rest, a fast swing followed closely). false = raw.
+        // The gun's turn from the hands is One Euro filtered: tracking noise is held still at rest, a fast swing is followed closely.
         public static float aimMinCutoff = 2f;          // Hz at rest: lower = steadier, more lag starting a turn
         public static float aimSpeedCutoff = 0.05f;     // Hz added per deg/s of turn
         public static float aimDerivativeCutoff = 1f;   // Hz, the turn speed's own smoothing
         public static bool debugLog = false;        // a line per take / mount / let-go, plus the live handles against the zones
         public static bool debugViz = false;        // the handle zones as spheres
 
-        // Each gun's hands in its idle hold (weapon_L_IK_marker / weapon_R_IK_marker, utes_idle / ags_idle), in its 'weapon' bone's frame:
-        // StationaryWeapon.WeaponTransform is that bone in the world (ManualUpdate keeps it there). The hands' IK target is the wrist.
-        // The Utyos's left: where a VR wrist sits holding it (the mean of 5 two-handed grabs, all within 5 cm of it): Tarkov's left hand holds
-        // that handle turned round, fingers back toward the stock, so its marker is 13 cm off a hand held the usual way.
+        // Each gun's hand positions in its idle hold (weapon_L_IK_marker / weapon_R_IK_marker in utes_idle / ags_idle), in its 'weapon'
+        // bone's frame. StationaryWeapon.WeaponTransform is that bone in the world (ManualUpdate keeps it there). The hands' IK target is
+        // the wrist. The Utyos's left value is where a VR wrist sits holding that handle (the mean of 5 measured grabs): Tarkov's left hand
+        // holds that handle turned round, fingers back toward the stock, so its marker is 13 cm off a hand held the usual way.
         private static readonly Vector3 utesLeftHandle = new Vector3(-0.067f, -0.024f, -0.044f);
         private static readonly Vector3 utesRightHandle = new Vector3(0.062f, -0.197f, -0.158f);
         private static readonly Vector3 agsLeftHandle = new Vector3(-0.27f, -0.285f, -0.267f);
@@ -70,22 +70,22 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool cameFromEmptyHands;
         private static float takenAt;
         private static float mountedAt;
-        private static bool takeArmed;                                    // both grips closed on the handles: taken once the host is free
+        private static bool takeArmed;                                    // grips closed on the handles: the gun is taken once the host is free
         private static readonly bool[] holding = new bool[2];
         private static readonly bool[] previousGrip = new bool[2];
         private static float allOpenSince = -1f;
         private static readonly ZoneEntryBlip[] handleBlips = { new ZoneEntryBlip(), new ZoneEntryBlip() };
 
-        // The aim: the hands' lever off the hinge turns the gun by as much as it turned since the base was taken
+        // Aim: the gun turns by as much as the hands' lever from the hinge has turned since the base was taken
         private static bool aimBased;
         private static int aimBaseHands;
         private static Vector3 aimBaseLever;
-        private static Vector3 aimPivot;                                  // the hinge where the base was taken: the hands' lever off it
+        private static Vector3 aimPivot;                                  // the hinge position when the base was taken; the lever starts here
         private static Vector2 aimBaseRotation;
         private static float lastAimToggle;
         private static float nextAimLog;
 
-        // The hands sampled once a frame, after the rig is final (PinRig, LateUpdate): the turn reads the same moment every frame
+        // The wrists are sampled once a frame after the rig is final (PinRig, in LateUpdate), so the aim reads the same moment every frame
         private static readonly Vector3[] sampledWrist = new Vector3[2];
         private static bool wristsSampled;
 
@@ -97,7 +97,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static float nextReachLog;
 
-        // The view held still in the world: the rig anchor's moves taken out of the offsetter
+        // Keeps the view still in the world: the rig anchor's moves are taken back out of the offsetter
         private static bool rigPinned;
         private static Vector3 lastAnchor;
 
@@ -121,7 +121,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // On it, the gun in the hands
+        // On the gun, with the gun in the hands
         internal static bool Mounted => MountedController(VRGlobals.player) != null;
 
         // The body's left / right hand holding its handle (the left controller drives the left arm)
@@ -138,7 +138,7 @@ namespace TarkovVR.Source.Player.Interactions
             return player.HandsController is FirearmController firearmController && firearmController.Item == stationaryWeapon.Item ? firearmController : null;
         }
 
-        // A firearm coming into the hands is the mounted gun (none of the held-gun setup for it: Tarkov places it on its mount)
+        // True if a firearm coming into the hands is the mounted gun. It gets none of the held-gun setup: Tarkov places it on its mount.
         internal static bool IsMountedGun(FirearmController firearmController)
         {
             EFT.Player player = firearmController != null ? firearmController._player : null;
@@ -146,7 +146,7 @@ namespace TarkovVR.Source.Player.Interactions
                 && firearmController.Item == player.MovementContext.StationaryWeapon.Item;
         }
 
-        // WeaponPatches.MoveWeaponToIKHands, the mounted gun's turn: the hands are nobody's gun hands now
+        // Called from WeaponPatches.MoveWeaponToIKHands when the mounted gun comes into the hands: clears the held-gun state
         internal static void OnGunInHands(FirearmController firearmController)
         {
             VRGlobals.player = firearmController._player;
@@ -164,7 +164,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //---------------------------------------------------------------------------------------------------------
-        // Per frame (HandsInteractionController.Update, before everything else there): true = the hands are the mounted gun's this frame
+        // Per frame, from HandsInteractionController.Update before everything else there. true = the hands belong to the mounted gun this frame
 
         internal static bool Tick(bool draggingBody)
         {
@@ -223,7 +223,7 @@ namespace TarkovVR.Source.Player.Interactions
                 takeArmed = false;
                 return false;
             }
-            // "Toggle Gun Grip": the press with the hands at the handles takes it, the grips may open after
+            // With "Toggle Gun Grip", a press with the hands at the handles takes the gun, and the grips may open after
             bool toggle = VRSettings.GetGunGripToggle();
             bool leftOn = leftAt && (leftGrip || toggle);
             bool held = rightAt && (rightGrip || toggle) && (oneHanded || leftOn);
@@ -237,7 +237,7 @@ namespace TarkovVR.Source.Player.Interactions
                 takeArmed = false;
                 Take(player, nearest, leftOn);
             }
-            // A hand on a handle: its grip is the gun's, not the loot pointer's or a door's
+            // A hand is at a handle: its grip belongs to the gun, not to the loot pointer or a door
             return true;
         }
 
@@ -274,7 +274,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (stage == Stage.Free)
             {
-                // On it some other way (a raid joined on the gun): both hands on it while the grips are closed
+                // On the gun some other way (e.g. a raid joined on the gun): each hand whose grip is closed holds it
                 gun = player.MovementContext.StationaryWeapon;
                 stage = Stage.Taking;
                 takenAt = Time.time;
@@ -286,14 +286,14 @@ namespace TarkovVR.Source.Player.Interactions
             FirearmController firearmController = MountedController(player);
             if (firearmController == null)
             {
-                // Walking onto it, the gun coming into the hands, or getting off it. A take Tarkov never finishes is called off:
-                // the hands and the sticks are the gun's until then.
+                // Walking onto the gun, the gun coming into the hands, or getting off it. A take Tarkov never finishes is called off,
+                // because the hands and the sticks belong to the gun until then.
                 if (stage == Stage.Taking && Time.time - takenAt > takeTimeout && player.MovementContext.StationaryWeapon != null)
                 {
                     Plugin.MyLog.LogWarning($"[MountedGun] not on the gun {takeTimeout:0}s after taking it ({player.MovementContext.CurrentState?.GetType().Name}): called off");
                     takenAt = float.PositiveInfinity;
                     player.OperateStationaryWeapon(player.MovementContext.StationaryWeapon, StationaryWeaponPacket.EStationaryCommand.Denied);
-                    // Never got to the gun's own state, whose Exit lets go of it: let go of it here
+                    // Never reached StationaryPlayerState, whose Exit would let go of the gun, so let go of it here
                     if (!(player.MovementContext.CurrentState is StationaryPlayerState))
                         player.MovementContext.StationaryWeapon = null;
                 }
@@ -317,12 +317,12 @@ namespace TarkovVR.Source.Player.Interactions
             bool toggle = VRSettings.GetGunGripToggle();
             for (int hand = OneHanded(gun) ? RIGHT : LEFT; hand <= RIGHT; hand++)
             {
-                // Hold: the grip open lets go. Toggle: a press does.
+                // Hold mode: opening the grip lets go. Toggle mode: a press does.
                 if (holding[hand] && (toggle ? pressed[hand] : !grips[hand]))
                     holding[hand] = false;
                 else if (!holding[hand] && pressed[hand])
                 {
-                    // Off its live marker or its zone (the Utyos's left marker is 13 cm off where a VR wrist sits)
+                    // Distance to its live marker or its zone, whichever is closer (the Utyos's left marker is 13 cm off where a VR wrist sits)
                     Vector3 wrist = Wrist(hand == LEFT);
                     Transform handle = LiveHandle(firearmController, hand == LEFT);
                     float reach = handle != null ? (wrist - handle.position).sqrMagnitude : float.PositiveInfinity;
@@ -347,8 +347,8 @@ namespace TarkovVR.Source.Player.Interactions
                 LetGo(player);
         }
 
-        // Tarkov's own way off (StationaryPlayerState.OnInteraction = the interact key): its Leave puts your weapon in your hands, made
-        // empty hands when you came with them (MountedGunPatches). A slung gun goes back to its spot (ChestHang.HangOnArrival).
+        // Gets off the way Tarkov does (StationaryPlayerState.OnInteraction = the interact key). Its Leave puts your weapon in your hands,
+        // or empty hands if you came with empty hands (MountedGunPatches). A slung gun goes back to its sling spot (ChestHang.HangOnArrival).
         private static void LetGo(EFT.Player player)
         {
             if (!(player.MovementContext.CurrentState is StationaryPlayerState state) || state.Stage != StationaryPlayerState.EStationaryStage.Main)
@@ -382,7 +382,8 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //---------------------------------------------------------------------------------------------------------
-        // The aim (MovementPatches.SetPlayerRotate, MovementState.Rotate prefix): true = the body's rotation is ours / Tarkov's here
+        // The aim (MovementPatches.SetPlayerRotate, a MovementState.Rotate prefix). true = the body's rotation is handled here (by us, or
+        // left to Tarkov's stationary state), so the patch skips the normal rotation
 
         internal static bool DriveRotation(MovementState state)
         {
@@ -404,8 +405,9 @@ namespace TarkovVR.Source.Player.Interactions
             if (!wristsSampled)
                 SampleWrists();
             Vector3 grip = hands == 3 ? (sampledWrist[LEFT] + sampledWrist[RIGHT]) * 0.5f : sampledWrist[hands == 1 ? LEFT : RIGHT];
-            // A new base whenever the hands on it change, so a hand letting go or coming back doesn't jump the gun. The pivot is the hinge
-            // as it was then: if the live hinge moves as the gun turns, a lever off it feeds the gun's own turn back into the aim.
+            // Take a new base whenever the hands on the gun change, so a hand letting go or coming back doesn't jump the gun. The pivot is
+            // the hinge as it was then: the live hinge can move as the gun turns, and a lever from it would feed the gun's own turn back
+            // into the aim.
             if (!aimBased || hands != aimBaseHands)
             {
                 aimPivot = gun.Hinge.position;
@@ -422,7 +424,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (lever.sqrMagnitude < 1e-4f)
                 return true;
             // A rigid turn about the hinge: the handles swing about the vertical by as much as the muzzle does, and rise by as much as
-            // it dips (pitch is positive down)
+            // it dips (pitch is positive down).
             float yaw = aimBaseRotation.x + Mathf.DeltaAngle(YawOf(aimBaseLever), YawOf(lever));
             float pitch = aimBaseRotation.y + (ElevationOf(lever) - ElevationOf(aimBaseLever));
             movementContext.Rotation = FilterAim(movementContext, new Vector2(yaw, pitch));
@@ -430,9 +432,10 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //---------------------------------------------------------------------------------------------------------
-        // The body (MountedGunPatches: StationaryPlayerState.ManualAnimatorMoveUpdate prefix): true = moved here, Tarkov's skipped.
-        // Tarkov never turns the body on the gun: the aim's turn off it (UpdateStationaryDeltaAngle) picks a step clip, and the clip's
-        // root motion walks the body round. Facing it along the aim leaves no turn to step through. Its range check is in Enter only.
+        // The body (MountedGunPatches: a StationaryPlayerState.ManualAnimatorMoveUpdate prefix). true = moved here, Tarkov's update skipped.
+        // Tarkov never turns the body directly on the gun: the aim's angle off the body (UpdateStationaryDeltaAngle) picks a step clip,
+        // and the clip's root motion walks the body round. Facing the body along the aim leaves no angle to step through.
+        // Tarkov's range check is only in Enter.
 
         internal static bool MoveBody(StationaryPlayerState state, float deltaTime)
         {
@@ -448,8 +451,8 @@ namespace TarkovVR.Source.Player.Interactions
             if (state._denied)
                 state.DropStationary();
             movementContext.ApplyRotation(Quaternion.Euler(0f, movementContext.Yaw, 0f));
-            // The body's own head (standing or sat, as its pose has it) under the headset once it's past the dead zone. Moving the
-            // body moves its head as much, so this is the body's motion.
+            // Move the body's own head (standing or seated, as its pose has it) under the headset once it is past the dead zone. Moving
+            // the body moves its head by the same amount, so this offset is the body's motion.
             Vector3 offHead = headset.transform.position - head.position;
             offHead.y = 0f;
             float distance = offHead.magnitude;
@@ -467,7 +470,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static float YawOf(Vector3 direction) => Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
         private static float ElevationOf(Vector3 direction) => Mathf.Asin(Mathf.Clamp(direction.y / direction.magnitude, -1f, 1f)) * Mathf.Rad2Deg;
 
-        // One Euro filter on yaw (wrapped) and pitch; kept inside the mount's limits so it never trails behind a stop
+        // One Euro filter on yaw (wrapped) and pitch. The result is clamped to the mount's limits so it never trails behind a stop.
         private static Vector2 FilterAim(MovementContext movementContext, Vector2 raw)
         {
             if (!aimFiltered)
@@ -509,7 +512,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         internal static bool TriggerPulled => (holding[LEFT] && VRInput.LeftTrigger.axis > 0.5f) || (holding[RIGHT] && VRInput.RightTrigger.axis > 0.5f);
 
-        // The eye at the sight and looking down the barrel: aiming (the AGS's PAG-17 only draws its view while aiming)
+        // Aiming = the eye at the sight and looking down the barrel. The AGS's PAG-17 only draws its view while aiming.
         internal static void UpdateAim(ref ECommand command)
         {
             EFT.Player player = VRGlobals.player;
@@ -520,7 +523,7 @@ namespace TarkovVR.Source.Player.Interactions
             EFT.Animations.ProceduralWeaponAnimation animation = player.ProceduralWeaponAnimation;
             Transform sight = animation != null && animation.ScopeAimTransforms != null && animation.ScopeAimTransforms.Count > 0 && animation.CurrentScope != null
                 ? animation.CurrentScope.Bone : null;
-            // The barrel the way Tarkov's own PAG-17 code takes it (ProceduralWeaponAnimation.AdjustOpticsPAG17): the fireport's -up
+            // The barrel direction as Tarkov's own PAG-17 code takes it (ProceduralWeaponAnimation.AdjustOpticsPAG17): the fireport's -up
             Transform fireport = animation != null && animation.HandsContainer != null ? animation.HandsContainer.Fireport : null;
             Transform weapon = firearmController.HandsHierarchy.GetTransform(ECharacterWeaponBones.weapon);
             Vector3 barrel = fireport != null ? -fireport.up : weapon != null ? -weapon.up : Vector3.zero;
@@ -549,7 +552,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // A shot: both holding hands feel it
+        // On a shot, each holding hand gets a haptic pulse
         internal static bool Recoil(float kick)
         {
             if (!Mounted)
@@ -562,7 +565,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //---------------------------------------------------------------------------------------------------------
-        // The arms (IKPatches.RemoveSprintAnimFromHands, Player.IkProcess prefix: the last word before the IK solves)
+        // The arms (IKPatches.RemoveSprintAnimFromHands, a Player.IkProcess prefix: the last change before the IK solves)
 
         internal static bool DriveArms(EFT.Player player)
         {
@@ -598,8 +601,8 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //---------------------------------------------------------------------------------------------------------
-        // The view (VRPlayerManager.LateUpdate, after its own pin): camRoot on the body like always, its moves taken back out of the
-        // offsetter so the headset alone moves the view (Tarkov slides the body onto the gun, sits it down, the upper body bends)
+        // The view (VRPlayerManager.LateUpdate, after its own pin). camRoot stays pinned to the body as usual, but its moves are taken back
+        // out of the offsetter so only the headset moves the view while Tarkov slides the body onto the gun, sits it down and bends it.
 
         internal static void PinRig()
         {
@@ -613,7 +616,7 @@ namespace TarkovVR.Source.Player.Interactions
             Transform ribcage = player.PlayerBones != null && player.PlayerBones.Ribcage != null ? player.PlayerBones.Ribcage.Original : null;
             if (ribcage == null || VRGlobals.camRoot == null || VRGlobals.vrOffsetter == null || VRGlobals.vrOffsetter.transform.parent == null)
                 return;
-            // The same anchor the empty-hands / gun pins use (the hands object sits on the ribcage), so getting off doesn't jump
+            // The same anchor the empty-hands / gun pins use (the hands object sits on the ribcage), so getting off doesn't jump the view
             Vector3 anchor = new Vector3(ribcage.position.x, player.Transform.position.y + 1.5f, ribcage.position.z);
             if (rigPinned)
             {
@@ -633,7 +636,7 @@ namespace TarkovVR.Source.Player.Interactions
         //---------------------------------------------------------------------------------------------------------
         // Helpers
 
-        // null = both hands free for a mounted gun, else why not
+        // null = both hands are free for a mounted gun, else the reason they aren't
         private static string HandsBusy(EFT.Player player, bool draggingBody)
         {
             if (player.IsInPronePose)
@@ -655,7 +658,7 @@ namespace TarkovVR.Source.Player.Interactions
             return $"{player.HandsController?.GetType().Name ?? "nothing"} in the hands{(player.HandsController is FirearmController ? " (not on the sling)" : "")}";
         }
 
-        // A grip closing near a mounted gun that didn't take it: why (hands busy, or where each hand was off its handle)
+        // Logs why a grip closing near a mounted gun didn't take it: hands busy, or where each hand was relative to its handle
         private static void LogReach(StationaryWeapon stationaryWeapon, string busy)
         {
             nextReachLog = Time.time + 0.5f;
@@ -668,7 +671,7 @@ namespace TarkovVR.Source.Player.Interactions
                 + $"available {stationaryWeapon.IsAvailable(VRGlobals.player.ProfileId)}, locked {stationaryWeapon.Locked}");
         }
 
-        // The nearest mounted gun in reach of the hands (the mounted guns found once per map)
+        // The nearest mounted gun within reach. The map's mounted guns are found once per map.
         private static StationaryWeapon NearestGun(EFT.Player player)
         {
             GameWorld world = Comfort.Common.Singleton<GameWorld>.Instantiated ? Comfort.Common.Singleton<GameWorld>.Instance : null;
@@ -686,7 +689,7 @@ namespace TarkovVR.Source.Player.Interactions
                         if (stationaryWeapon != null)
                             guns.Add(stationaryWeapon);
                     }
-                    // (a map without any is looked at again every 10 s: said once)
+                    // A map without any is scanned again every 10 s, so the count is only logged when it changes
                     if (debugLog && guns.Count != loggedGunCount)
                         Plugin.MyLog.LogInfo($"[MountedGun] {guns.Count} mounted guns on this map");
                     loggedGunCount = guns.Count;
@@ -727,7 +730,7 @@ namespace TarkovVR.Source.Player.Interactions
             return hand != null ? hand.transform : null;
         }
 
-        // That controller's wrist (the rig hand), the world clamp left out
+        // That controller's wrist (the rig hand), without the world-collision clamp
         private static Vector3 Wrist(bool left)
         {
             Transform hand = RigHand(left);

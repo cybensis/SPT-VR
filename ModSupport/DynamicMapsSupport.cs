@@ -14,8 +14,8 @@ namespace TarkovVR.ModSupport.DynamicMaps
     [HarmonyPatch]
     internal static class DynamicMapsSupport
     {
-        // Sets the dynamic map's map to be on the UI layer, otherwise it does not appear in world space
-        // Also disables ScrollRect, this does not work in world space so we add our own VRMapDragger component to handle dragging and zooming the map with the VR controller
+        // Puts the map on the UI layer, otherwise it does not appear in world space.
+        // ScrollRect doesn't work in world space, so it is disabled and VRMapDragger handles dragging and zooming with the controller.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MapView), "LoadMap")]
         private static void SetMapViewWorldCamera(MapView __instance)
@@ -31,7 +31,7 @@ namespace TarkovVR.ModSupport.DynamicMaps
             }
         }
 
-        // Minimap disabled: minimaps aren't nice in VR
+        // Disables the minimap, which doesn't work well in VR
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MapPeekComponent), "HandleMinimapState")]
         private static bool DisableMinimap(MapPeekComponent __instance)
@@ -52,7 +52,7 @@ namespace TarkovVR.ModSupport.DynamicMaps
             transform.localRotation = Quaternion.Euler(0, 0, 0);
         }
 
-        // Map labels and map marker labels have a Z scale of 0 which breaks fonts in world space, the two patches below fix this by setting the Z scale to 1 after they are created
+        // Map labels and marker labels are created with a Z scale of 0, which breaks their fonts in world space. These two patches set it to 1.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MapLabel), "Create")]
         private static void FixMapLabelScale(MapLabel __result)
@@ -71,7 +71,7 @@ namespace TarkovVR.ModSupport.DynamicMaps
             rectTransform.localScale = new Vector3(s.x, s.y, 1f);
         }
 
-        // Updates the cursor position text to show the correct position of the VR pointer on the map, instead of the mouse cursor position which is not used in VR
+        // The cursor position text shows the VR pointer's position on the map instead of the mouse position, which is not used in VR
         [HarmonyPrefix]
         [HarmonyPatch(typeof(CursorPositionText), "Update")]
         private static bool VRCursorUpdate(CursorPositionText __instance)
@@ -87,8 +87,8 @@ namespace TarkovVR.ModSupport.DynamicMaps
             return false;
         }
 
-        // No map-texture downscale: since DynamicMaps 1.1.0 the map layers are SVGs tessellated into meshes (SvgUtils.LoadSvgFromPath),
-        // so LoadTexture2DFromPath only loads the small marker icons, and halving those just blurs them.
+        // No map-texture downscale here: DynamicMaps' map layers are SVGs tessellated into meshes (SvgUtils.LoadSvgFromPath), so
+        // LoadTexture2DFromPath only loads the small marker icons, and halving those just blurs them.
 
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(ModdedMapScreen), "ReadConfig")]
@@ -115,11 +115,11 @@ namespace TarkovVR.ModSupport.DynamicMaps
             var interacter = MenuPatches.vrUiInteracter;
             if (interacter == null) return;
 
-            // Cast inside the method: MapView (DynamicMaps') only resolves when this runs, and this component only exists once the
-            // DynamicMaps patch above has added it.
+            // Cast here instead of holding a MapView field: DynamicMaps' type only resolves when this runs, and this component only
+            // exists once the patch above has added it.
             MapView mapView = (MapView)_mapViewRef;
 
-            // The laser's hand ("Laser Pointer In Left Hand"): its trigger drags, its own stick zooms
+            // The laser pointer's hand (setting "Laser Pointer In Left Hand"): its trigger drags the map and its stick zooms
             bool triggerHeld = Handedness.PointerHandTrigger.axis > 0.5f;
             if (triggerHeld)
             {

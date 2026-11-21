@@ -17,8 +17,7 @@ public class CircularSegmentUI : MonoBehaviour
     public float radius = 100f;       // Radius of the circle
     public float segmentSpacing = 2f; // Spacing between segments in degrees
 
-    public string spritePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\sptvr\\Assets"); // Path to the image in the Resources folder
-    //public string[] menuSprites = { "reload.png", "checkAmmo.png", "inspect.png", "fixMalfunction.png", "fireMode_burst.png" };
+    public string spritePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\sptvr\\Assets"); // folder with the menu images
     public Sprite[] menuSprites;
     public Image[] menuSegments;
     public Sprite defaultMenuSprite = null;
@@ -49,8 +48,8 @@ public class CircularSegmentUI : MonoBehaviour
 
     private int lastSelectedSegment = -1;
 
-    // The grenade picker (GrenadePicker): drawn like the quick slots, but its stick and its closing are the picker's - it reads back the
-    // segment the stick points at
+    // Grenade picker mode (GrenadePicker): drawn like the quick slots, but the picker supplies the stick input and closes the menu
+    // itself. It reads back the segment the stick points at.
     public bool pickerMode;
     public bool pickerOnLeftController;
     public Vector2 pickerStick;
@@ -59,7 +58,7 @@ public class CircularSegmentUI : MonoBehaviour
     public void CreatePickerUi(Sprite[] sprites)
     {
         pickerMode = true;
-        leftHand = true;    // the quick slots' icon layout
+        leftHand = true;    // use the quick slots' icon layout
         for (int i = transform.childCount - 1; i >= 0; i--)
             Destroy(transform.GetChild(i).gameObject);
         lastSelectedSegment = -1;
@@ -69,11 +68,6 @@ public class CircularSegmentUI : MonoBehaviour
         if (numberOfSegments > 0)
             CreateSegments();
     }
-
-    //private void OnEnable() {
-    //    if (leftHand)
-    //        CreateQuickSlotUi();
-    //}
 
     public void CreateGunUi(string[] menuSpriteNames) {
         menuSegments = new Image[menuSpriteNames.Length];
@@ -118,7 +112,7 @@ public class CircularSegmentUI : MonoBehaviour
         iconsList = new List<ItemIcon>();
         foreach (KeyValuePair<EBoundItem, Item> entry in quickSlots)
         {
-            // Grenades aren't in this menu: they come off the chest slot (GrenadeSlot shows the quick-access one), held by the grip that took them
+            // Grenades aren't in this menu: they are taken off the chest slot (GrenadeSlot shows the quick-access one) by the grip
             if (entry.Value is ThrowWeap)
                 continue;
             ItemIcon itemIcon = ItemViewFactory.LoadItemIcon(entry.Value);
@@ -152,8 +146,8 @@ public class CircularSegmentUI : MonoBehaviour
 
     }
 
-    // The menu is picked with the stick of the controller it sits on, and that stick's other use is blocked while it's open (with
-    // Swap Sticks the right controller's stick is the one moving you: VRInput). Kept from the open so the close clears the same flag.
+    // The menu is picked with the stick of the controller it sits on, and that stick's normal use is blocked while it's open (with
+    // Swap Sticks, the right controller's stick is the movement stick: VRInput). Stored at open so the close clears the same flag.
     private bool blockedLeftStick;
 
     private bool OnLeftController => pickerMode ? pickerOnLeftController : leftHand != VRSettings.GetLeftHandedMode();
@@ -171,8 +165,8 @@ public class CircularSegmentUI : MonoBehaviour
             VRGlobals.blockLeftJoystick = false;
         else
             VRGlobals.blockRightJoystick = false;
-        // The stick that picked in it reads centred for everything else until it's let go, or the push that picked carries on as a
-        // crouch or a move. Only a menu that was up: they're also made and switched off at a raid's start.
+        // The stick that made the pick reads as centred for everything else until it's let go, otherwise the push that picked carries on
+        // as a crouch or a move. Only for a menu that was shown: the menus are also created and switched off at the start of a raid.
         if (shown)
             VRInput.HoldStickUntilLetGo(OnLeftController ? OpenXRInput.LEFT_HAND : OpenXRInput.RIGHT_HAND);
         shown = false;
@@ -184,7 +178,7 @@ public class CircularSegmentUI : MonoBehaviour
         bool leftHandedMode = VRSettings.GetLeftHandedMode();
         bool secondaryGripState = leftHandedMode ? VRInput.RightGrip.GetState(SteamVR_Input_Sources.RightHand) : VRInput.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand);
         bool primaryGripState = leftHandedMode ? VRInput.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand) : VRInput.RightGrip.GetState(SteamVR_Input_Sources.RightHand);
-        // Nothing in it (no quick slots, or grenades only): it still closes with its grip, else it stays open holding a stick
+        // An empty menu (no quick slots, or grenades only) still closes when its grip is let go, else it would stay open and block a stick
         if (numberOfSegments == 0)
         {
             if (!pickerMode && (leftHand ? !secondaryGripState : !primaryGripState))
@@ -246,14 +240,6 @@ public class CircularSegmentUI : MonoBehaviour
         }
     }
 
-    // parent is HumanLForearm3
-
-    // Timer panel localpos: 0.047 0.08 0.025
-    // local rot = 88.5784 83.1275 174.7802
-    // child(0).localeuler = 0 342.1273 0
-
-    // leftwristui localpos = -0.1 0.04 0.035
-    // localrot = 304.3265 181 180
     void CreateSegments()
     {
         if (menuSegments == null || menuSegments.Length < numberOfSegments)

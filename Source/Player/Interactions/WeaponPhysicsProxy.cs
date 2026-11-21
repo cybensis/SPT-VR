@@ -5,50 +5,51 @@ using UnityEngine.SceneManagement;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Real-PhysX collision for the gun, sandboxed. An invisible Rigidbody shaped like the weapon (fat body + thin barrel capsule)
-    // is driven toward the controller pose and collided by the engine, in its own local physics scene with static copies of the
-    // nearby world colliders. Tarkov runs autoSimulation off and Physics.Simulate() would step the whole default scene
-    // (double-steps loot/ragdolls), so the proxy steps only its sandbox. The sandbox is tiny, so it can afford fine substepping,
-    // which is what catches a fast rotational swing tunnelling a thin wall (PhysX CCD is blind to rotation).
-    // The world it holds: the bullet geometry + terrain + glass, trunks not branches (CollisionWorld).
-    // Doors the hand can move (PhysicalDoors) are hinged bodies here: the gun pushes a free one, a held / latched / locked one
-    // moves with the real door. Copies of unreadable meshes work (Tarkov's meshes nearly all are), at a one-time cook cost.
+    // Real PhysX collision for the gun, in a sandbox. An invisible Rigidbody shaped like the weapon (fat body + thin barrel capsule)
+    // is driven toward the controller pose and collided by the engine, in its own local physics scene that holds static copies of
+    // the nearby world colliders. Tarkov runs with autoSimulation off, and Physics.Simulate() would step the whole default scene
+    // (double-stepping loot and ragdolls), so the proxy steps only its sandbox. The sandbox is tiny, so it can afford fine substeps,
+    // which catch a fast rotational swing tunnelling through a thin wall (PhysX CCD ignores rotation).
+    // The world it holds: the bullet geometry, terrain and glass, with tree trunks but not branches (CollisionWorld).
+    // Doors the hand can move (PhysicalDoors) are hinged bodies here: the gun pushes a free one, and a held / latched / locked one
+    // moves with the real door. Copies of unreadable meshes work (nearly all of Tarkov's are unreadable), at a one-time cooking cost.
     public class WeaponPhysicsProxy : MonoBehaviour
     {
         public static float driveGain = 1f;
         public static float maxSpeed = 40f;         // m/s
         public static float maxAngSpeed = 5000f;    // deg/s (also the body's own limit: Tarkov's physics settings clamp every body to 7 rad/s = 400 deg/s)
         public static float bodySplit = 0.5f;       // rod fraction where the fat body capsule ends and the thin barrel begins
-        public static float resyncDistance = 3f;    // if the body is this far from the hand it's desynced (garbage frame) -> snap
-        public static float contactMemory = 0.04f;  // s a contact is remembered after it ends (small = no "stick" on pull-off; bridges single-frame gaps)
+        public static float resyncDistance = 3f;    // m, a body this far from the hand is out of sync (bad frame) and is snapped back
+        public static float contactMemory = 0.04f;  // s a contact is remembered after it ends (bridges 1-frame gaps; short = no stick on pull-off)
 
         public static float queryRegion = 1.5f;     // m half-extent of the box that cooks nearby colliders: covers a swing's reach, so the collider is there before the swing
-        public static float retainDistance = 3f;    // m a cooked copy is kept until this far - hysteresis so back-and-forth doesn't re-cook
+        public static float retainDistance = 3f;    // m, a cooked copy is kept until this far away (hysteresis, so back-and-forth doesn't re-cook)
         public static float colliderRefreshMove = 0.25f;
         public static float colliderRefreshInterval = 0.3f;
 
         public static float substepMuzzleDist = 0.015f;  // m the muzzle moves at most per sandbox substep: must be < the thinnest wall or a fast rotation tunnels
         public static int maxSimSubsteps = 40;
 
-        public static float contactLeadMargin = 0.03f;   // m; physics mode engages when geometry is within (gun radius + this-frame travel + this); bigger = earlier
-        // The contact solve's passes for the proxy (Tarkov's physics settings give every body 3 / 1, Unity's own 6 / 1): a gun resting on
-        // a ledge, pressed into a corner or pivoting on an edge holds steadier with more. One small body: the cost is nothing.
+        public static float contactLeadMargin = 0.03f;   // m added to gun radius + this frame's travel: geometry that near makes the drive take over
+        // Solver iterations for the proxy (Tarkov's physics settings give every body 3 / 1, Unity's default is 6 / 1). A gun resting on
+        // a ledge, pressed into a corner or pivoting on an edge holds steadier with more. It's one small body, so the cost is negligible.
         public static int solverIterations = 12;
         public static int solverVelocityIterations = 4;
-        // The hand's hold has a strength: the drive follows the hand's own move this frame in full (x holdFollow), but a gap already
-        // there - something stops the gun, the hand goes on in - closes by at most holdGap / holdTurnGap a frame. Pushed past
-        // something, the gun leans on it instead of being driven at it at gap / frame (a hand 40 cm past two contacts = ~36 m/s, the
-        // solve flipping between them = the shake); freed, it glides back to the hand. Big = the old weld, small = a weak hold.
+        // The hold has a limited strength. The drive follows the hand's own move this frame in full (x holdFollow), but an existing gap
+        // between gun and hand (something stopped the gun and the hand went on) closes by at most holdGap / holdTurnGap per frame. So a
+        // gun pushed past something leans on it instead of being driven at it at gap-per-frame speed (a hand 40 cm past two contacts
+        // would be ~36 m/s, and the solve flipping between them shakes the gun). Once free, it glides back to the hand.
+        // Big values = a rigid hold, small = a weak hold.
         public static float holdGap = 0.02f;             // m a frame
         public static float holdTurnGap = 3f;            // deg a frame
         public static float holdFollow = 1.25f;
-        // A line each time the gun ends up inside something solid in the real world (a pass-through): what, how deep, whether the
-        // sandbox had it, how fast the gun was moving and turning, the substeps. Off once the pass-through is understood.
+        // Logs a line each time the gun ends up inside something solid in the real world (a pass-through): what, how deep, whether
+        // the sandbox had it, how fast the gun was moving and turning, and the substeps.
         public static bool passThroughLog = false;
 
         public static float proxyMass = 10f;             // kg; only matters against a door body: heavier = the gun shoves doors more easily
         public static float doorMass = 1f;               // kg of a door in the sandbox
-        public static float doorJumpDegrees = 10f;       // a held / latched door that moved more than this since it was last simulated is placed, not swept
+        public static float doorJumpDegrees = 10f;       // deg, a held / latched door that moved more than this since its last simulation is placed, not swept
         public static float worldClearDelay = 5f;        // s out of a raid before the copies go (they hold the map's meshes)
 
         private Rigidbody rb;
@@ -57,7 +58,7 @@ namespace TarkovVR.Source.Player.Interactions
         private bool active;
         private Vector3 targetPos;
         private Quaternion targetRot = Quaternion.identity;
-        private Vector3 previousTargetPos;              // last frame's: the hand's own move this frame
+        private Vector3 previousTargetPos;              // last frame's target, for the hand's own move this frame
         private Quaternion previousTargetRot = Quaternion.identity;
         private bool hasPreviousTarget;
         private float builtLen = -1f, builtBodyR = -1f, builtBarrelR = -1f;
@@ -106,8 +107,8 @@ namespace TarkovVR.Source.Player.Interactions
         private readonly List<int> staleDoors = new List<int>();
 
         // Our own player's colliders (the body, the guns on it, the gun in hands) and any weapon model are never world geometry here:
-        // a freshly drawn gun's own colliders, copied in as world, push the holder off the hand. Cached by instance id, the cache
-        // cleared now and then (a pooled gun model can come back as loot).
+        // a freshly drawn gun's own colliders, copied in as world, would push the holder off the hand. Cached by instance id; the cache
+        // is cleared every few seconds, because a pooled gun model can come back as loot.
         private readonly Dictionary<int, bool> ownColliders = new Dictionary<int, bool>();
         private float ownCollidersClearTime;
 
@@ -138,7 +139,7 @@ namespace TarkovVR.Source.Player.Interactions
             GameObject proxyObject = new GameObject("WeaponPhysicsProxy");
             var proxy = proxyObject.AddComponent<WeaponPhysicsProxy>();
             int doorLayer = LayerMask.NameToLayer("DoorLowPolyCollider");
-            // + the movement layer (tree trunks: CollisionWorld) and the doors' own colliders
+            // Also the movement layer (tree trunks, see CollisionWorld) and the doors' own colliders
             proxy.queryMask = CollisionWorld.Mask(worldMask) | (doorLayer >= 0 ? 1 << doorLayer : 0);
 
             proxy.rb = proxyObject.AddComponent<Rigidbody>();
@@ -178,8 +179,8 @@ namespace TarkovVR.Source.Player.Interactions
             return proxy;
         }
 
-        // The proxy's layer (its copies collide with it). Static copies go on a menu-only layer of their own (nothing in a raid is
-        // on it) that the proxy includes and the door bodies exclude: a door body would otherwise jam against its own frame.
+        // Sets the proxy's layer (its copies collide with it). Static copies go on a menu-only layer of their own (nothing in a raid is
+        // on it) that the proxy includes and the door bodies exclude; otherwise a door body would jam against its own frame.
         public void UseLayer(int proxyLayer)
         {
             gameObject.layer = proxyLayer;
@@ -208,8 +209,8 @@ namespace TarkovVR.Source.Player.Interactions
             barrelCol.height = barrelLen + barrelR * 2f;
             barrelCol.center = new Vector3(0f, -(bodySplit * weaponLn + barrelLen * 0.5f), 0f);
 
-            // The body turns about the grip, the point the drive places: about Unity's computed centre (out along the barrel) every
-            // turn would also move the grip, off its target until the next frame
+            // The body turns about the grip, which is the point the drive places. Turning about Unity's computed centre (out along the
+            // barrel) would move the grip off its target on every turn, until the next frame.
             rb.centerOfMass = Vector3.zero;
             rb.mass = proxyMass;
         }
@@ -260,7 +261,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Step the sandbox at render rate (from WeaponCollision.Apply, in Update), not in FixedUpdate. rb.position is then
         // current this frame, so:
-        //  - no rb.interpolation is needed (at 50Hz it fights AddRigMotion's teleport = jitter while walking, and it lags);
+        //  - no rb.interpolation is needed (at 50 Hz it causes jitter while walking and adds lag);
         //  - the proxy collides the same frame the hand does, so the visible gun stops at the wall instead of clipping through;
         //  - in free space the gain-1 drive reaches the hand exactly each frame: the gun sits at the true controller pose.
         public void Step(float dt)
@@ -271,10 +272,10 @@ namespace TarkovVR.Source.Player.Interactions
 
             RefreshNearbyColliders();
 
-            // Free-space fast path: no world geometry within reach of the whole gun this frame -> snap the proxy straight to
-            // the controller pose (zero lag, no speed cap; the target already includes locomotion + turn + hand). The
-            // speed-capped velocity drive below only runs when something is nearby to collide with. "Reach" = the gun's
-            // grip->muzzle capsule plus this frame's travel + a margin, so physics mode starts before the muzzle can reach a wall.
+            // Fast path in free space: with no world geometry within reach of the whole gun this frame, snap the proxy straight to the
+            // controller pose (no lag, no speed cap; the target already includes locomotion, turning and the hand). The speed-capped
+            // velocity drive below only runs when something is near enough to collide with. The reach is the gun's grip-to-muzzle
+            // capsule plus this frame's travel and a margin, so the drive takes over before the muzzle can reach a wall.
             float length = Mathf.Max(builtLen, 0f);
             Vector3 muzzle = rb.position + rb.rotation * new Vector3(0f, -length, 0f);
             float muzzleTravel = (targetPos - rb.position).magnitude
@@ -282,7 +283,7 @@ namespace TarkovVR.Source.Player.Interactions
             float reachRadius = contactLeadMargin + Mathf.Max(builtBodyR, builtBarrelR) + muzzleTravel;
             int found = Physics.OverlapCapsuleNonAlloc(rb.position, muzzle, reachRadius, proximityBuf,
                                                       queryMask, QueryTriggerInteraction.Collide);
-            // (a full buffer may have missed something solid: physics mode then)
+            // A full buffer may have missed something solid, so it counts as near
             bool near = found >= proximityBuf.Length;
             for (int i = 0; i < found && !near; i++)
             {
@@ -294,7 +295,7 @@ namespace TarkovVR.Source.Player.Interactions
             float reach = holdGap + (targetPos - previousTargetPos).magnitude * holdFollow;
             float turnReach = holdTurnGap + Quaternion.Angle(previousTargetRot, targetRot) * holdFollow;
             bool caughtUp = (targetPos - rb.position).sqrMagnitude <= reach * reach && Quaternion.Angle(rb.rotation, targetRot) <= turnReach;
-            // (behind the hand in open space, freed from a wall: it glides back there under the drive instead of jumping)
+            // Behind the hand in open space (just freed from a wall), it glides back under the drive instead of jumping
             if (!near && caughtUp)
             {
                 LastSubsteps = 0;
@@ -302,7 +303,7 @@ namespace TarkovVR.Source.Player.Interactions
                 rb.rotation = targetRot;
                 rb.velocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
-                // (0 substeps in its line: the snap put it there, the reach test missed what it went into)
+                // A log line with 0 substeps means the snap put it there: the reach test missed what it went into
                 if (passThroughLog)
                     ProbePassThrough(dt, 0);
                 return;
@@ -355,8 +356,8 @@ namespace TarkovVR.Source.Player.Interactions
                 ProbePassThrough(dt, steps);
         }
 
-        // Inside: the proxy's shapes at their resolved pose against the real world (a contact's skin isn't: a shape a few mm in is
-        // pressed against it). One line per pass-through, its deepest frame, when it ends.
+        // Pass-through check: the proxy's shapes at their resolved pose against the real world. Only more than 1 cm counts, since a shape
+        // a few mm in is just pressed against the surface. One line per pass-through, for its deepest frame, logged when it ends.
         private readonly Collider[] insideBuf = new Collider[32];
         private int insideFrames;
         private float insideDeepest;
@@ -452,8 +453,8 @@ namespace TarkovVR.Source.Player.Interactions
             return ColliderUse.Static;
         }
 
-        // Cook every world collider within queryRegion (a box around the gun) into the sandbox.
-        // Cached by instance id -> each cooks once; kept until retainDistance away (hysteresis).
+        // Cooks every world collider within queryRegion (a box around the gun) into the sandbox.
+        // Cached by instance id, so each cooks once; kept until retainDistance away (hysteresis).
         private void RefreshNearbyColliders()
         {
             if (builtLen <= 0f)
@@ -482,7 +483,7 @@ namespace TarkovVR.Source.Player.Interactions
                     AddDoorPart(source, door);
                     continue;
                 }
-                // (a pooled window piece back in another window has another mesh: cooked again)
+                // A pooled window piece reused in another window has a different mesh, so it is cooked again
                 if (colliderCopies.TryGetValue(id, out GameObject existing) && existing != null && source is MeshCollider sourceMesh
                     && existing.GetComponent<MeshCollider>() is MeshCollider copyMesh && copyMesh.sharedMesh != sourceMesh.sharedMesh)
                 {
@@ -524,7 +525,7 @@ namespace TarkovVR.Source.Player.Interactions
                 colliderCopies.Remove(staleKeys[i]);
             }
 
-            // A door far off (a door is wide: its hinge is measured, plus a door's width)
+            // Drop doors that are far off. The distance is measured to the hinge, so a door's width is added to the limit.
             staleDoors.Clear();
             float doorRetain = retainDistance + 2f;
             foreach (var entry in doorBodies)
@@ -738,7 +739,7 @@ namespace TarkovVR.Source.Player.Interactions
             Transform sourceTransform = source.transform;
             GameObject part = new GameObject("wc_door_part") { layer = layer };
             SceneManager.MoveGameObjectToScene(part, sandbox);
-            // (a mirrored door's negative scale is the same box about its centre)
+            // A mirrored door's negative scale gives the same box about its centre, so the absolute scale is used
             Vector3 scale = sourceTransform.lossyScale;
             part.transform.SetPositionAndRotation(sourceTransform.TransformPoint(bounds.center), sourceTransform.rotation);
             part.transform.localScale = new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
@@ -759,8 +760,8 @@ namespace TarkovVR.Source.Player.Interactions
             doorBodies.Remove(doorId);
         }
 
-        // Before this frame's substeps: a door the gun may push is a free body, started from the real door as it is (its swing
-        // carried in); any other door follows the real one (swept through the substeps, so the gun meets a moving door)
+        // Before this frame's substeps: a door the gun may push becomes a free body, started from the real door's pose and swing speed.
+        // Any other door follows the real one, swept through the substeps so the gun meets a moving door.
         private void PrepareDoorBodies()
         {
             int frame = Time.frameCount;
@@ -778,7 +779,7 @@ namespace TarkovVR.Source.Player.Interactions
                 bool pushable = PhysicalDoors.MayBePushed(door);
                 if (pushable)
                 {
-                    // Moved by something else since (the hand, its swing, another player), or newly free: start from the real door
+                    // Start from the real door if something else moved it since (the hand, its swing, another player) or it's newly free
                     bool movedElsewhere = float.IsNaN(doorBody.writtenAngle)
                         || Mathf.Abs(Mathf.DeltaAngle(doorBody.writtenAngle, door.CurrentAngle)) > 0.01f;
                     if (!doorBody.pushable || doorBody.pinned || movedElsewhere || !simulatedLastFrame)
@@ -820,8 +821,8 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // After each substep: a pushed door stays on its hinge and within its range; pushed against a stop it holds there (kinematic
-        // for the rest of the frame, else the gun would drive a light door through its stop every substep)
+        // After each substep, keeps a pushed door on its hinge and within its range. Pushed against a stop, it is held there (kinematic
+        // for the rest of the frame); otherwise the gun would drive the light door through its stop every substep.
         private void KeepDoorsOnHinges()
         {
             foreach (DoorBody doorBody in doorBodies.Values)
@@ -853,7 +854,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // The pushed doors' new angles to the real doors (PhysicalDoors: the state, the sounds, the co-op sync)
+        // Passes the pushed doors' new angles to the real doors (PhysicalDoors handles the state, the sounds and the co-op sync)
         private void ReportDoorMotion()
         {
             foreach (DoorBody doorBody in doorBodies.Values)
@@ -865,7 +866,7 @@ namespace TarkovVR.Source.Player.Interactions
                     || Mathf.Abs(doorBody.angularSpeed) > 0.5f || doorBody.hitSpeed > 0f;
                 if (moved)
                     PhysicalDoors.Pushed(door, doorBody.angle, doorBody.angularSpeed, doorBody.hitSpeed);
-                // (refused - the door was taken meanwhile: next frame starts from the real door)
+                // If the push was refused (the door was taken meanwhile), the next frame starts from the real door
                 doorBody.writtenAngle = Mathf.Abs(Mathf.DeltaAngle(door.CurrentAngle, doorBody.angle)) < 0.01f ? door.CurrentAngle : float.NaN;
             }
         }

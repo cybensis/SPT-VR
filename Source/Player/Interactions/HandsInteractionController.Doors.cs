@@ -6,11 +6,11 @@ namespace TarkovVR.Source.Player.Interactions
 {
     internal partial class HandsInteractionController
     {
-        // Doors by hand (PhysicalDoors): which hands may take a door this frame. Called before Update's bail: a held door lets go
-        // there itself (menus, sprint).
+        // Doors by hand (PhysicalDoors): decides which hands may take a door this frame. Called before Update's early return,
+        // because PhysicalDoors itself lets go of a held door in those cases (menus, sprint).
         private void UpdatePhysicalDoors()
         {
-            // (out of a raid it lets go of everything)
+            // Out of a raid, Tick lets go of everything
             if (!VRGlobals.inGame || VRGlobals.vrPlayer == null || VRGlobals.player == null)
             {
                 PhysicalDoors.Tick(this, false, false, "out of a raid", "out of a raid");
@@ -22,7 +22,8 @@ namespace TarkovVR.Source.Player.Interactions
                 && !leftHandState.inScope && !leftHandState.inBackpack && !leftHandState.inHeadGear;
             bool dominantHandFree = !armsBusy && !HoldsLoot(true) && !(isSummoningLoot && heldInDominantHand)
                 && SecondHandFree(true) && !VRReloadController.GunHandHolds;
-            // A door or key a hand holds stays through the reach zones; it goes when the hand takes something (null = nothing did)
+            // A held door or key stays held while the hand passes through the reach zones. It is let go only when the hand takes
+            // something else (null = nothing did).
             string offHandTakenBy = armsBusy ? "an item, food or a grenade"
                 : VRGlobals.vrPlayer.isSupporting ? "the foregrip"
                 : HoldsLoot(false) || (isSummoningLoot && !heldInDominantHand) ? "loot"

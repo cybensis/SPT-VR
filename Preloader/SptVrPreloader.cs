@@ -8,8 +8,9 @@ using TarkovVR.Source.XR;
 
 namespace TarkovVR.Preloader
 {
-    // BepInEx runs preloader patchers before the engine reads EscapeFromTarkov_Data/UnitySubsystems; the SPT-VR plugin starts long
-    // after that, so a manifest it writes only counts from the next start. This writes them in time. Patches no assembly.
+    // BepInEx runs preloader patchers before the engine reads EscapeFromTarkov_Data/UnitySubsystems. The SPT-VR plugin starts long
+    // after that, so a manifest written by the plugin only takes effect on the next start. This writes the VR files in time.
+    // It patches no assembly.
     public static class SptVrPreloader
     {
         public static IEnumerable<string> TargetDLLs { get; } = new string[0];
@@ -35,7 +36,7 @@ namespace TarkovVR.Preloader
             }
         }
 
-        // Next to SPT-VR.dll, wherever its folder is called
+        // The VR folder next to SPT-VR.dll, whatever the plugin's folder is named
         private static string FindModVRFolder()
         {
             foreach (string plugin in Directory.GetFiles(Paths.PluginPath, "SPT-VR.dll", SearchOption.AllDirectories))

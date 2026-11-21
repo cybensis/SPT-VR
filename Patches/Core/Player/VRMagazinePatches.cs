@@ -22,7 +22,7 @@ namespace TarkovVR.Patches.Core.Player
             VRReloadController.PlaceDroppedMagazine(item, __result);
         }
 
-        // A round our rechamber threw out (Firearms.ThrowPatronAsLoot: the 9-argument overload, syncable false)
+        // A round thrown out by our rechamber (Firearms.ThrowPatronAsLoot calls this 9-argument overload with syncable false)
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GameWorld), nameof(GameWorld.ThrowItem),
             new[] { typeof(Item), typeof(IPlayer), typeof(Vector3), typeof(Quaternion), typeof(Vector3), typeof(Vector3), typeof(bool), typeof(bool), typeof(float) })]
@@ -33,9 +33,9 @@ namespace TarkovVR.Patches.Core.Player
             EjectedRoundProbe.Attach(__result, velocity);
         }
 
-        // Tarkov's magazine and rechamber operations as they start (each after InitiateOperation made it current). As a FIKA client our
-        // moves land whenever the host answers; VRReloadController finishes ours right here (only on a co-op client, only the local
-        // player's controller: it checks both)
+        // Tarkov's magazine and rechamber operations, as they start (after InitiateOperation made each one current). On a FIKA client
+        // our moves only land when the host answers, so VRReloadController finishes them here. It checks that this is a co-op client
+        // and the local player's controller.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController.PullOutMagOperation), nameof(EFT.Player.FirearmController.PullOutMagOperation.Start),
             new[] { typeof(Magazine), typeof(Slot), typeof(Callback) })]
@@ -60,7 +60,7 @@ namespace TarkovVR.Patches.Core.Player
             VRReloadController.OnOperationStarted(__instance);
         }
 
-        // Every clip a sound player plays comes through here: the reload sounds VRReloadController plays are felt too
+        // Every clip a sound player plays passes through here, so the reload sounds VRReloadController plays also drive the haptics
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BaseSoundPlayer), nameof(BaseSoundPlayer.PlayClip))]
         private static void FeelReloadSound(BaseSoundPlayer __instance, AudioClip clip)

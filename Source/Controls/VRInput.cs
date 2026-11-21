@@ -27,15 +27,15 @@ namespace TarkovVR.Source.Controls
         public static readonly VRSingle RightTrigger = new VRSingle(() => SteamVR_Actions._default.RightTrigger, OpenXRInput.RIGHT_HAND);
         public static readonly VRSingle LeftTrigger = new VRSingle(() => SteamVR_Actions._default.LeftTrigger, OpenXRInput.LEFT_HAND);
 
-        // Moving, turning, crouch/jump, zoom: held still after a radial menu until let go (HoldStickUntilLetGo). The Raw* ones the menus
-        // read aren't.
+        // The sticks for moving, turning, crouch / jump and zoom read as centred after a radial menu pick until let go (HoldStickUntilLetGo).
+        // The Raw* ones, which the menus read, don't.
         private static readonly VRVector2 rightJoystick = new VRVector2(() => SteamVR_Actions._default.RightJoystick, OpenXRInput.RIGHT_HAND, heldAfterMenus: true);
         private static readonly VRVector2 leftJoystick = new VRVector2(() => SteamVR_Actions._default.LeftJoystick, OpenXRInput.LEFT_HAND, heldAfterMenus: true);
         private static readonly VRVector2 rawRightJoystick = new VRVector2(() => SteamVR_Actions._default.RightJoystick, OpenXRInput.RIGHT_HAND);
         private static readonly VRVector2 rawLeftJoystick = new VRVector2(() => SteamVR_Actions._default.LeftJoystick, OpenXRInput.LEFT_HAND);
 
-        // A radial menu just picked with this controller's stick (CircularSegmentUI closing): everything else reads that stick as centred
-        // until it's let go - else the pick's push carries on as a move or a crouch
+        // After a radial menu pick with a controller's stick (CircularSegmentUI closing), everything else reads that stick as centred
+        // until it is let go. Otherwise the pick's push would carry on as a move or a crouch.
         public static float menuStickLetGoRadius = 0.2f;    // how far from the centre counts as let go
         private static readonly bool[] stickHeld = new bool[2];
 
@@ -47,7 +47,7 @@ namespace TarkovVR.Source.Controls
 
         internal static bool StickHeldAfterMenu(int hand) => stickHeld[hand];
 
-        // This controller's stick at `actual`: still held after a menu (read as centred)? Let go = released for good.
+        // True while this controller's stick, at `actual`, is still held after a menu pick (it reads as centred). Once let go, the hold ends.
         internal static bool StickStillHeld(int hand, Vector2 actual)
         {
             if (!stickHeld[hand])
@@ -58,10 +58,11 @@ namespace TarkovVR.Source.Controls
             return false;
         }
 
-        // The "Swap Sticks" setting (VRSettings.GetSwapSticks, for left-handed players): the stick everything calls the right one is
-        // the left controller's, and back - turning, jump / crouch and its click, the scope dial, the weapon-part menu's scroll; moving,
-        // sprint's click. Done here so every feature follows it. Asked for with a hand (GetState(RightHand)) they'd read the other hand's
-        // action, so callers use the source-less reads. The Raw* ones stay on their controller (the menus scroll with the laser's hand).
+        // The "Swap Sticks" setting (VRSettings.GetSwapSticks, for left-handed players) makes the "right" stick the left controller's and
+        // the "left" stick the right controller's: turning, jump / crouch and its click, the scope dial and the weapon-part menu's scroll on
+        // one; moving and sprint's click on the other. It is done here so every feature follows it. Asked with a hand source
+        // (GetState(RightHand)) they would read the other hand's action, so callers use the reads without a source.
+        // The Raw* ones stay on their own controller (the menus scroll with the laser's hand).
         private static bool SticksSwapped => TarkovVR.Source.Settings.VRSettings.GetSwapSticks();
         public static VRVector2 RightJoystick => SticksSwapped ? leftJoystick : rightJoystick;
         public static VRVector2 LeftJoystick => SticksSwapped ? rightJoystick : leftJoystick;
@@ -81,7 +82,7 @@ namespace TarkovVR.Source.Controls
         internal static bool UsingOpenXR => OpenXRBootstrap.Active;
     }
 
-    // The SteamVR actions are looked up on first use, SteamVR_Actions._default only exists after SteamVR_Actions.PreInitialize()
+    // The SteamVR actions are looked up on first use, because SteamVR_Actions._default only exists after SteamVR_Actions.PreInitialize()
 
     public class VRBoolean
     {
@@ -141,8 +142,8 @@ namespace TarkovVR.Source.Controls
 
         public float axis => VRInput.UsingOpenXR ? OpenXRInput.GetTrigger(hand) : SteamAction.axis;
 
-        // A finger resting on the trigger. False = can't tell: SteamVR has no touch action in the mod's manifest, and some
-        // controllers have no sensor there.
+        // Whether a finger rests on the trigger. Returns false when it can't tell: SteamVR has no touch action in the mod's manifest,
+        // and some controllers have no sensor there.
         public bool TryGetTouch(out bool touched)
         {
             touched = false;
@@ -186,7 +187,7 @@ namespace TarkovVR.Source.Controls
             return SteamAction.GetAxis(inputSource);
         }
 
-        // Off this controller's own stick, whatever source was asked for (another hand's source reads zero, which isn't a let-go)
+        // Checked on this controller's own stick whatever source was asked for (another hand's source reads zero, which isn't a let-go)
         private bool Held() => heldAfterMenus && VRInput.StickHeldAfterMenu(hand) && VRInput.StickStillHeld(hand, Actual);
     }
 
@@ -272,7 +273,7 @@ namespace TarkovVR.Source.Controls
                 SteamAction.RemoveAllListeners(inputSource);
         }
 
-        // Called once a frame by OpenXRInput. Copies the sources first, a listener may add or remove listeners.
+        // Called once a frame by OpenXRInput. The sources are copied first, because a listener may add or remove listeners.
         internal void FireOpenXRListeners()
         {
             sourcesToFire.Clear();

@@ -16,18 +16,18 @@ namespace TarkovVR.Patches.Misc
     // Weapons are never touched here: they keep vanilla's own surface-aware gun banks.
     //
     // dropSoundMode -- which layers play:
-    //   InventorySounds -- the item's inventory "_drop" foley (GUISounds/ItemSounds): material identity, not surface-aware.
-    //   SurfaceOnly     -- just a per-surface thud (no material).
+    //   InventorySounds -- the item's inventory "_drop" foley (GUISounds/ItemSounds): sounds like the material, ignores the surface.
+    //   SurfaceOnly     -- only a per-surface thud, no material sound.
     //   Layered (default) -- both.
     // surfaceSource -- where the surface thud comes from:
-    //   FootstepBanks (default) -- the player's footstep SurfaceSet (Sounds.GetSurfaceSet): a per-surface body-thud
+    //   FootstepBanks (default) -- the player's footstep SurfaceSet (Sounds.GetSurfaceSet): a per-surface body thud
     //                      (ProneDrop/Landing) with no gun rattle.
-    //   GunBanks        -- the gun drop banks (ItemDropSounds), class by weight; the gun clatter is baked into every clip.
+    //   GunBanks        -- the gun drop banks (ItemDropSounds), class picked by weight; every clip has gun clatter in it.
     //
     // Co-op (FIKA): a dropped item is an ObservedLootItem on every machine. The dropper simulates it locally
-    // (bool_3 == false) -> vanilla OnCollisionEnter. Everyone else observes it (bool_3 == true) -> LootSyncStruct ->
-    // ApplyNetPacket -> PlayDropSound() on settle (the path weapon drops sync on). Both are hooked and split by bool_3 so no
-    // machine double-plays. References only EFT types (no Fika types), so it's inert in solo.
+    // (bool_3 == false), so vanilla OnCollisionEnter fires. Everyone else observes it (bool_3 == true): LootSyncStruct ->
+    // ApplyNetPacket -> PlayDropSound() when it settles, the same path weapon drops sync on. Both are hooked and split by
+    // bool_3, so no machine plays it twice. Only EFT types are referenced (no FIKA types), so this is harmless in solo.
     [HarmonyPatch]
     internal class LootDropSoundPatches
     {
@@ -43,7 +43,7 @@ namespace TarkovVR.Patches.Misc
         public static float lightWeightMax = 1.0f;
         public static float heavyWeightMin = 3.0f;
 
-        // Only voice a real impact (filters gentle placements), and don't re-fire on every bounce contact.
+        // Only voice a real impact (not a gentle placement), and don't play again on every bounce.
         public static float minImpactSpeed = 1.2f;
         public static float retriggerDelay = 0.4f;
 
@@ -52,18 +52,18 @@ namespace TarkovVR.Patches.Misc
         public static float invVolume = 1f;
 
         // Surface thud volume scales with the item's current weight: silent below surfaceMinWeight, then
-        // ramps from surfaceVolMin (just above the cutoff) up to surfaceVolMax, hitting max at surfaceVolMaxWeight.
+        // rising from surfaceVolMin just above the cutoff to surfaceVolMax at surfaceVolMaxWeight.
         public static float surfaceVolMin = 0.02f;
         public static float surfaceVolMax = 0.5f;
         public static float surfaceVolMaxWeight = 10.0f; // kg at which the thud reaches surfaceVolMax
 
-        // Below this weight (kg) an item is too light to thud on a surface -- skip the surface bank entirely
-        // (Layered keeps only material foley; SurfaceOnly goes silent). ammo ~0.01, bandage ~0.15, can ~0.5.
+        // Below this weight (kg) an item is too light to thud, so the surface bank is skipped
+        // (Layered keeps only the material foley; SurfaceOnly is silent). Ammo ~0.01, bandage ~0.15, can ~0.5.
         public static float surfaceMinWeight = 0.4f;
 
-        // Velocity-based volume: a harder throw/drop is louder. Impact speed (m/s) maps to a volume multiplier
-        // between velVolumeSoft and velVolumeLoud, applied more to the inventory foley than the surface thud
-        // via per-layer "influence" (0 = ignore velocity, 1 = full multiplier).
+        // A harder throw or drop is louder. Impact speed (m/s) maps to a volume multiplier between velVolumeSoft
+        // and velVolumeLoud. Each layer has an influence (0 = ignore velocity, 1 = full multiplier), so the
+        // inventory foley follows it more than the surface thud.
         public static float velSpeedSoft = 1.5f;         // m/s -- gentle drop -> velVolumeSoft
         public static float velSpeedHard = 8f;           // m/s -- hard throw -> velVolumeLoud
         public static float velVolumeSoft = 0.4f;
@@ -71,16 +71,16 @@ namespace TarkovVR.Patches.Misc
         public static float invVelInfluence = 1.0f;      // inventory foley follows velocity fully
         public static float surfaceVelInfluence = 0.35f; // surface thud follows velocity only a little
 
-        // Per-item throttle; the weak table auto-drops entries when the LootItem is destroyed (no leak).
+        // Per-item retrigger time. The weak table drops an entry when its LootItem is destroyed, so it doesn't leak.
         private static readonly ConditionalWeakTable<LootItem, StrongBox<float>> lastPlayed =
             new ConditionalWeakTable<LootItem, StrongBox<float>>();
 
-        // Peak networked speed per observed item: by the time the settle fires the item is ~stationary, so we
-        // remember the fastest in-flight packet velocity to scale a co-op observer's volume by throw strength.
+        // Peak networked speed per observed item. By the time the settle fires, the item has almost stopped, so the
+        // fastest in-flight packet velocity is kept to scale a co-op observer's volume by how hard it was thrown.
         private static readonly ConditionalWeakTable<LootItem, StrongBox<float>> peakNetSpeed =
             new ConditionalWeakTable<LootItem, StrongBox<float>>();
 
-        // Dropper side (you drop it) + singleplayer: vanilla fires OnCollisionEnter from real collisions.
+        // On the dropper's machine and in single player, vanilla fires OnCollisionEnter from real collisions.
         // Networked observers (bool_3 == true) are driven by packets instead and handled in PlayDropSound.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(LootItem), "OnCollisionEnter")]
@@ -102,8 +102,8 @@ namespace TarkovVR.Patches.Misc
             Voice(__instance, position, surface, impact);
         }
 
-        // Observer side in co-op: ObservedLootItem.ApplyNetPacket calls this on the networked settle (the
-        // path that syncs weapon drops). Only the networked observer reaches here.
+        // Observer side in co-op: ObservedLootItem.ApplyNetPacket calls this when the networked item settles (the
+        // path that syncs weapon drops). Only a networked observer gets here.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(LootItem), "PlayDropSound")]
         private static void VoiceOnNetworkedSettle(LootItem __instance)
@@ -117,7 +117,7 @@ namespace TarkovVR.Patches.Misc
             Voice(__instance, position, __instance._currentSurface, speed);
         }
 
-        // Observer side: remember the fastest velocity the synced item reaches in flight, so the settle can
+        // Observer side: keeps the fastest velocity the synced item reaches in flight, so the settle can
         // scale volume by how hard it was thrown. ApplyNetPacket sets _rigidBody.velocity from each packet.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ObservedLootItem), "ApplyNetPacket")]
@@ -135,8 +135,8 @@ namespace TarkovVR.Patches.Misc
         private static void Voice(LootItem instance, Vector3 pos, BaseBallistic.ESurfaceSound surface, float impact)
         {
 
-            // ItemOwner.RootItem is the stable accessor for the held item (same one vanilla reads for the
-            // pickup sound). Weapons already have a real DropSoundType -> vanilla voiced them, so bail.
+            // ItemOwner.RootItem is the reliable accessor for the item (vanilla reads the same one for the
+            // pickup sound). Weapons have a real DropSoundType and vanilla already voiced them, so skip them.
             Item item = instance.ItemOwner?.RootItem;
             if (item == null || item.DropSoundType != EItemDropSoundType.None)
                 return;
@@ -169,8 +169,8 @@ namespace TarkovVR.Patches.Misc
             return Mathf.Lerp(1f, multiplier, influence);
         }
 
-        // The item's "<category>_drop" inventory clip, played at the landing point through BetterAudio (3D),
-        // like the vanilla pickup sound. Null clip (category has none) -> stays silent. Volume mostly follows throw/drop speed.
+        // Plays the item's "<category>_drop" inventory clip in 3D at the landing point through BetterAudio, like the
+        // vanilla pickup sound. A category with no clip stays silent. Volume mostly follows the throw or drop speed.
         private static void PlayInventoryDrop(Item item, Vector3 pos, float impact)
         {
             AudioClip clip = Singleton<GUISounds>.Instance.GetItemClip(item.ItemSound, EInventorySoundType.drop);
@@ -179,16 +179,16 @@ namespace TarkovVR.Patches.Misc
                     BetterAudio.AudioSourceGroupType.Character, invRolloff, invVolume * VelocityMult(impact, invVelInfluence));
         }
 
-        // A per-surface thud: either the pure footstep SurfaceSet bank (no gun) or a weight-picked gun bank.
-        // Volume scales with the item's current weight (incl. contents) and a little with impact speed.
+        // Plays a per-surface thud: either the footstep SurfaceSet bank (no gun sound) or a gun bank picked by weight.
+        // Volume scales with the item's current weight, including contents, and a little with impact speed.
         private static void PlaySurfaceBank(Item item, BaseBallistic.ESurfaceSound surface, Vector3 pos, float impact)
         {
             BetterAudio betterAudio = Singleton<BetterAudio>.Instance;
             if (betterAudio == null)
                 return;
 
-            // TotalWeight is the current weight incl. contents (loaded mag, filled rig/backpack, ammo stack)
-            // -- the same value the inspect window shows -- not the empty Template.Weight.
+            // TotalWeight is the current weight including contents (loaded mag, filled rig or backpack, ammo stack),
+            // the same value the inspect window shows, not the empty Template.Weight.
             float weight = item.TotalWeight;
             if (weight < surfaceMinWeight)
                 return; // too light to thud -- only the material foley (if any) plays
@@ -197,8 +197,8 @@ namespace TarkovVR.Patches.Misc
             if (bank == null)
                 return;
 
-            // surfaceVolMin at the cutoff, ramping to surfaceVolMax at surfaceVolMaxWeight (clamped above),
-            // then nudged by impact speed (less than the inventory layer).
+            // surfaceVolMin at the cutoff, rising to surfaceVolMax at surfaceVolMaxWeight and clamped above it,
+            // then scaled by impact speed (less than the inventory layer).
             float volume = Mathf.Lerp(surfaceVolMin, surfaceVolMax, Mathf.InverseLerp(surfaceMinWeight, surfaceVolMaxWeight, weight))
                 * VelocityMult(impact, surfaceVelInfluence);
 
@@ -206,14 +206,14 @@ namespace TarkovVR.Patches.Misc
             betterAudio.PlayAtPoint(pos, bank, distance, volume, -1f, EnvironmentType.Outdoor, EOcclusionTest.OneShotPropagation);
         }
 
-        // FootstepBanks: the player's per-surface SurfaceSet thud (pure surface, no gun). GunBanks: the gun
-        // drop bank for the surface, gun class picked by weight.
+        // FootstepBanks: the player's per-surface SurfaceSet thud (surface only, no gun). GunBanks: the gun
+        // drop bank for the surface, with the gun class picked by weight.
         private static SoundBank ResolveSurfaceBank(BetterAudio ba, BaseBallistic.ESurfaceSound surface, float weight)
         {
             if (surfaceSource == SurfaceBankSource.FootstepBanks)
             {
-                // _playerSounds is the local player's footstep Sounds asset; the surface table is shared, so
-                // it's valid for any drop (including remote ones we're observing).
+                // _playerSounds is the local player's footstep Sounds asset. The surface table is shared, so it
+                // works for any drop, including remote ones we observe.
                 var player = VRGlobals.player;
                 if (player == null || player._playerSounds == null)
                     return null;

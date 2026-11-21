@@ -6,23 +6,24 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Which grenade you hold (grenades are not in the quick-slot radial): the trigger of the hand holding a grenade, held, opens
-    // a radial of the other grenades in your quick access; that controller's stick points at one, letting go of the trigger swaps to it
-    // (GrenadeSlot.SwapHeldTo: Tarkov's switch, its put-away and draw skipped, the same hand holding it). Only with the pin in.
+    // Picks which grenade you hold, since grenades are not in the quick-slot radial. Holding the trigger of the hand that holds a
+    // grenade opens a radial of the other grenades in your quick access. That controller's stick points at one, and letting go of the
+    // trigger swaps to it (GrenadeSlot.SwapHeldTo: Tarkov's switch with its put-away and draw skipped, in the same hand).
+    // Only works with the pin in.
     public static class GrenadePicker
     {
-        public static float aboveHand = 0.12f;      // m the menu floats over the holding controller, turned to face you
+        public static float aboveHand = 0.12f;      // m, how high the menu floats over the holding controller (it faces you)
 
         private static GameObject menu;
         private static CircularSegmentUI ui;
         private static readonly List<ThrowWeap> options = new List<ThrowWeap>();
-        private static readonly List<ItemIcon> icons = new List<ItemIcon>();    // kept while it's open (the sprites are theirs)
+        private static readonly List<ItemIcon> icons = new List<ItemIcon>();    // kept while the menu is open, since they own the sprites
         private static EFT.Player.GrenadeHandsController openFor;
         private static bool triggerDown;
 
         public static bool Open => menu != null && menu.activeSelf;
 
-        // Every frame a grenade is held (GrenadeHold.UpdateCommand); canPick = held by its grip, the pin in, no hand on the ring
+        // Called every frame a grenade is held (GrenadeHold.UpdateCommand). canPick = held by its grip, pin in, no hand on the ring.
         public static void Update(EFT.Player.GrenadeHandsController grenade, bool canPick)
         {
             float axis = Handedness.GunHandTrigger.axis;
@@ -97,7 +98,7 @@ namespace TarkovVR.Source.Player.Interactions
             icons.Clear();
         }
 
-        // Over the holding controller, facing the head (GrenadeHold's onBeforeRender, after the rig moved)
+        // Places the menu over the holding controller, facing the head. Called from GrenadeHold's onBeforeRender, after the rig has moved.
         public static void Place()
         {
             if (!Open && openFor == null)
@@ -112,7 +113,7 @@ namespace TarkovVR.Source.Player.Interactions
             menu.transform.SetPositionAndRotation(position, Quaternion.LookRotation(away, Vector3.up));
         }
 
-        // The grenade left the hands, a menu opened or the raid ended: closed
+        // Closes the picker when the grenade leaves the hands, a menu opens or the raid ends
         public static void Reset()
         {
             Close();

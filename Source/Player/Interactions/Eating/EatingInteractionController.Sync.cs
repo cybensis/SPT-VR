@@ -3,25 +3,27 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // FIKA co-op eating sync, send-side data gathering. No FIKA/module types here (it JITs without FIKA): fills buffers with the
-    // rendered wrist poses + every live prop's pose/visibility in the local body frame (Player.Transform). VRArmSync (FIKA-gated) ships them via the
-    // module, which finds the matching prop on each observer's copy of the food model and overrides its world pose.
+    // FIKA co-op eating sync, the sending side's data. No FIKA or module types are used here, so it compiles without FIKA.
+    // It fills buffers with the rendered wrist poses and every prop's pose and visibility in the local body frame (Player.Transform).
+    // VRArmSync (only with FIKA) sends them through the module, which finds the matching prop on each observer's copy of the
+    // food model and overrides its world pose.
     internal static partial class EatingInteractionController
     {
-        // One local eater at a time -> static reusable buffers (cleared each build, never shrunk).
+        // There is only one local eater at a time, so the buffers are static and reused (cleared each build, never shrunk).
         public static readonly List<string> syncNames = new List<string>(24);
         public static readonly List<Vector3> syncPos = new List<Vector3>(24);
         public static readonly List<Quaternion> syncRot = new List<Quaternion>(24);
         public static readonly List<bool> syncVis = new List<bool>(24);
-        // Food animator state per layer (the skinned-deformation seek targets).
+        // Food animator state per layer (what observers seek to for the skinned deformation).
         public static readonly List<int> syncAnimHashes = new List<int>(8);
         public static readonly List<float> syncAnimTimes = new List<float>(8);
-        // Log the eater's per-layer food-animator state (~1/s), so a food whose eat lives on an unexpected layer is visible
+        // Logs the local food animator's state per layer (~1/s), to spot a food whose eat is on an unexpected layer
         public static bool debugEatSync = false;
 
-        // Fills the buffers from the current eat, relative to `frame` (the body). False when not eating or the rig isn't ready (the caller
-        // sends nothing / a stop). Wrists are the rendered IK hand bones, not the raw controllers, so a pull-latched hand is
-        // carried correctly. Visibility mirrors the local renderer state (un-taken pieces / un-poured crackers stay hidden).
+        // Fills the buffers from the current eat, relative to `frame` (the body). Returns false when not eating or when the rig isn't
+        // ready (the caller then sends nothing or a stop). Wrists are the rendered IK hand bones, not the raw controllers, so a
+        // hand latched for a pull-open is sent where it is drawn. Visibility copies the local renderer state (pieces not yet taken
+        // and crackers not yet poured stay hidden).
         public static bool TryBuildSync(Transform frame,
             out Vector3 lPos, out Quaternion lRot, out Vector3 rPos, out Quaternion rRot)
         {
@@ -36,8 +38,8 @@ namespace TarkovVR.Source.Player.Interactions
             lPos = frame.InverseTransformPoint(lw.position); lRot = invFrame * lw.rotation;
             rPos = frame.InverseTransformPoint(rw.position); rRot = invFrame * rw.rotation;
 
-            // The food animator's state on every layer (hash + normalized time), which drives the food's skinned deformation.
-            // Observers seek their copy to these so the lid/rip/chew matches. All layers: a food's eat can live on any of them.
+            // The food animator's state on every layer (hash and normalized time), which drives the food's skinned deformation.
+            // Observers seek their copy to these so the lid, rip and chew match. All layers, because a food's eat can be on any of them.
             try
             {
                 var firearmsAnimator = controller?.FirearmsAnimator;
@@ -61,8 +63,8 @@ namespace TarkovVR.Source.Player.Interactions
             catch { syncAnimHashes.Clear(); syncAnimTimes.Clear(); }
 
             syncNames.Clear(); syncPos.Clear(); syncRot.Clear(); syncVis.Clear();
-            // baseT/cover/wrapper are never hidden locally; the piece props carry their live renderer state. Order doesn't
-            // matter (the observer depth-sorts).
+            // baseT, cover and wrapper are never hidden locally; the piece props send their current renderer state. The order
+            // doesn't matter (the observer sorts by depth).
             AddProp(frame, invFrame, baseT, true);
             AddProp(frame, invFrame, spoonT, spoonR == null || spoonR.enabled);
             AddProp(frame, invFrame, foodT, foodR == null || foodR.enabled);
@@ -88,8 +90,8 @@ namespace TarkovVR.Source.Player.Interactions
             syncVis.Add(vis);
         }
 
-        // True when `sp` is our active eat's sound player: a sound passing AllowSound on it is one we played. The OnSound gate
-        // forwards it to observers (who suppress the looping vanilla observed-meds sound).
+        // True when `sp` is the sound player of the active manual eat, so a sound passing AllowSound on it is one this mod played.
+        // The OnSound gate forwards it to observers, who mute the vanilla observed-meds sound.
         public static bool IsOwnEatSound(BaseSoundPlayer sp) => active && !manualDone && sp != null && sp == soundPlayer;
     }
 }

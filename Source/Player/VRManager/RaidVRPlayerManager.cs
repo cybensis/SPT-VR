@@ -10,15 +10,9 @@ namespace TarkovVR.Source.Player.VRManager
     internal class RaidVRPlayerManager : VRPlayerManager
     {
         public float rayDistance = 0.75f;
-        // Interactable layer is 22
-        // Dead bodies are 23
-        //private LayerMask interactableLayerMask = (1 << 22) | (1 << 23); // Layer 22 and Layer 23
-        //private GameObject cube;
-        // When displaying the interactable UI it needs to be brought a bit closer to the player
-        // otherwise it could end up inside the object
+        // The interaction UI is brought a bit toward the player, otherwise it can end up inside the object
         public float dirMultiplier = 0.1f;
-        // The center of the camera doesn't feel like it aligns with the center of my vision in VR
-        // so use this to drop it down a little bit
+        // The camera's centre doesn't line up with the centre of vision in VR, so this drops the gaze ray a little
         public float downwardOffset = 0.1f;
         private Vector3 interactUiPos;
         private LootItem interactLootItem; // the loot item the menu is for, so it can track its movement
@@ -33,18 +27,14 @@ namespace TarkovVR.Source.Player.VRManager
             if (interactionUi && (!WeaponPatches.currentGunInteractController || !WeaponPatches.currentGunInteractController.highlightingMesh))
             {
                 if (positionTransitUi) {
-                    //float yRotationDifference = Mathf.Abs(Quaternion.Angle(Camera.main.transform.localRotation, camRotation));
                     float yRotationDifference = Mathf.Abs(Quaternion.Angle(VRGlobals.VRCam.transform.localRotation, camRotation));
 
                     if (yRotationDifference > 30)
                     {
 
-                        //camRotation = Camera.main.transform.localRotation;
                         camRotation = VRGlobals.VRCam.transform.localRotation;
 
-                        // Set position not local position so it doesn't inherit rotated position from camRoot
-                        //interactionUi.position = Camera.main.transform.position + Camera.main.transform.forward * 0.4f + Camera.main.transform.up * -0.2f + Camera.main.transform.right * 0;
-                        //interactionUi.LookAt(Camera.main.transform);
+                        // Set position, not local position, so it doesn't inherit the rotated position from camRoot
                         interactionUi.position = VRGlobals.VRCam.transform.position + VRGlobals.VRCam.transform.forward * 0.4f + VRGlobals.VRCam.transform.up * -0.2f + VRGlobals.VRCam.transform.right * 0;
                         interactionUi.LookAt(VRGlobals.VRCam.transform);
                         // Need to rotate 180 degrees otherwise it shows up backwards
@@ -61,7 +51,6 @@ namespace TarkovVR.Source.Player.VRManager
                         interactUiPos = c + (VRGlobals.VRCam.transform.position - c).normalized * dirMultiplier;
                     }
                     interactionUi.position = interactUiPos;
-                    //interactionUi.LookAt(Camera.main.transform);
                     interactionUi.LookAt(VRGlobals.VRCam.transform);
                     // Need to rotate 180 degrees otherwise it shows up backwards
                     interactionUi.Rotate(0, 180, 0);
@@ -79,20 +68,11 @@ namespace TarkovVR.Source.Player.VRManager
 
         public override void PositionLeftWristUi()
         {
-            // Timer panel localpos: 0.047 0.08 0.025
-            // local rot = 88.5784 83.1275 174.7802
-            // child(0).localeuler = 0 342.1273 0
-
-            // leftwristui localpos = -0.1 0.04 0.035
-            // localrot = 304.3265 181 180
-
             leftWristUi.transform.SetParent(InitVRPatches.leftWrist, false);
             leftWristUi.transform.localPosition = new Vector3(-0.1f, 0.04f, 0.035f);
             leftWristUi.transform.localEulerAngles = new Vector3(304, 180, 180);
 
             UIPatches.extractionTimerUi.transform.SetParent(leftWristUi.transform, false);
-            //UIPatches.extractionTimerUi.transform.localPosition = (VRSettings.GetLeftHandedMode()) ? new Vector3(0.037f, 0.12f, -0.015f)  : new Vector3(0.047f, 0.08f, 0.025f);
-            //UIPatches.extractionTimerUi.transform.localEulerAngles = (VRSettings.GetLeftHandedMode()) ? new Vector3(307, 81, 20) : new Vector3(88, 83, 175);
             UIPatches.extractionTimerUi.transform.localPosition = (VRSettings.GetLeftHandedMode()) ? new Vector3(0.037f, 0.12f, -0.015f) : new Vector3(0.01f, 0.12f, -0.05f);
             UIPatches.extractionTimerUi.transform.localEulerAngles = (VRSettings.GetLeftHandedMode()) ? new Vector3(307, 81, 20) : new Vector3(18, 183, 285);
             UIPatches.extractionTimerUi._mainContainer.localEulerAngles = new Vector3(0, 342, 0);
@@ -116,19 +96,11 @@ namespace TarkovVR.Source.Player.VRManager
         public void PlaceUiInteracter(RaycastHit hit)
         {
 
-            // Verify if the current hit object is still the same after the delay
             Vector3 rayOrigin = VRGlobals.VRCam.transform.position;
-
-            //Vector3 rayDirection = Camera.main.transform.forward;
-            //RaycastHit hit;
-            //rayDirection.y -= downwardOffset;
-            //float adjustedRayDistance = rayDistance * GetDistanceMultiplier(rayDirection);
-            //if (Physics.Raycast(rayOrigin, rayDirection, out hit, adjustedRayDistance, GameWorld.int_0))
-            //{
 
                 BoxCollider boxCollider = hit.collider as BoxCollider;
                 Vector3 offsetDirection = (rayOrigin - hit.point).normalized;
-                interactUiPos = hit.point + offsetDirection * dirMultiplier; // Adjust the offset distance as needed
+                interactUiPos = hit.point + offsetDirection * dirMultiplier;
 
                 // Loose loot items: anchor the menu to the item's bound-collider centre, not the face the gaze ray hit.
                 // Remembered so Update keeps it on the item as it moves.
@@ -166,10 +138,7 @@ namespace TarkovVR.Source.Player.VRManager
                     Vector3 worldHitFaceCenter = hit.transform.TransformPoint(hitFaceCenter);
                     interactUiPos = worldHitFaceCenter + (rayOrigin - worldHitFaceCenter).normalized * dirMultiplier;
                 }
-                    //Plugin.MyLog.LogWarning(boxCollider + " | " + interactUiPos + " |  " + interactionUi);
                 raycastHit = true;
-                // Set the interactions UI position
-            //}
         }
 
         public void StopPlacingUi() { raycastHit = false; interactLootItem = null; }
@@ -202,27 +171,5 @@ namespace TarkovVR.Source.Player.VRManager
 
             return multiplier;
         }
-
-        //0.296 0.1104 -0.0803
-
-        //protected override void SpawnHands()
-        //{
-        //    if(!RightHand)
-        //    {
-        //        RightHand = new GameObject("RightHand");
-        //        RightHand.AddComponent<SteamVR_Behaviour_Pose>();
-        //        //RightHand.AddComponent<SteamVR_Skeleton_Poser>();
-        //        RightHand.transform.parent = VRGlobals.camHolder.transform.parent;
-        //        //MenuPatches.vrUiInteracter = RightHand.AddComponent<VRUIInteracter>();
-
-
-        //    }
-        //    if (!LeftHand)
-        //    {
-        //        LeftHand = new GameObject("LeftHand");
-        //        LeftHand.AddComponent<SteamVR_Behaviour_Pose>();
-        //        LeftHand.transform.parent = VRGlobals.camHolder.transform.parent;
-        //    }
-        //}
     }
 }

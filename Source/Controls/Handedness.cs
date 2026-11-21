@@ -5,23 +5,24 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Controls
 {
-    // Who is the gun hand and who is the off hand, in one place.
-    //  - The controllers by role: the gun hand's controller is the right one, or the left one in left-handed mode. Its grip, trigger,
-    //    stick, face buttons and haptics.
-    //  - The rig hands by role: which of the rig's hands (and EFT arms) holds the gun. The left-handed mode keeps the gun on the
-    //    rig's right hand and mirrors the arms, so the gun rig hand is always the right one.
-    // New code should go through here rather than VRSettings.GetLeftHandedMode() ? left : right.
+    // Which hand is the gun hand and which is the off hand, in one place.
+    //  - Controllers by role: the gun hand's controller is the right one, or the left one in left-handed mode (its grip, trigger,
+    //    stick, face buttons and haptics).
+    //  - Rig hands by role: which of the rig's hands (and EFT arms) holds the gun. Left-handed mode keeps the gun on the rig's
+    //    right hand and mirrors the arms, so the gun rig hand is always the right one.
+    // New code should use this rather than VRSettings.GetLeftHandedMode() ? left : right.
     public static class Handedness
     {
         public static bool LeftHanded => VRSettings.GetLeftHandedMode();
 
-        // The left-handed mode: the arms + gun mirrored (scale -1), everything right-handed underneath. Untouched by the below.
+        // Left-handed mode: the arms and gun are mirrored (scale -1) and everything underneath stays right-handed.
+        // GunInLeftHand below doesn't affect it.
         public static bool MirrorLeftHanded => LeftHanded;
 
-        // The gun in the left hand, right-handed mode (no mirroring anywhere: on the mirrored mode it would stack mirror on mirror):
-        // the left hand took it off the sling (ChestHang). The rig's gun hand follows the left controller with the right-handed hold
-        // mirrored once (VRPlayerManager.MirroredGunHold), EFT's arms go onto the gun mirrored (RealLeftHandedPatches), the fingers
-        // swap (HandMirror). Back to the sling = back to normal.
+        // Right-handed mode with the gun in the left hand, after the left hand took it off the sling (ChestHang). Never set in
+        // left-handed mode, where it would stack a mirror on the mirror. The rig's gun hand follows the left controller with the
+        // right-handed hold mirrored once (VRPlayerManager.MirroredGunHold), EFT's arms go onto the gun mirrored (RealLeftHandedPatches),
+        // and the fingers swap (HandMirror). Putting the gun back on the sling clears it.
         public static bool GunInLeftHand { get; private set; }
 
         public static void SetGunInLeftHand(bool inLeftHand)
@@ -31,7 +32,7 @@ namespace TarkovVR.Source.Controls
             if (GunInLeftHand == inLeftHand)
                 return;
             GunInLeftHand = inLeftHand;
-            // The arms back as they were before anything frees or takes them next (the sling)
+            // Restore the arms before anything else (the sling) frees or takes them next
             if (!inLeftHand)
                 TarkovVR.Patches.Core.Player.RealLeftHandedPatches.ReleaseArms();
             // Which controller drives the rig's gun hand
@@ -55,8 +56,8 @@ namespace TarkovVR.Source.Controls
 
         public static VRSingle GunHandTrigger => GunHandIsLeft ? VRInput.LeftTrigger : VRInput.RightTrigger;
 
-        // The gun hand's thumb on A/B/X/Y or its stick (OpenXR touch sensors). False = can't tell: SteamVR has no touch action in the
-        // mod's manifest, and some controllers have no sensor there.
+        // TryGetGunHandThumbTouch (below): whether the gun hand's thumb is on A/B/X/Y or its stick (OpenXR touch sensors). False = can't
+        // tell: SteamVR has no touch action in the mod's manifest, and some controllers have no sensor there.
         public static bool TryGetGunHandGripValue(out float value)
         {
             value = 0f;
@@ -66,7 +67,7 @@ namespace TarkovVR.Source.Controls
             return true;
         }
 
-        // The gun hand's grip counted as held from now, without a squeeze (OpenXR only)
+        // Counts the gun hand's grip as held from now on, without a squeeze (OpenXR only)
         public static void HoldGunHandGrip()
         {
             if (VRInput.UsingOpenXR)
@@ -83,8 +84,8 @@ namespace TarkovVR.Source.Controls
         public static VRVector2 GunHandJoystick => LeftHanded ? VRInput.LeftJoystick : VRInput.RightJoystick;
         public static VRVector2 OffHandJoystick => LeftHanded ? VRInput.RightJoystick : VRInput.LeftJoystick;
 
-        // The laser and the menus: the controller the "Laser Pointer In Left Hand" setting picks (VRSettings.GetLaserInLeftHand), whichever
-        // hand holds the gun - its trigger drags, its lower button clicks, its upper button cancels, its stick scrolls (VRUIInteracter)
+        // The laser and menus use the controller the "Laser Pointer In Left Hand" setting picks (VRSettings.GetLaserInLeftHand), whichever
+        // hand holds the gun. Its trigger drags, lower button clicks, upper button cancels and stick scrolls (VRUIInteracter).
         public static bool PointerHandIsLeft => VRSettings.GetLaserInLeftHand();
         public static VRSingle PointerHandTrigger => PointerHandIsLeft ? VRInput.LeftTrigger : VRInput.RightTrigger;
         public static VRVector2 PointerHandJoystick => PointerHandIsLeft ? VRInput.RawLeftJoystick : VRInput.RawRightJoystick;

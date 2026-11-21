@@ -4,20 +4,20 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // An AK's magazine doesn't slide out of the well. The off hand holds it and that thumb pushes the paddle catch behind it (B on
-    // that controller), then it rocks forward about the top of the well until it comes away; going in it hooks at that tilt and rocks
-    // back until the catch clicks, or just gets pushed up. Which guns, about which axis and how far come from each gun's own magazine clips
-    // (Tools/gen_reload_holds). The hinge runs on the same track as a straight magazine: railPosition 0 is seated and railLength fully
-    // rocked, so the catch, the seat and the capture read the same.
+    // An AK's magazine doesn't slide out of the well. The off hand holds it while its thumb pushes the paddle catch behind it (B on that
+    // controller), then the magazine rocks forward about the top of the well until it comes away. Going in, it hooks at that tilt and
+    // rocks back until the catch clicks, or is simply pushed up. Which guns rock, about which axis and how far comes from each gun's own
+    // magazine clips (Tools/gen_reload_holds). The rocking uses the same track as a straight magazine: railPosition 0 is seated and
+    // railLength fully rocked, so the catch, seat and capture logic works unchanged.
     public static partial class VRReloadController
     {
         public static float rockInCatchStart = 0.35f;       // share of the rock left when a magazine going in starts pushing the catch
-        public static float rockInCatchFull = 0.1f;         // and when it has it all the way in, just before it clicks past
-        public static float rockInInsertEscape = 0.15f;     // m the controller moves off a magazine going in before the hand lets go of the track
+        public static float rockInCatchFull = 0.1f;         // share left when the catch is pushed all the way in, just before it clicks past
+        public static float rockInInsertEscape = 0.15f;     // m the controller may move off a magazine going in before the hand lets go of the track
 
         private sealed class RockIn
         {
-            public Vector3 pivot;       // the hinge's point in the well bone's frame: zero = the well itself (an AK's); a belt box's hooked edge
+            public Vector3 pivot;       // the hinge point in the well bone's frame: zero = the well itself (an AK), else a belt box's hooked edge
             public Vector3 axis;        // in the well bone's frame; turning about it by a positive angle tilts the magazine out
             public float angle;         // degrees to come free
             public Vector3[] thumb;     // the off thumb's three joints on the catch; null = the clip doesn't press it
@@ -26,7 +26,7 @@ namespace TarkovVR.Source.Weapons
         private static readonly Dictionary<string, RockIn> rockInGuns = new Dictionary<string, RockIn>();
         private static FirearmController rockInFor;
         private static RockIn rockInOfGun;
-        private static RockIn heldRockIn;                   // the held magazine's: null on a straight track
+        private static RockIn heldRockIn;                   // the held magazine's rock-in: null on a straight track
         private static Vector3 rockLeverOnHand;             // the point of the magazine the hand holds, in the controller's frame
         private static Vector3 rockLeverStartInWell;        // and where that was in the well bone's frame when the track started
 
@@ -35,11 +35,11 @@ namespace TarkovVR.Source.Weapons
         private static Vector3[] latchThumbPose;
         private static int latchFinger;                     // which of the off hand's fingers that pose is (0 thumb): an MDR's is the index
 
-        // The off thumb works these guns' catch without the magazine rocking (an MP5's paddle): the thumb's joints on it, by animation set
+        // Guns whose catch the off thumb works without the magazine rocking (an MP5's paddle): the thumb's joints on it, keyed by animation set
         private static readonly Dictionary<string, Vector3[]> thumbCatches = new Dictionary<string, Vector3[]>();
 
-        // The off hand works these guns' catch though their clips don't put the thumb on it (the AUG's release behind the magazine, the
-        // P90's on the magazine's back end: the hand lifting it squeezes it; its model has no release part)
+        // Guns whose catch the off hand works even though their clips don't put the thumb on it: the AUG's release behind the magazine,
+        // and the P90's on the magazine's back end (the hand lifting the magazine squeezes it; the model has no release part)
         private static readonly HashSet<string> offHandCatchGuns = new HashSet<string> { "aug", "p90" };
 
         // Who presses each gun's release in its own mag_out clip (Tools/gen_reload_holds/gen_release.py): the hand, the finger, and
@@ -61,7 +61,7 @@ namespace TarkovVR.Source.Weapons
             return press;
         }
 
-        // The off hand presses this gun's catch, on the off controller's button, not the gun hand's finger
+        // True when the off hand presses this gun's catch, on the off controller's button, instead of the gun hand's finger
         private static bool ThumbWorksCatch(FirearmController firearmController)
         {
             return RockInOf(firearmController) != null || ThumbCatchOf(firearmController) != null || BeltBoxReleasedByOffHand(firearmController)
@@ -70,9 +70,9 @@ namespace TarkovVR.Source.Weapons
         }
 
         // These guns' catch answers either hand's button: the gun hand's, as on an M4, or the off controller's with that hand on the
-        // magazine, as on a thumb catch. Ahead of the rock-in's off-thumb-only rule (the Mk47, SA58 and the backport's NL545 rock their
-        // magazines in too). The PM's, PB's and APS's (APB too) heel catch: Tarkov's clips work it with the off thumb, but a pistol's
-        // off hand is on the grip, not the magazine, so their gun hand's button alone did nothing.
+        // magazine, as on a thumb catch. This overrides the rock-in's off-thumb-only rule (the Mk47, SA58 and the backport's NL545 also
+        // rock their magazines in). The PM, PB and APS (and APB) have a heel catch that Tarkov's clips work with the off thumb, but a
+        // pistol's off hand is on the grip, not the magazine, so the gun hand's button has to work it too.
         private static readonly HashSet<string> eitherHandCatchGuns = new HashSet<string> { "mk47", "sa58", "nl545_di", "pm", "pb", "aps" };
 
         private static bool EitherHandWorksCatch(FirearmController firearmController)
@@ -115,17 +115,18 @@ namespace TarkovVR.Source.Weapons
             return magazineWell.TransformDirection(RockRotation(railLength) * railAxisInWell).normalized;
         }
 
-        // The hinge, world: the well itself, or a belt box's hooked edge
+        // The hinge in world space: the well itself, or a belt box's hooked edge
         private static Vector3 RockPivotWorld() => magazineWell.TransformPoint(heldRockIn.pivot);
 
-        // A magazine at this much of the rock (0 seated): where its seated pose turns to about the hinge, in the well's frame
+        // Where a magazine rocked this far (0 = seated) sits in the well's frame: its seated position turned about the hinge
         private static Vector3 RockedLocalPosition(float position) => heldRockIn.pivot + RockRotation(position) * (seatedLocalPosition - heldRockIn.pivot);
 
-        // The hand holds the magazine rigidly, so a point on it says how far the hand has rocked it, whether that came from the arm or
-        // the wrist: its middle, fixed to the controller from here on. The hand holding it (MagazineHandRig): a belt box may be the gun hand's.
-        // A belt box's middle is its body's: the middle of everything it draws sits far off it (the belt and the spent links, which a box
-        // just taken off the gun still has in the model's rest shape: a lever 25-30 cm off the hinge, a long arc for the hand to sweep).
-        // rockAwayInWell: the way it hangs off the well, seated (well point to its body's middle).
+        // The hand holds the magazine rigidly, so one point on it shows how far the hand has rocked it, whether by the arm or the wrist.
+        // That point is the magazine's middle, fixed to the controller from the start of the track. The holding hand is MagazineHandRig
+        // (a belt box may be in the gun hand). For a belt box the box body's middle is used: the middle of everything it draws sits far
+        // off (the belt and spent links, still in the model's rest shape on a box just taken off the gun), which would make a 25-30 cm
+        // lever and a long arc for the hand to sweep.
+        // rockAwayInWell: the direction the seated box hangs off the well (from the well point to its body's middle).
         private static Vector3 rockAwayInWell;
         private static Quaternion rockHandRotationAtStart = Quaternion.identity;
 
@@ -151,9 +152,9 @@ namespace TarkovVR.Source.Weapons
             return MagazineHandRig.TransformPoint(rockLeverOnHand) - RockPivotWorld();
         }
 
-        // A belt box going in is caught hooked: held near where its well point sits at the full rock (on the hinge, that's off the well),
-        // turned about that way (AK magazines keep their own catch along the track)
-        public static float rockHookCatchRadius = 0.06f;   // m the box's well point to where it is hooked
+        // A belt box going in is caught once hooked: its well point near where it sits at the full rock (around the hinge, which is off
+        // the well) and turned about that way. AK magazines keep their own catch along the track.
+        public static float rockHookCatchRadius = 0.06f;   // m from the box's well point to its hooked spot
         private static bool HookedOnPivot(Transform propTransform)
         {
             Vector3 hookedWellPoint = magazineWell.TransformPoint(heldRockIn.pivot + RockRotation(railLength) * (-heldRockIn.pivot));
@@ -162,7 +163,7 @@ namespace TarkovVR.Source.Weapons
             return (wellPointNow - hookedWellPoint).magnitude <= rockHookCatchRadius && Quaternion.Angle(propTransform.rotation, hookedRotation) <= railCaptureAngle;
         }
 
-        // The controller's move since the track started as a turn about the hinge, in track metres, and how far it is off the magazine.
+        // The controller's move since the track started, as a turn about the hinge in track metres, and how far it is off the magazine.
         // Measured along the circle at the start rather than as an angle from the hinge: pushing up brings that point close to the
         // hinge, where the angle jumps around and knocks the magazine off the track. Going in, pushing it up seats it as well as rocking
         // it back does, so the tilt doesn't have to be right.
@@ -177,13 +178,13 @@ namespace TarkovVR.Source.Weapons
             handAlongTrack = rockedDegrees / heldRockIn.angle * railLength;
             if (!railPullingOut)
                 handAlongTrack = Mathf.Min(handAlongTrack, Vector3.Dot(moved, outward));
-            // A belt box: pushed straight up onto the gun (the way it hangs) seats it too, and coming off is the same run backwards - rocked out,
-            // pulled away from the hinge or pulled straight down, whichever is furthest (BeltBoxComesOff)
+            // A belt box: pushing it straight up onto the gun (the way it hangs) also seats it. Coming off is the same in reverse: rocked out,
+            // pulled away from the hinge or pulled straight down, whichever is furthest (BeltBoxComesOff).
             if (rockAwayInWell != Vector3.zero)
             {
                 float alongAway = Vector3.Dot(moved, magazineWell.TransformDirection(rockAwayInWell).normalized);
-                // The hand's own roll about the hinge's line, same sense as the box's: held by its far end, a roll of the wrist turns the
-                // box about the hand, which carries the lever point the other way round the hinge (it would read as rocking it back in).
+                // The hand's own roll about the hinge's line, in the same sense as the box's. Held by its far end, a roll of the wrist turns
+                // the box about the hand, which carries the lever point the other way round the hinge and would count as rocking it back in.
                 Quaternion turned = MagazineHandRig.rotation * Quaternion.Inverse(rockHandRotationAtStart);
                 if (turned.w < 0f)
                     turned = new Quaternion(-turned.x, -turned.y, -turned.z, -turned.w);
@@ -197,7 +198,7 @@ namespace TarkovVR.Source.Weapons
             handOffTrack = HandOffRockingMagazine();
         }
 
-        // The controller away from where the hand holds the magazine as it sits now. Pushing further in isn't coming off it.
+        // How far the controller is from where the hand holds the magazine as it sits now. Pushing further in doesn't count as coming off it.
         private static float HandOffRockingMagazine()
         {
             Vector3 hinge = magazineWell.TransformDirection(heldRockIn.axis).normalized;
@@ -206,19 +207,19 @@ namespace TarkovVR.Source.Weapons
             Vector3 offset = RockLeverNow() - heldPoint;
             Vector3 outward = heldPoint.normalized;
             float alongOutward = Vector3.Dot(offset, outward);
-            // A belt box coming off: pulling it away from the hinge is taking it out, not coming off it (as pushing it toward the hinge
-            // going in isn't)
+            // A belt box coming off: pulling it away from the hinge is taking it out, not the hand coming off it (just as pushing toward
+            // the hinge going in isn't)
             bool along = alongOutward < 0f || (railPullingOut && heldRockIn.pivot != Vector3.zero);
             return (along ? offset - outward * alongOutward : offset).magnitude;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // A belt box off its hinge (the PKM's): going in run backwards. No catch (the box's latch is on the box, under the gripping hand),
-        // pulling away from the hinge is taking it out (not the hand coming off it), and too far off the track it comes away with the hand
-        // once it has moved at all. It rocks out only beltBoxRockOutDegrees, then it's the hand's: driven round its whole hook arc, the
-        // drawn hand on its far end (~25 cm off the hinge) sweeps further than the real one and slides off it.
+        // Taking a belt box off its hinge (the PKM's) is going in, in reverse. There is no catch (the box's latch is on the box, under the
+        // gripping hand), pulling away from the hinge takes it out rather than the hand coming off it, and once it has moved at all, a hand
+        // too far off the track takes it along. It only rocks out beltBoxRockOutDegrees before the hand takes it: driven round its whole
+        // hook arc, the drawn hand on its far end (~25 cm off the hinge) would sweep further than the real one and slide off it.
         public static float beltBoxRockOutDegrees = 8f;     // deg a belt box rocks off its edge before it comes away in the hand (it hooks on at its full angle)
-        private static Vector3 lastRockTerms;                // this frame's rock (deg), away from the hinge, down (m): the take-out log
+        private static Vector3 lastRockTerms;                // for the take-out log: this frame's rock (deg), away from the hinge and down (m)
         private static float lastRollDegrees;               // and the hand's own roll about the hinge's line
         private static float boxPullLogTime;
 
@@ -237,7 +238,7 @@ namespace TarkovVR.Source.Weapons
             }
             if (gripReleased)
             {
-                // Let go part way: back in the gun, as a box let go part way in stays in the hand
+                // Let go part way out: it goes back in the gun (as a box let go part way in stays in the hand)
                 if (beltDebugLog)
                     Plugin.MyLog.LogInfo($"[VRBelt] box coming off: let go at {railPosition / freeAt * 100f:0}%, back in");
                 CancelHold();
@@ -265,7 +266,7 @@ namespace TarkovVR.Source.Weapons
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // Past the catch nothing but the hand holds it: let go it falls, pulled away it comes with the hand
+        // Past the catch only the hand holds the magazine: let go, it falls; pulled away, it comes with the hand
         private static bool RockedMagazineLeaves(bool gripReleased, float handOffMagazine)
         {
             if (heldRockIn == null || !magazineCatchPassed || HoldingPalmedMagazine || (!gripReleased && handOffMagazine <= railLateralEscape))

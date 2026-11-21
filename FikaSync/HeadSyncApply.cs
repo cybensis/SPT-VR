@@ -7,21 +7,22 @@ using UnityEngine;
 
 namespace SptVrFikaSync
 {
-    // A VR player's head and upper body on the other players' screens: the headset pose in their body's frame (VRHeadPacket) through the
-    // same solve the VR player's own body runs (UpperBodySolver, linked in from SPT-VR): the chest (and standing still, the hips) turns toward the head, the spine bends to
-    // put the head where theirs is, the head turns to the headset. First among the ObservedPlayer.LateUpdate postfixes: the arm, weapon and
-    // eating drives after it reach the arms from the bent shoulders (their poses come in the body's frame, like the head's).
+    // Poses a VR player's head and upper body on the other players' screens. VRHeadPacket carries the headset pose in the body's frame, and it
+    // goes through the same solve the VR player's own body runs (UpperBodySolver, linked in from SPT-VR): the chest (and the hips, while standing
+    // still) turns toward the head, the spine bends to put the head where the headset is, and the head turns to match the headset.
+    // Runs first among the ObservedPlayer.LateUpdate postfixes, so the arm, weapon and eating drives after it start from the bent shoulders.
     [HarmonyPatch]
     internal static class HeadSyncApply
     {
-        // Exponential smoothing of the head pose (the ~20 Hz packets), as the arms (ArmSyncApply.smoothRate). 0 = snap.
+        // Exponential smoothing rate of the head pose (packets arrive at ~20 Hz), like the arms' ArmSyncApply.smoothRate. 0 = snap.
         public static float smoothRate = 18f;
-        public static float staleTimeout = 0.5f;    // s without a packet before it lets go
-        public static float blendTime = 0.25f;      // s it eases in and out
+        public static float staleTimeout = 0.5f;    // s without a packet before the solve fades out
+        public static float blendTime = 0.25f;      // s to fade in and out
         public static float maxDistance = 80f;      // m from the camera past which the body stays as animated
         public static bool logRig = true;           // one line per player's rig: the bones it turns, or why it can't
-        // The hips square to the body (its facing follows the head) standing still only (UpperBodySolver.hipShare): full up to hipStillSpeed, none from hipMovingSpeed
-        // (m/s across the ground; a walk's legs go the way you walk), eased over hipBlendTime. Not prone, on a mounted gun or sprinting.
+        // The hips square to the body (whose facing follows the head) only while standing still (UpperBodySolver.hipShare). Full up to
+        // hipStillSpeed, none from hipMovingSpeed (m/s across the ground; walking legs point the way you walk), eased over hipBlendTime.
+        // Off while prone, on a mounted gun or sprinting.
         public static bool turnHips = true;
         public static float hipStillSpeed = 0.3f;
         public static float hipMovingSpeed = 1.0f;
@@ -49,7 +50,7 @@ namespace SptVrFikaSync
 
         public static void ResetState() => remotes.Clear();
 
-        // A player that sends its headset pose = a VR player
+        // A player that sends its headset pose is a VR player.
         internal static bool IsVrPlayer(int netId) => remotes.ContainsKey(netId);
 
         public static void Store(VRHeadPacket p)

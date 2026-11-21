@@ -5,19 +5,20 @@ using TarkovVR.Source.Weapons;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // The interact press: an empty hand's trigger on a body (its loot grid), in a container (open) or on a door the hands don't
-    // drive (open / close). The grip on a body only drags.
+    // The interact press: an empty hand's trigger on a body opens its loot grid, in a container opens it, and on a door the hands
+    // don't drive opens or closes it. The grip on a body only drags.
     internal partial class HandsInteractionController
     {
-        public static bool triggerInteract = true;              // false = the grip: a quick tap on a body, a press on a container / door
+        public static bool triggerInteract = true;              // false = use the grip: a quick tap on a body, a press on a container / door
         public static float interactTriggerPress = 0.75f;       // trigger axis: pressed from here, released under interactTriggerRelease
         public static float interactTriggerRelease = 0.35f;
 
         private readonly bool[] interactTriggerHeld = new bool[2];      // [0] off hand, [1] dominant
         private readonly bool[] interactTriggerPressed = new bool[2];   // pressed this frame and not taken yet
 
-        // From the top of Update, before the bail: a trigger held through a menu or a sprint isn't a press when they end. A hand
-        // on a door or key at the press: the doors take that trigger this frame (UpdatePhysicalDoors), before the hand reads free.
+        // Called from the top of Update, before its early return, so a trigger held through a menu or a sprint isn't read as a press
+        // when they end. A press by a hand on a door or key is skipped: the doors take that trigger this frame (UpdatePhysicalDoors),
+        // before the hand reads as free.
         private void UpdateInteractTriggers()
         {
             for (int hand = 0; hand < 2; hand++)
@@ -31,13 +32,14 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // That hand's trigger pressed this frame, the hand empty: taken (the next check this frame doesn't see it)
+        // True when that hand's trigger was pressed this frame and the hand is free. The press is consumed, so later checks this
+        // frame don't see it.
         private bool TakeInteractPress(bool dominant, string what)
         {
             int hand = dominant ? 1 : 0;
             if (!interactTriggerPressed[hand])
                 return false;
-            // (the gun hand on the gun: that trigger fires it, nothing to report)
+            // The gun hand on the gun: its trigger fires the gun, so there is nothing to log
             if (dominant && !ChestHang.Detached && !(VRGlobals.player != null && VRGlobals.player.HandsIsEmpty))
                 return false;
             string busy = InteractHandBusy(dominant);
@@ -51,8 +53,8 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // null = nothing in that hand (the other hand may hold something), else what it has. The off hand's trigger also holds
-        // the breath aiming, runs a gun part's prompt, and drops the backpack / turns the headlight on in those zones.
+        // Returns null when that hand is free (the other hand may hold something), else what keeps it busy. The off hand's trigger
+        // also holds the breath while aiming, runs a gun part's prompt, and drops the backpack / turns the headlight on in those zones.
         private string InteractHandBusy(bool dominant)
         {
             if (HoldsLoot(dominant))
@@ -86,8 +88,8 @@ namespace TarkovVR.Source.Player.Interactions
             return null;
         }
 
-        // The trigger with the palm on a body: its loot grid. Not with the gun in the left hand (the palms these use are drawn on the
-        // other arms then, like the body grab).
+        // The trigger with the palm on a body opens its loot grid. Not with the gun in the left hand: the palms used here are then drawn
+        // on the other arms (same as for the body grab).
         private bool TryTriggerBodyLoot(bool dominant)
         {
             if (!triggerInteract || !interactTriggerPressed[dominant ? 1 : 0] || Handedness.GunInLeftHand || BodyHand(dominant) == null)

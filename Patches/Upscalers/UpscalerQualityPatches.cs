@@ -107,13 +107,12 @@ namespace TarkovVR.Patches.Upscalers
             __instance.method_3();
             return false;
         }
-        // VR Native AA (DLAA-style): render at native (or near) and let FSR/DLSS run purely as an anti-
-        // aliaser. VR sets the camera rect directly here (not the game's SSAA.Switch state machine), so the
-        // flatscreen NOSCALE gate that forces 0.99 there doesn't apply. If FSR stops running at exactly 1.0
-        // (jitter appears), set this to 0.99.
+        // Native AA (DLAA-style): render at or near native resolution and let FSR/DLSS run only as an anti-aliaser.
+        // VR sets the camera rect directly here instead of going through the game's SSAA.Switch, so the flatscreen
+        // NOSCALE gate that forces 0.99 doesn't apply. If FSR stops running at exactly 1.0 (the jitter shows), use 0.99.
         public static float NativeAAScale = 1.0f;
 
-        // The quality mode's real scale (pre Native-AA), stashed so the menu toggle can re-apply live.
+        // The quality mode's own scale before Native AA, kept so the menu toggle can re-apply it at runtime.
         private static float _lastBaseScale = -1f;
         private static bool _lastIsDlss;
 

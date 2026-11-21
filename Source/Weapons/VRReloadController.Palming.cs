@@ -7,16 +7,16 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // Two magazines in one hand: with a new magazine held, the off-hand trigger at the gun's magazine takes that one too (the grip
-    // is already busy), B lets the catch go and it comes out, and the new one goes in while the old stays in the hand until it lets go.
-    // Tarkov has the animation (*_reload_admin, *_mag_admin on AK-type guns, with its mod_magazine_new bone) but
+    // Two magazines in one hand (palming). With a new magazine held, the off-hand trigger at the gun's magazine takes that one too (the
+    // grip is already busy). B releases the catch and the old magazine comes out, then the new one goes in while the old one stays in the
+    // hand until it lets go. Tarkov has the animation (*_reload_admin, *_mag_admin on AK-type guns, with its mod_magazine_new bone), but
     // ReloadExternalMagOperation.SwitchToReloadWithNewMag only logs "Not Implemented". The hand poses are read from that clip.
     // The gun holds one magazine, so the old one moves to the rig the moment it comes free of the well, while its model stays
-    // in the hand. Letting go at the chest leaves it there; anywhere else throws it from the rig to the ground.
+    // in the hand. Letting go at the chest leaves it in the rig; anywhere else throws it from the rig to the ground.
     public static partial class VRReloadController
     {
         public static bool palming = true;                  // false = no second magazine in the hand
-        public static float palmGrabRadius = 0.10f;         // m palm to the gun magazine's capsule; wider than an empty hand's: the new magazine is in the way
+        public static float palmGrabRadius = 0.10f;         // m, palm to the gun magazine's capsule; wider than an empty hand's since the new magazine is in the way
         public static float palmMaxThickness = 0.035f;      // m; a drum or a MAG5 doesn't fit in one hand with another magazine
         public static float palmMaxLength = 0.26f;          // m
 
@@ -28,8 +28,8 @@ namespace TarkovVR.Source.Weapons
             public Vector3[] thumb;     // on the catch, with the new magazine in the hand; a rock-in gun's thumb works it (null = the gun's own pose)
         }
 
-        // By animation set (m4a1_reload_admin at 1.6 s); the other clips' come from ReloadHolds.json. Few guns have the clip: the rest
-        // borrow the closest kind (FindPalmHold).
+        // By animation set (m4a1 = m4a1_reload_admin at 1.6 s); the other clips' holds come from ReloadHolds.json. Few guns have the clip,
+        // so the rest borrow the closest kind (FindPalmHold).
         private static readonly Dictionary<string, PalmHold> palmHolds = new Dictionary<string, PalmHold>
         {
             {
@@ -123,7 +123,7 @@ namespace TarkovVR.Source.Weapons
 
         //-----------------------------------------------------------------------------------------------------------------------------
 
-        // The trigger with a new magazine in the hand. Says why not in the log: it's a gesture you can't see fail.
+        // The trigger with a new magazine in the hand. Logs why it refused, since it's a gesture you can't see fail.
         private static bool TryStartPalming()
         {
             if (!palming || heldSource != HeldMagazineSource.FromPouch || onRail || HoldingPalmedMagazine)
@@ -168,7 +168,7 @@ namespace TarkovVR.Source.Weapons
                 return false;
             }
 
-            // The hand on the old magazine the way the clip has it, the new one riding along in the palm
+            // Put the hand on the old magazine as the clip has it, with the new one carried in the palm
             PoseForThisMagazine(palmHold.oldMagazine, heldProp, propWellPointLocal, out Vector3 oldPosition, out Quaternion oldRotation);
             heldReloadGrip = new ReloadGrip { pull = new MagazineHold { position = oldPosition, rotation = oldRotation.eulerAngles } };
             magazineHandFingers = palmHold.fingers;
@@ -177,7 +177,7 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // The old magazine came free of the well: it moves to the rig and stays in the hand, the new one is the one going in
+        // The old magazine came free of the well. It moves to the rig and its model stays in the hand; the new one is now the one going in.
         private static void FinishPalmPull()
         {
             Magazine oldMagazine = heldMagazine;
@@ -186,7 +186,7 @@ namespace TarkovVR.Source.Weapons
 
             if (!TryBuildMoveToRig(oldMagazine, out OperationResult<MoveResult> moveResult))
             {
-                // No room in the rig: it can't be kept, it falls from the hand (or stays in the gun where nothing can drop)
+                // No room in the rig: it can't be kept, so it falls from the hand (or stays in the gun where nothing can be dropped)
                 onRail = false;
                 magazineLeftWell = true;
                 ReleaseHandLatch();
@@ -240,7 +240,7 @@ namespace TarkovVR.Source.Weapons
             LogAction($"[VRReload] {oldMagazine.LocalizedShortName()} out and in the hand, {newMagazine.LocalizedShortName()} next");
         }
 
-        // A new magazine as the held one, off the track, its way into this gun worked out (HoldNewMagazine's second half)
+        // Makes a new magazine the held one, off the track, and works out its way into this gun (the second half of HoldNewMagazine)
         private static void ArmNewMagazine(FirearmController firearmController, Magazine magazine, GameObject prop, HeldMagazineSource source)
         {
             ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(firearmController.Item.GetMagazineSlot());
@@ -334,7 +334,7 @@ namespace TarkovVR.Source.Weapons
                 return;
 
             bool stillInGun = palmedFor.Item != null && palmedFor.Item.GetCurrentMagazine() == palmedMagazine;
-            // The move to the rig never landed: the magazine is still in the gun, showing again
+            // The move to the rig never happened: the magazine is still in the gun and shown again
             if (stillInGun && expectedOperation == ExpectedOperation.None && palmedFor.CurrentOperation is FirearmController.Idling)
             {
                 Plugin.MyLog.LogWarning($"[VRReload] {palmedMagazine.LocalizedShortName()} never left the gun, letting go of its model");

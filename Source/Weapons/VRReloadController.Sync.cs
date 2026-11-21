@@ -8,9 +8,9 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // Co-op: what the manual reload shows, for other players' copies of you (the FIKA sync module's ReloadSyncApply draws it there).
-    // Built every send while a firearm is in hands (VRArmSync.Tick, with the weapon pose), from Unity / Tarkov types only, so this
-    // JITs without FIKA:
+    // Co-op: collects what the manual reload shows, for other players' copies of you (the FIKA sync module's ReloadSyncApply draws it
+    // there). Built on every send while a firearm is in hands (VRArmSync.Tick, with the weapon pose), from Unity and Tarkov types only,
+    // so this JIT-compiles without FIKA:
     //  - the two rendered wrists (the arm IK's hand bones) and which arms other players drive to them instead of welding onto the
     //    gun's markers
     //  - the props in the hands (magazines, a round), by item id
@@ -39,7 +39,7 @@ namespace TarkovVR.Source.Weapons
         public static int syncShellsThrown;
         public static int syncRoundsShown;
 
-        // SetBoltOpen's last value and frame: the bolt-open layer is ours while it's being written
+        // SetBoltOpen's last value and frame. The bolt-open layer counts as driven by hand while it's being written.
         private static float boltOpenWritten;
         private static int boltOpenWrittenFrame = -10;
         // The magazine whose prop waits in the hand for Tarkov's move (CommitHold)
@@ -71,9 +71,9 @@ namespace TarkovVR.Source.Weapons
             syncManualReload = VRSettings.GetManualReloadOn();
             syncManualBolt = ManualBoltOn(firearmController);
 
-            // The gun hand on the grip and the support hand on the foregrip are welded onto the gun's markers there; any other hand
-            // (off the gun, on a part, holding the gun from the left) goes where it's drawn here
-            // (the support hand riding an open pump and the gun hand in a press check are off those markers too)
+            // On the other side, the gun hand on the grip and the support hand on the foregrip are welded onto the gun's markers. Any
+            // other hand (off the gun, on a part, holding the gun from the left) goes where it's drawn here. The support hand riding an
+            // open pump and the gun hand in a press check are off those markers too.
             bool gunInLeftHand = Handedness.GunInLeftHand;
             syncDriveRight = gunInLeftHand || ChestHang.Detached || PressCheckActive || BreakLeverPressing;
             syncDriveLeft = !(VRGlobals.vrPlayer.isSupporting && !gunInLeftHand) || pumpHandDriving;
@@ -154,9 +154,9 @@ namespace TarkovVR.Source.Weapons
         }
 
         // The wrists as the arm IK leaves them, in the gun's frame. Tarkov animates the arms in Player.Update and solves them in
-        // Player.LateUpdate (VisualPass), in no fixed order with VRPlayerManager.LateUpdate where the sync is built: read there, a
-        // wrist can still be the animation's right-handed hold. With the gun in the left hand both observed arms go to these.
-        // Instance ids, not references: nothing raid-scoped is kept alive here.
+        // Player.LateUpdate (VisualPass), in no fixed order relative to VRPlayerManager.LateUpdate, where the sync is built. Read there,
+        // a wrist can still be in the animation's right-handed hold. With the gun in the left hand both observed arms go to these.
+        // Instance ids are stored, not references, so nothing raid-scoped is kept alive here.
         private struct SolvedWrist
         {
             public int gunId;
@@ -188,7 +188,7 @@ namespace TarkovVR.Source.Weapons
         private static void CaptureLeftWrist() => CaptureWrist(0, VRGlobals.ikManager != null ? VRGlobals.ikManager.leftArmIk : null);
         private static void CaptureRightWrist() => CaptureWrist(1, VRGlobals.ikManager != null ? VRGlobals.ikManager.rightArmIk : null);
 
-        // Every solve of the arm: the last one in the frame is the pose drawn
+        // Runs on every solve of the arm; the last one in the frame is the pose that is drawn
         private static void CaptureWrist(int index, RootMotion.FinalIK.LimbIK armIk)
         {
             Transform weaponRoot = VRGlobals.firearmController != null ? VRGlobals.firearmController.WeaponRoot : null;
@@ -242,7 +242,7 @@ namespace TarkovVR.Source.Weapons
                 AddPartPose(weaponRoot, part, part.localPosition, part.localRotation, part.gameObject.activeSelf);
         }
 
-        // A part with the pose it's drawn with this frame, where that's written after the sync may be built
+        // Adds a part with the pose it is drawn with this frame, for parts whose pose is written after the sync may be built
         private static void AddPartPose(Transform weaponRoot, Transform part, Vector3 localPosition, Quaternion localRotation, bool shown)
         {
             string path = PathUnder(weaponRoot, part);
@@ -255,7 +255,7 @@ namespace TarkovVR.Source.Weapons
         }
 
         // The names from under the gun's root down to the part, joined by '/' (the other side's copy of the gun is built from the same
-        // prefab, so it finds the part by the same path). Null when it isn't under the root, or rides one of our own transforms (VR*).
+        // prefab, so it finds the part by the same path). Null when it isn't under the root, or sits under one of our own transforms (VR*).
         private static string PathUnder(Transform weaponRoot, Transform part)
         {
             if (partPaths.TryGetValue(part, out string cached))

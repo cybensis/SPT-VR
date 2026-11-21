@@ -3,16 +3,16 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Right-hand "open hand" pose while the dominant hand is off the gun (ChestHang sling / support-only hold) or empty:
-    // the arms animator still thinks the gun is held, so without this the freed right hand keeps its grip curl. Mirrors
-    // the left hand's baked rest-pose replay: same accumulation-safe RecoverAnimated, same weight easing (handOpenLerp /
-    // handPoseWeight). To re-bake: captureRightRestPose=true (UnityExplorer) while the hand shows the pose you want,
-    // then logRightRestPose prints the paste-ready array.
+    // Open-hand pose for the right hand while it is off the gun (ChestHang sling or support-only hold) or empty. The arms animator
+    // still thinks the gun is held, so without this the freed right hand keeps its grip curl. Works like the left hand's baked
+    // rest-pose replay: the same RecoverAnimated (no accumulation) and the same weight easing (handOpenLerp / handPoseWeight).
+    // To re-bake, set captureRightRestPose = true (UnityExplorer) while the hand shows the pose you want; logRightRestPose prints
+    // the array to paste.
     internal partial class HandsInteractionController
     {
-        // Per-joint bake for the right hand (captured off the procedural flatten). null = the procedural flatten
+        // Baked local eulers per right-hand joint, captured from the procedural flatten. null = use the procedural flatten
         // (ApplyFlatFlex on the right hand's own animated pose). The left bake's eulers don't transfer to the right
-        // bones in any mirror convention: re-author via capture instead.
+        // bones in any mirror convention: re-bake with a capture instead.
         public static Vector3[] rightRestPoseEuler = new Vector3[]
         {
             new Vector3(300.00f, 300.00f, 40.00f), // finger0 (thumb) joint0
@@ -45,19 +45,19 @@ namespace TarkovVR.Source.Player.Interactions
         private bool[] rightFingerIsThumb;
         private float rightHandWeightBlend;
 
-        // LateUpdate, after UpdateLeftHandFingers (and after EFT animates the hand).
+        // Runs in LateUpdate, after UpdateLeftHandFingers and after EFT animates the hand.
         private void UpdateRightHandFingers()
         {
-            // Pose the dominant hand when it's off the gun: slung/support-held (ChestHang.Detached) or empty-handed,
-            // like the left. A held gun keeps its grip pose.
+            // Pose the dominant hand when it is off the gun (slung or support-held: ChestHang.Detached) or empty, like the left.
+            // A held gun keeps its grip pose.
             bool emptyHands = VRGlobals.player != null && VRGlobals.player.HandsIsEmpty;
             bool free = VRGlobals.inGame && !VRGlobals.menuOpen
                         && !VRGlobals.usingItem && !EatingInteractionController.ManualActive
-                        // (not while it holds the gun alone by the foregrip, the gun in the left hand: HandMirror's foregrip pose then)
+                        // Not while this hand holds the gun alone by the foregrip with the gun in the left hand: HandMirror poses it then
                         && ((ChestHang.Detached && !TarkovVR.Patches.Core.Player.RealLeftHandedPatches.SupportHeld) || emptyHands
-                            // the gun in the LEFT hand and this one off the foregrip (HandMirror puts the mirrored foregrip pose on it there)
+                            // The gun is in the left hand and this hand is off its foregrip (on it, HandMirror applies the mirrored pose)
                             || (TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active && !VRGlobals.vrPlayer.isSupporting)
-                            // off a mounted gun's handle while still on the gun
+                            // Off a mounted gun's handle while still on the mounted gun
                             || (MountedGun.Mounted && !MountedGun.HandOnHandle(left: false)));
 
             float k = 1f - Mathf.Exp(-handOpenLerp * Time.deltaTime);
@@ -77,11 +77,11 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (rightHandWeightBlend >= 0.01f)
             {
-                // Index controllers curl the real fingers from the baked pose; everything else replays the baked/procedural
-                // open pose. Holding a loot item in this hand suppresses skeletal (the grip squeeze would clench the fist
-                // through the item).
+                // Index controllers curl the fingers from the baked pose; other controllers replay the baked or procedural open pose.
+                // While this hand holds loot or a door, the natural and skeletal poses are skipped: the grip squeeze would clench the
+                // fist through the item.
                 bool holdingInThisHand = HoldsLoot(true) || PhysicalDoors.HoldsDoor(true);
-                // Empty: Tarkov's own relaxed / open / fist poses by the curls (HandsInteractionController.NaturalHands)
+                // Empty hand: Tarkov's own relaxed / open / fist poses, blended by the finger curls (HandsInteractionController.NaturalHands)
                 if (!holdingInThisHand && naturalHands && ApplyNaturalPose(true, rightFingerJoints, rightFingerIsThumb, rightHandWeightBlend, rightBones: true, ready: 0f))
                 {
                 }
@@ -111,8 +111,8 @@ namespace TarkovVR.Source.Player.Interactions
                 }
                 else
                 {
-                    // No bake: procedural flatten - strip the animated grip curl in the right rig's own frame
-                    // (swing-twist, ApplyFlatFlex) and apply the idle flex.
+                    // No bake: the procedural flatten strips the animated grip curl in the right rig's own frame
+                    // (swing-twist, ApplyFlatFlex) and applies the idle flex.
                     for (int fingerIndex = 0; fingerIndex < rightFingerJoints.Length; fingerIndex++)
                     {
                         Transform[] joints = rightFingerJoints[fingerIndex];
@@ -126,12 +126,12 @@ namespace TarkovVR.Source.Player.Interactions
                         }
                     }
                 }
-                // Closed on a held loot item (HandsInteractionController.Grasp), from the pose just written
+                // Close the fingers on a held loot item (HandsInteractionController.Grasp), starting from the pose just written
                 ApplyGrasp(true, rightFingerJoints, rightFingerIsThumb, rightCurlSign, rightHandWeightBlend);
             }
 
-            // Capture last, after our pose is written: the animator re-stomps the fingers every frame before this
-            // LateUpdate, so earlier in the method the bones hold the grip curl, not what's on screen.
+            // Capture last, after the pose is written: the animator overwrites the fingers every frame before this
+            // LateUpdate, so earlier in the method the bones hold the grip curl, not what is on screen.
             if (captureRightRestPose)
             {
                 captureRightRestPose = false;
@@ -186,7 +186,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // The right palm = the right arm IK's wrist bone (solver.bone3, the bone eating pins); its children are the
+        // The right palm is the right arm IK's wrist bone (solver.bone3, the bone eating pins). Its children are the
         // finger roots, like "Base HumanLPalm" on the left.
         private void ResolveRightFingers()
         {

@@ -19,8 +19,6 @@ namespace TarkovVR
         public const float MIN_JOYSTICK_AXIS_FOR_MOVEMENT = 0.5f;
         public const float NEAR_CLIP_PLANE = 0.01f;
 
-        //public static HideoutVRPlayerManager hideoutVRPlayer;
-        //public static RaidVRPlayerManager raidVRPlayer;
         public static VRPlayerManager vrPlayer;
         public static MenuVRManager menuVRManager;
         public static Transform commonUi;
@@ -55,7 +53,6 @@ namespace TarkovVR
         public static BoxCollider backCollider;
         public static FirearmController firearmController;
         public static float scopeSensitivity = 0.1f;
-        //public static Transform scope;
         public static List<Transform> scopes = new List<Transform>();
         public static IKManager ikManager;
 

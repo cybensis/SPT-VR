@@ -6,20 +6,19 @@ using UnityEngine.SceneManagement;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // A held loot item's surface as the fingers closing on it see it (HandsInteractionController.Grasp), in the item's own frame: its
-    // root's position and rotation, unscaled. Every visible part starts as the box of its mesh's bounds; each part then gets its convex
-    // hull from the mesh's own vertices - read on the CPU when the mesh is readable, else copied back from the GPU (most of Tarkov's
-    // item meshes aren't readable). A hull replaces its part's box as it arrives (Version goes up, the grip re-solves). The hulls are
-    // convex MeshColliders in a physics scene of their own (LocalPhysicsMode), so nothing in the game can hit them;
-    // Physics.ClosestPoint measures them at the pose it's given.
+    // A held loot item's surface as the closing fingers see it (HandsInteractionController.Grasp), in the item's own frame (its root's
+    // position and rotation, unscaled). Every visible part starts as its mesh-bounds box, then gets a convex hull from the mesh's vertices:
+    // read on the CPU when the mesh is readable, else copied back from the GPU (most of Tarkov's item meshes aren't readable). Each hull
+    // replaces its part's box as it arrives (Version goes up and the grip re-solves). Hulls are convex MeshColliders in their own physics
+    // scene (LocalPhysicsMode), so nothing in the game can hit them; Physics.ClosestPoint measures them at a given pose.
     internal sealed class GraspShape
     {
         public static int maxParts = 10;                 // the biggest parts by volume; the rest (screws, decals) don't shape a grip
-        // A hull = each part's furthest vertex in this many directions spread over a sphere. A hull of n points has at most 2n-4 faces and
-        // PhysX cooks at most 255 polygons (more = its "partial hull" warning on every grab), so 100 = at most 196.
-        // They're ~20 deg apart: half a millimetre off a 6 cm bottle.
+        // A hull is each part's furthest vertex in this many directions spread over a sphere. A hull of n points has at most 2n-4 faces,
+        // and PhysX cooks at most 255 polygons (more gives its "partial hull" warning on every grab), so 100 gives at most 196.
+        // The directions are ~20 deg apart: half a millimetre off on a 6 cm bottle.
         public static int hullDirections = 100;
-        public static int preThinPoints = 4000;          // the grid thinning first, so the direction search stays cheap
+        public static int preThinPoints = 4000;          // points the grid thinning cuts down to first, so the direction search stays cheap
         public static float hullCellSize = 0.003f;       // m: the thinning grid's first cell
         public static float minHullThickness = 0.002f;   // m: a part flatter than this keeps its box (a flat point set can't be cooked)
 
@@ -67,7 +66,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 if (renderer is SkinnedMeshRenderer skinned)
                 {
-                    // Its mesh is in bind pose, not where the bones put it: the world box it's drawn in, no hull
+                    // Its mesh is in bind pose, not where the bones put it: use the world box it's drawn in, and no hull
                     Bounds drawn = skinned.bounds;
                     Part skinnedPart = new Part
                     {
@@ -207,9 +206,9 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // The mesh's vertices in the item's frame, cut to what a hull needs: thinned on a grid first (one vertex per cell, the cell doubled
-        // until preThinPoints fit; the first vertex in a cell stands for it), then the one furthest along each of hullDirections directions
-        // spread evenly over a sphere - every one on the hull, spread around it, and few enough for PhysX's 255-polygon limit
+        // The mesh's vertices in the item's frame, cut down to what a hull needs. First they're thinned on a grid (one vertex per cell, the
+        // first one in it; the cell size doubles until preThinPoints fit). Then only the vertex furthest along each of hullDirections
+        // directions over a sphere is kept: all on the hull, spread around it, and few enough for PhysX's 255-polygon limit.
         private static List<Vector3> HullPoints(Matrix4x4 meshToItem, Vector3[] meshVertices)
         {
             if (meshVertices == null || meshVertices.Length == 0)
@@ -287,8 +286,8 @@ namespace TarkovVR.Source.Player.Interactions
             SceneManager.MoveGameObjectToScene(holder, sandbox);
         }
 
-        // Physics.ClosestPoint on a collider in its own physics scene, at a pose we pass: assumed to work (it's a geometry query on the
-        // shape), checked once - a point 10 m off has to come back to the hull's surface
+        // Physics.ClosestPoint on a collider in its own physics scene, at a pose we pass, should work (it's a geometry query on the
+        // shape). It's checked once: a point 10 m off has to come back to the hull's surface.
         private static bool CheckHullQueries(MeshCollider collider)
         {
             if (hullQueriesWork.HasValue)
@@ -425,8 +424,8 @@ namespace TarkovVR.Source.Player.Interactions
             return false;
         }
 
-        // The item's surface nearest a world point and the way out of the item there. From inside, the nearest way out of the part it's
-        // in, by that part's box (a hull gives no direction from inside).
+        // The item's surface nearest a world point, and the way out of the item there. From inside, it's the nearest way out of the part
+        // the point is in, using that part's box (a hull gives no direction from inside).
         public bool NearestSurface(Vector3 worldPoint, Vector3 itemPosition, Quaternion itemRotation, out Vector3 surface, out Vector3 outward, out bool inside)
         {
             surface = worldPoint;
@@ -487,7 +486,7 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // Small enough for a pinch: its longest side and its middle one, from the box around all the parts
+        // Small enough for a pinch: checks its longest and middle sides, from the box around all the parts
         public bool FitsAPinch(float maxLength, float maxWidth)
         {
             if (parts.Count == 0)

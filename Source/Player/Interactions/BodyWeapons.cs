@@ -13,35 +13,31 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Guns on the body: every weapon you're not holding hangs where you reach for it (the first primary on the chest sling, the
-    // second over the dominant shoulder, the pistol on the dominant hip, the knife on Tarkov's sheath; in the body's frame,
-    // ChestHang.BodyYaw, so a glance doesn't swing them away from the hand), and the dominant hand takes one by gripping it
-    // there, with no draw animation. Letting go of the gun in hand sends it to its own spot (ChestHang.SpotPose); it stays in
-    // hands game-side until another is taken.
-    //
-    // Tarkov keeps the rules: one item in hands, and a switch is its own (the keyboard's Select commands), with its put-away and
-    // draw fast-forwarded (Tarkov's own skip). The models on the body are Tarkov's: PlayerBody.SlotViews builds every slot weapon
-    // for your player too and only turns its renderers off; a weapon in hands has no model. While a switch runs, the taken gun's
-    // body model rides in the hand as the stand-in until Tarkov's own gun takes its place. Co-op partners see Tarkov's default
-    // placement: only the drawing is local.
+    // Guns on the body. Each weapon you're not holding hangs where you reach for it (the first primary on the chest sling, the second over
+    // the dominant shoulder, the pistol on the dominant hip, the knife on Tarkov's sheath), in the body's frame (ChestHang.BodyYaw) so
+    // turning your head doesn't move them. The dominant hand takes one by gripping it, with no draw animation. A gun you let go of goes to
+    // its spot (ChestHang.SpotPose) and stays in hands game-side until another is taken. Switches are Tarkov's own Select commands with
+    // the put-away and draw skipped. The body models are Tarkov's (PlayerBody.SlotViews builds them for your player too and hides the
+    // renderers; a weapon in hands has none). During a switch the taken gun's body model rides in the hand until Tarkov's gun replaces it.
+    // Only the drawing is local: co-op partners see Tarkov's default placement.
     public static class BodyWeapons
     {
         public static bool enabled = true;
         public static bool fastSwitch = true;           // false = Tarkov's put-away and draw animations play out
-        public static float grabRadius = 0.13f;         // m RightHand rig to a body gun's grip, as ChestHang.regrabRadius
-        public static float gunGrabRadius = 0.06f;      // m any point of the hand (palm, fingertips) off a gun's barrel line: anywhere on it takes it
+        public static float grabRadius = 0.13f;         // m, from the RightHand rig transform to a body gun's grip (like ChestHang.regrabRadius)
+        public static float gunGrabRadius = 0.06f;      // m, from any point of the hand (palm, fingertips) to a gun's barrel line: grabbing anywhere on it takes it
         public static float switchTimeout = 3f;         // s before a switch that never lands is given up
-        public static bool debugLog = false;            // every dominant grip press: the zones, each slot's gun and grip distance, why it did or didn't take one
+        public static bool debugLog = false;            // logs every grip press: the zones, each slot's gun and grip distance, why a gun was or wasn't taken
         public static bool leftHandTakes = true;        // right-handed mode: the left hand takes a gun off the body too, and holds it left-handed
-        // The gun a grab switches to: its draw skipped the moment Tarkov starts it (BodyWeaponPatches.SkipDraw), before the animator plays a
-        // frame of it. UpdateSwitch's skip comes a frame later: the draw's swing-up and sound have started by then.
+        // true = the grabbed gun's draw is skipped the moment Tarkov starts it (BodyWeaponPatches.SkipDraw), before the animator plays a frame.
+        // UpdateSwitch's skip comes a frame later, when the draw's swing-up and sound have already started.
         public static bool skipDrawAtSpawn = true;
         private static Item lastSwitchItem;
 
         private static readonly EquipmentSlot[] bodySlots =
             { EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster, EquipmentSlot.Scabbard };
 
-        // Models we've moved or shown, with Tarkov's own local pose, put back when we stop
+        // Models we've moved or shown, with Tarkov's own local pose to put back when we stop
         private static readonly Dictionary<GameObject, Pose> tarkovPoses = new Dictionary<GameObject, Pose>();
         private static readonly Dictionary<GameObject, Transform> weaponRoots = new Dictionary<GameObject, Transform>();
         private static readonly Dictionary<GameObject, Transform> gripMarkers = new Dictionary<GameObject, Transform>();
@@ -49,31 +45,31 @@ namespace TarkovVR.Source.Player.Interactions
         private static readonly HashSet<GameObject> currentModels = new HashSet<GameObject>();
         private static bool hooked;
 
-        // The switch under way
+        // The switch in progress
         private static Item switchingTo;
         private static GameObject standIn;
         private static Vector3 standInInHandPosition;
         private static Quaternion standInInHandRotation;
         private static bool standInInLeftHand;
         private static float switchStarted;
-        // The gun the left hand took, held left-handed once it spawns (Handedness.GunInLeftHand); ChestHang keeps it there through the switch
+        // The gun the left hand took. It is held left-handed once it spawns (Handedness.GunInLeftHand); ChestHang keeps it there through the switch.
         private static Item takenLeftItem;
         private static float takenLeftUntil;
         private static bool prevLeftGrip;
 
         public static bool Switching => switchingTo != null;
-        // From a grab until the grip opens: the old holster zones and the radial menu leave that press alone
+        // True from a grab until the grip opens, so the holster zones and the radial menu ignore that press
         public static bool GrabbedThisPress { get; private set; }
-        // ...the left grip's, for a gun the left hand took (the quick-slot radial behind the shoulder leaves it alone)
+        // The same for the left grip, for a gun the left hand took (the quick-slot radial behind the shoulder ignores that press)
         public static bool LeftGrabbedThisPress { get; private set; }
-        // The dominant hand within reach of a gun on the body (the loot pointer yields there, as at the hanging gun's regrab zone)
+        // The dominant hand is within reach of a gun on the body. The loot pointer yields there, as at the hanging gun's regrab zone.
         public static bool HandAtBodyGun { get; private set; }
-        // The left hand within reach of one it may take (the off-hand loot pointer and body grab yield there)
+        // The left hand is within reach of a body gun it may take. The off-hand loot pointer and body grab yield there.
         public static bool OffHandAtBodyGun { get; private set; }
-        // A gun the left hand took is coming into, or just came into, the hands: ChestHang leaves it in the left hand
+        // A gun the left hand took is coming into the hands, or just arrived. ChestHang leaves it in the left hand.
         public static bool KeepsLeftHand => takenLeftItem != null && Time.time < takenLeftUntil
             && (switchingTo == takenLeftItem || HandsItem() == takenLeftItem);
-        // The holster zones' own swaps are this system's job now; the pistol's only where Tarkov draws it on the body (a holster)
+        // This system replaces the holster zones' own swaps. For the pistol, only when Tarkov draws it on the body (in a holster).
         public static bool ReplacesBackZone => Active;
         public static bool ReplacesHipZone => Active && ViewOf(EquipmentSlot.Holster) != null;
 
@@ -85,8 +81,8 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Grabbing
 
-        // From HandsInteractionController.Update, before ChestHang.UpdateInput (a grab here takes the press from its regrab). The
-        // shoulder and hip zones (InitVRPatches' backHolster / sidearmHolster colliders, one frame stale) take their own gun.
+        // Called from HandsInteractionController.Update, before ChestHang.UpdateInput, so a grab here takes the press before ChestHang's
+        // regrab sees it. The shoulder and hip zones (InitVRPatches' backHolster / sidearmHolster colliders, one frame stale) take their own gun.
         private static bool handInShoulderZone;
         private static bool handInHipZone;
 
@@ -116,7 +112,7 @@ namespace TarkovVR.Source.Player.Interactions
             HandAtBodyGun = Active && NearestBodyGun(out _, out _, out _, out _);
             if (gripPressed && debugLog && Active)
                 LogGripPress();
-            // Not a press the grenade on the chest took (GrenadeSlot, just before)
+            // Skip a press the chest grenade already took (GrenadeSlot runs just before)
             if (gripPressed && HandAtBodyGun && !GrenadeSlot.TookPress)
             {
                 TryGrab();
@@ -134,8 +130,8 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // The left hand (right-handed mode): a gun off the body into it, held the way the left hand holds the slung gun it takes
-        // (ChestHang). Not the knife (no left-handed hold for it).
+        // The left hand (right-handed mode) takes a gun off the body and holds it the way it holds a slung gun it takes (ChestHang).
+        // Not the knife: it has no left-handed hold.
 
         private static readonly List<Vector3> leftTouchPoints = new List<Vector3>();
 
@@ -150,7 +146,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (HandsInteractionController.HoldingLoot) return "holding loot";
             if (GrenadeSlot.OffHandAtSlot) return "at the grenade";
             if (PhysicalDoors.HoldsDoor(false)) return "on a door";
-            // At the slung gun's grip: that press takes the slung gun into the left hand (ChestHang)
+            // At the slung gun's grip, the press takes the slung gun into the left hand instead (ChestHang)
             if (ChestHang.LeftHandAtHangingGrip()) return "at the slung gun's grip";
             return null;
         }
@@ -232,9 +228,9 @@ namespace TarkovVR.Source.Player.Interactions
             Plugin.MyLog.LogInfo(line.ToString());
         }
 
-        // The gun the dominant hand takes: the shoulder or hip zone's own while the hand is in that zone (the guns sit there,
-        // ChestHang.SpotPose), else the one on the body nearest the hand within grabRadius. Never the one in hands (the hanging
-        // one is ChestHang's regrab).
+        // The gun the dominant hand takes: while the hand is in the shoulder or hip zone, that zone's gun (the guns sit there,
+        // ChestHang.SpotPose); otherwise the body gun nearest the hand within grabRadius. Never the gun in hands (taking the hanging
+        // one back is ChestHang's regrab).
         private static bool NearestBodyGun(out Item takenItem, out GameObject takenModel, out EquipmentSlot takenSlot, out float nearest)
         {
             Item inHands = HandsItem();
@@ -247,7 +243,7 @@ namespace TarkovVR.Source.Player.Interactions
                 EquipmentSlot zoneSlot = handInShoulderZone ? EquipmentSlot.SecondPrimaryWeapon : EquipmentSlot.Holster;
                 GameObject zoneModel = ViewOf(zoneSlot)?.Model;
                 Item zoneItem = SlotItem(zoneSlot);
-                // A spot placed by hand: that gun isn't in the zone any more (the reach below finds it where it is)
+                // If the gun's spot was placed by hand, the gun isn't in the zone any more; the reach check below finds it where it is.
                 if (!GunSpots.MovedOffZone(zoneSlot) && zoneModel != null && zoneModel.activeInHierarchy && zoneItem != null && zoneItem != inHands)
                 {
                     takenItem = zoneItem;
@@ -285,8 +281,8 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Reach: anywhere on the gun, not just its grip
 
-        // A capsule along the gun's barrel through the middle of its meshes, in its Weapon_root's frame (mesh-local corners, never
-        // Renderer.bounds: the world box grows as the gun turns), plus the grip reach. Under 1 = in reach, smaller = nearer.
+        // A capsule along the gun's barrel through the middle of its meshes, in its Weapon_root's frame, plus the grip reach. Measured
+        // from mesh-local corners, never Renderer.bounds (the world box grows as the gun turns). A score under 1 is in reach; smaller is nearer.
         private sealed class GunSpan
         {
             public Vector3 butt;      // Weapon_root local: +up is the butt
@@ -336,8 +332,8 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 if (meshFilter.sharedMesh == null)
                     continue;
-                // The gun's own drawn parts only: not its muzzle flash's combined mesh (MuzzleJetCombinedMesh, built out in front of the
-                // muzzle - it stretched the line well past it), nor a mesh that isn't drawn
+                // Only the gun's own drawn parts. Skip the muzzle flash's combined mesh (MuzzleJetCombinedMesh), which sits out in front of
+                // the muzzle and would stretch the line well past it, and any mesh that isn't drawn.
                 if (meshFilter.name.IndexOf("MuzzleJet", System.StringComparison.OrdinalIgnoreCase) >= 0)
                     continue;
                 MeshRenderer meshRenderer = meshFilter.GetComponent<MeshRenderer>();
@@ -362,7 +358,7 @@ namespace TarkovVR.Source.Player.Interactions
             return span;
         }
 
-        // ReachScore's measure for any hand's points (GunSpots: either hand places a gun's spot). Under 1 = in reach.
+        // ReachScore's measure for any hand's touch points (GunSpots lets either hand place a gun's spot). Under 1 is in reach.
         internal static float HandReach(Transform weaponRoot, Transform meshRoot, Vector3 gripPoint, List<Vector3> handPoints)
         {
             if (weaponRoot == null)
@@ -380,7 +376,7 @@ namespace TarkovVR.Source.Player.Interactions
             return score;
         }
 
-        // A gun drawn at its spot on the body (GunSpots): shown, not the one in hands, not riding the hand in a switch, not the knife
+        // A gun drawn at its spot on the body (for GunSpots): shown, not the one in hands, not riding the hand in a switch, and not the knife
         internal static bool DrawnBodyGun(EquipmentSlot slot, out GameObject model, out Transform weaponRoot, out Vector3 gripLocal, out Vector3 grabPoint)
         {
             model = null;
@@ -414,7 +410,7 @@ namespace TarkovVR.Source.Player.Interactions
             Item inHands = HandsItem();
             if (!NearestBodyGun(out Item takenItem, out GameObject takenModel, out EquipmentSlot takenSlot, out float nearest))
                 return;
-            // The gun in hand hanging nearer than this one: that's its regrab
+            // The hanging gun in hand is nearer than this one: leave the press to its regrab
             if (ChestHang.Detached && ChestHang.RegrabScore() < nearest)
                 return;
 
@@ -451,7 +447,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (ChestHang.SupportOnly) return "the off hand holds the gun";
             if (VRReloadController.HoldingMagazine) return "holding a magazine";
             if (VRReloadController.HoldingChargingHandle) return "holding the charging handle";
-            // Co-op as a client: a hands change sent before the host answered the last move is refused, and the hands stay broken
+            // As a co-op client, a hands change sent before the host has answered the last move is refused, and the hands stay broken
             if (CoopHost.StillAnswering) return "co-op: the host hasn't answered your last move yet";
             object hands = VRGlobals.player.HandsController;
             if (hands is FirearmController firearmController)
@@ -495,7 +491,7 @@ namespace TarkovVR.Source.Player.Interactions
                 EndSwitch();
                 return;
             }
-            // The gun going away, then the one coming in: Tarkov's own skip of each
+            // Skip the put-away of the gun going away, then the draw of the one coming in, with Tarkov's own skip
             if (fastSwitch && player.HandsController is FirearmController firearmController && !(firearmController.CurrentOperation is FirearmController.Idling))
                 WeaponPatches.SkipDrawOrPutAway(firearmController);
             object hands = player.HandsController;
@@ -511,12 +507,12 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Player.SpawnController -> FirearmController.Spawn (BodyWeaponPatches.SkipDraw): the gun a grab asked for, its draw just started
+        // Called from FirearmController.Spawn (via Player.SpawnController, patched in BodyWeaponPatches.SkipDraw) when a gun's draw has just started
         internal static void OnDrawStarted(FirearmController firearmController)
         {
             try
             {
-                // Taken by the left hand: held by it from its first frame (before ChestHang sees the switch, which keeps it: KeepsLeftHand)
+                // A gun the left hand took is held by it from its first frame, before ChestHang sees the switch (ChestHang then keeps it: KeepsLeftHand)
                 if (firearmController != null && firearmController._player != null && firearmController._player.IsYourPlayer
                     && takenLeftItem != null && firearmController.Item == takenLeftItem && Time.time < takenLeftUntil)
                 {
@@ -539,13 +535,13 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // A draw that just started, finished now (also the gun a grenade put back returns to: GrenadeSlot). false = not drawing.
+        // Finishes a draw that has just started (GrenadeSlot also uses it for the gun a grenade returns to). Returns false if the gun isn't drawing.
         internal static bool SkipDrawNow(FirearmController firearmController)
         {
             if (!(firearmController.CurrentOperation is FirearmController.SpawnOperation spawn))
                 return false;
-            // The round its draw would have racked in, shown now (a gun the hand racks had it taken out of the draw already:
-            // VRReloadController.TakeRackOutOfDraw)
+            // Show now the round the draw would have chambered. For a gun the hand racks, VRReloadController.TakeRackOutOfDraw has
+            // already taken it out of the draw.
             if (spawn._ammoFromMagToChamber != null)
             {
                 spawn.OnAddAmmoInChamber();
@@ -575,7 +571,7 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Drawing them on the body
 
-        // After every LateUpdate (Tarkov's body bones are final): the last word on where these models are
+        // Runs after every LateUpdate, when Tarkov's body bones are final, so it has the last word on where these models are
         private static void OnBeforeRender()
         {
             if (!Active)
@@ -603,11 +599,11 @@ namespace TarkovVR.Source.Player.Interactions
                 currentModels.Add(model);
                 if (!tarkovPoses.ContainsKey(model))
                     tarkovPoses[model] = new Pose(model.transform.localPosition, model.transform.localRotation);
-                // Hidden (Tarkov's own state for your player): an empty slot (walking out of the range empties them, the models
-                // stay), and the gun in hands, whose body model Tarkov doesn't always drop (the range's hands item doesn't
+                // Hidden, as Tarkov keeps them for your player: an empty slot (walking out of the range empties the slots, but the
+                // models stay), and the gun in hands, whose body model Tarkov doesn't always drop (the range's hands item doesn't
                 // reach the body)
                 Item slotItem = SlotItem(slot);
-                // (a gun the left hand took: until it's held left-handed, then Tarkov's own gun is in that hand)
+                // A gun the left hand took rides only until it's held left-handed; then Tarkov's own gun is in that hand
                 bool riding = Switching && model == standIn && !(standInInLeftHand && Handedness.GunInLeftHand);
                 bool hidden = slotItem == null || (inHandsItem != null && slotItem == inHandsItem && !riding);
                 foreach (Renderer renderer in view.Renderers)
@@ -622,14 +618,14 @@ namespace TarkovVR.Source.Player.Interactions
                     Transform hand = (standInInLeftHand ? VRGlobals.vrPlayer.LeftHand : VRGlobals.vrPlayer.RightHand).transform;
                     model.transform.SetPositionAndRotation(hand.position + hand.rotation * standInInHandPosition, hand.rotation * standInInHandRotation);
                 }
-                // The guns to our spots (Tarkov's thigh holster and back bones turn with the body); the knife stays on
-                // Tarkov's sheath
+                // Move the guns to our spots (Tarkov's thigh-holster and back bones turn with the body). The knife stays on
+                // Tarkov's sheath.
                 else if (slot != EquipmentSlot.Scabbard && ChestHang.SpotPose(slot, GripInWeaponRoot(model), out Vector3 position, out Quaternion rotation))
                 {
                     PlaceWeaponRoot(model, position, rotation);
                 }
             }
-            // A model Tarkov took back (its gun went into hands, or into the bag) went to its pool: it sets its own pose when it's used again
+            // A model Tarkov took back (its gun went into hands or into the bag) went back to its pool; Tarkov sets its pose when it's used again
             stale.Clear();
             foreach (GameObject model in tarkovPoses.Keys)
             {
@@ -644,13 +640,13 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // The mod switches Tarkov's back-gun bones off (InitVRPatches SetupIK: weapon_holster, weapon_holster1, at rig setup and on
-        // every equip) and both primaries' models hang under them: hidden and never in reach (the pistol is on its own bone).
-        // The slot's own bone is back on while this runs; the Player layer they're on isn't collided.
+        // The mod switches Tarkov's back-gun bones off (weapon_holster, weapon_holster1 in InitVRPatches SetupIK, at rig setup and on
+        // every equip). Both primaries' models hang under them, so they would be hidden and out of reach (the pistol has its own bone).
+        // While this runs, each slot's own bone is turned back on; the Player layer they're on has no collision.
         private static readonly List<GameObject> bonesTurnedOn = new List<GameObject>();
 
-        // A slot holding a gun that isn't in your hands, with no model and none being built: Tarkov dropped it and didn't build it
-        // again (happens at the range after a gun's second draw). Built again the way its slot view does it, at most once a second.
+        // A slot holding a gun that isn't in your hands, with no model and none being built: Tarkov dropped the model and didn't rebuild
+        // it (happens at the range after a gun's second draw). It is rebuilt the way its slot view does it, at most once a second.
         private static readonly Dictionary<EquipmentSlot, float> lostSince = new Dictionary<EquipmentSlot, float>();
 
         private static void RebuildIfLost(EquipmentSlot slot, PlayerBody.SlotView view, Item inHandsItem)
@@ -688,7 +684,7 @@ namespace TarkovVR.Source.Player.Interactions
                 bonesTurnedOn.Add(bone.gameObject);
         }
 
-        // Back to Tarkov's: its pose on its bone, and hidden for your own player as Tarkov has it
+        // Restores Tarkov's state: each model back in its pose on its bone, and hidden for your own player as Tarkov has it
         private static void PutAllBack()
         {
             foreach (GameObject bone in bonesTurnedOn)
@@ -714,7 +710,7 @@ namespace TarkovVR.Source.Player.Interactions
             EndSwitch();
         }
 
-        // The model moved rigidly so its Weapon_root lands on the pose (as ChestHang stamps the gun in hand)
+        // Moves the model rigidly so its Weapon_root lands on the pose (the way ChestHang places the gun in hand)
         private static void PlaceWeaponRoot(GameObject model, Vector3 position, Quaternion rotation)
         {
             Transform root = WeaponRootOf(model);
@@ -724,7 +720,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // Where the hand takes it: the grip, a little toward the muzzle (ChestHang's regrab zone, the same reach); a knife at its middle
+        // Where the hand takes it: the grip, a little toward the muzzle (the same point as ChestHang's regrab zone). A knife at its middle.
         private static Vector3 GrabPoint(GameObject model)
         {
             Transform grip = GripMarkerOf(model);
@@ -734,7 +730,7 @@ namespace TarkovVR.Source.Player.Interactions
             return renderer != null ? renderer.bounds.center : model.transform.position;
         }
 
-        // The R-hand marker in the model's Weapon_root frame (rotation only): which side of the bore the grip is
+        // The R-hand marker in the model's Weapon_root frame (rotation only): tells which side of the bore the grip is on
         private static Vector3 GripInWeaponRoot(GameObject model)
         {
             Transform grip = GripMarkerOf(model);

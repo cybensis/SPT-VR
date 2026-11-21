@@ -122,8 +122,8 @@ namespace TarkovVR.Source.Weapons
 
             if (scopeXform != null && VRGlobals.vrPlayer?.LeftHand != null)
             {
-                // The off hand's own pose action: LeftHandPose asked for the right controller reads identity (the gun in the left
-                // hand / left-handed mode)
+                // Use the off hand's own pose action: LeftHandPose read for the right controller returns identity (gun in the left
+                // hand, or left-handed mode)
                 Quaternion localHandRot = Handedness.OffHandPose.GetLocalRotation(zoomSource);
                 Quaternion worldHandRot = VRGlobals.vrPlayer.LeftHand.transform.rotation;
                 trackingToWorldSpaceMatrix = worldHandRot * Quaternion.Inverse(localHandRot);
@@ -212,9 +212,9 @@ namespace TarkovVR.Source.Weapons
             SetScopeSensitivity();
         }
 
-        // The sight being aimed through is an optic that can change magnification (a variable ring or zoom steps). scopeCamera stays
-        // set after a scope was last used, so the aimed sight is checked too (irons / a red dot on a scoped gun). Not the HHS-1,
-        // which the stick doesn't zoom.
+        // True when the sight being aimed through is an optic that can change magnification (a variable ring or zoom steps).
+        // scopeCamera stays set after a scope was last used, so the aimed sight is checked too (irons or a red dot on a scoped gun).
+        // Not the HHS-1, which the stick doesn't zoom.
         internal bool CanZoomNow
         {
             get
@@ -232,7 +232,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (!scopeCamera) return;
 
-            // The turning stick: its up / down is free while in the scope (jump / crouch pause), the moving stick's never is
+            // The turning stick's up/down zooms; jump and crouch pause while in the scope. The movement stick is never used.
             float input = TarkovVR.Patches.Core.VR.VRControlsPatches.ScopeZoomAxis();
 
             if (VRGlobals.scopes.Any(s => s != null && s.parent != null
@@ -358,10 +358,10 @@ namespace TarkovVR.Source.Weapons
             PlaceRightHandOnDial(scopeXform, leftHand.position, leftHand.rotation);
         }
 
-        // The gun in the left hand: the right hand grips the dial, its arm aimed at the left hand's dial pose mirrored across the gun's
-        // centre plane (RealLeftHandedPatches takes it as that arm's target while it's set; the rig's LeftHand, which the left arm
-        // follows, is the right controller's then). The mirror turns the hand the other way about axes in that plane: if the right
-        // hand on the dial turns against the wrist, flip rightHandDialTwistSign.
+        // With the gun in the left hand, the right hand grips the dial. Its arm targets the left hand's dial pose mirrored across the
+        // gun's centre plane (RealLeftHandedPatches uses it as that arm's target while it is set; in that mode the rig's LeftHand,
+        // which the left arm follows, tracks the right controller). The mirror reverses the turn about axes in that plane: if the
+        // right hand on the dial turns against the wrist, flip rightHandDialTwistSign.
         public static float rightHandDialTwistSign = 1f;
         private Transform rightHandDial;
         private int rightHandDialFrame = -10;

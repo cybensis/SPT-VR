@@ -5,11 +5,11 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // A held loot item taken in both hands. The free hand gripping within reach of the item's surface takes hold where it touched (snapped
-    // onto the surface, Grasp.TryGraspItemShift). The first hand stays the anchor: the item keeps its grip there and turns about it so the
-    // line to the second grip follows the second controller, plus a share of the second hand's roll about that line. The second hand is
-    // drawn locked to its grip (its arm's IK target and EFT's hand marker both on secondHandLatch, a child of the item).
-    // The second hand letting go leaves the item with the first; the first letting go passes it to the second (HandOffToSecondHand).
+    // A held loot item taken in both hands. When the free hand grips within reach of the item's surface, it takes hold where it touched
+    // (snapped onto the surface, Grasp.TryGraspItemShift). The first hand stays the anchor: the item keeps its grip there and turns about it
+    // so the line to the second grip follows the second controller, plus a share of the second hand's roll about that line. The second hand
+    // is drawn locked to its grip: its arm's IK target and EFT's hand marker are both secondHandLatch, a child of the item.
+    // If the second hand lets go, the first keeps the item; if the first lets go, the item passes to the second (HandOffToSecondHand).
     internal partial class HandsInteractionController
     {
         public static bool twoHandedLoot = true;
@@ -17,8 +17,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static float secondHandRollShare = 0.5f;     // how much of the second hand's roll about the grip-to-grip line the item takes
 
         private bool secondHandHolding;
-        private Transform secondHandLatch;                  // the second arm's target: its grip on the item, a child of it
-        private Vector3 secondHandInItemPosition;           // that grip in the item's frame (unscaled), and the anchor's
+        private Transform secondHandLatch;                  // the second arm's IK target: its grip on the item (a child of the item)
+        private Vector3 secondHandInItemPosition;           // that grip in the item's frame (unscaled); anchorInItemPosition is the anchor's
         private Quaternion secondHandInItemRotation;
         private Vector3 anchorInItemPosition;
         private Vector3 secondGripInRig;                    // the grip, snapped onto the surface, in that controller's rig frame
@@ -56,10 +56,10 @@ namespace TarkovVR.Source.Player.Interactions
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // Update, after the loot pointer and before the held item's drop check: the free hand taking hold, the second hand letting go
+        // Called from Update, after the loot pointer and before the held item's drop check: the free hand taking hold, the second hand letting go
         private void UpdateSecondHand()
         {
-            // (a use or an eat drives the arms itself, and puts the held item away)
+            // Using an item or eating drives the arms itself and puts the held item away
             if (!twoHandedLoot || heldItem == null || !HeldItemAlive() || VRGlobals.usingItem || EatingInteractionController.ManualActive)
             {
                 EndSecondHand();
@@ -104,7 +104,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (rig == null || cachedHand == null)
                 return;
             Transform item = heldItem.transform;
-            // Onto the surface where it touched: the hand moves by what the item would to sit in it
+            // Snap the grip onto the surface where the hand touched: the hand moves opposite to the shift the item would need to sit in it
             Vector3 handPosition = rig.position;
             if (TryGraspItemShift(secondDominant, shape, false, item.position, item.rotation, out Vector3 itemShift))
                 handPosition -= itemShift;
@@ -122,8 +122,8 @@ namespace TarkovVR.Source.Player.Interactions
             VRInput.Haptic.Execute(0, 0.06f, 1, 0.45f, secondDominant ? primaryInputSource : secondaryInputSource);
         }
 
-        // Every frame the second hand holds: its arm reaches for its grip on the item. EFT solves the arms onto its hand markers too, so the
-        // marker goes with it (ChestHang.KeepGunHandFree does that for a freed right arm already)
+        // Every frame while the second hand holds, point its arm at its grip on the item. EFT also solves the arms onto its hand markers, so
+        // the marker is moved too (as ChestHang.KeepGunHandFree does for a freed right arm).
         private void AssertSecondHandLatch()
         {
             if (!secondHandHolding || secondHandLatch == null)
@@ -138,7 +138,7 @@ namespace TarkovVR.Source.Player.Interactions
                 VRGlobals.player._markers[marker] = secondHandLatch;
         }
 
-        // The second hand lets go (or the hold ended some other way): its arm back to its controller; the item stays with the anchor where it is
+        // The second hand lets go (or the hold ended some other way): its arm goes back to its controller, and the item stays with the anchor
         private void EndSecondHand()
         {
             if (!secondHandHolding)
@@ -154,7 +154,7 @@ namespace TarkovVR.Source.Player.Interactions
                 secondHandLatch.SetParent(null, worldPositionStays: false);
         }
 
-        // (the grip can be gone with the item - taken into the inventory destroys it and its children - so a dead target counts as ours)
+        // The latch can be destroyed with the item (taking it into the inventory destroys it and its children), so a destroyed target counts as ours
         private void GiveSecondArmBack(bool secondDominant)
         {
             Transform rig = HandRigTransform(secondDominant);
@@ -167,7 +167,7 @@ namespace TarkovVR.Source.Player.Interactions
                 VRGlobals.player._markers[marker] = rig;
         }
 
-        // LateUpdate: Update bails during a sprint or a menu, and the hold can end meanwhile (the item stowed, taken, dropped)
+        // Called from LateUpdate: Update returns early during a sprint or a menu, and the hold can end meanwhile (the item stowed, taken or dropped)
         private void KeepSecondHand()
         {
             if (!secondHandHolding)
@@ -178,8 +178,8 @@ namespace TarkovVR.Source.Player.Interactions
                 AssertSecondHandLatch();
         }
 
-        // The anchor lets go while the second hand holds: the item passes to that hand, brought to where its grip says (the hand and the item
-        // move together, so the hand doesn't come off it), and a later release there drops it as usual
+        // The anchor lets go while the second hand holds: the item passes to the second hand, placed where that hand's grip puts it (hand and
+        // item move together, so the hand doesn't come off it). A later release of that hand drops it as usual.
         private void HandOffToSecondHand()
         {
             bool newDominant = !heldInDominantHand;
@@ -204,7 +204,7 @@ namespace TarkovVR.Source.Player.Interactions
             cachedGrabOffset = newRig.InverseTransformPoint(itemPosition);
             cachedGrabRotation = Quaternion.Inverse(newRig.rotation) * itemRotation;
             cachedItemPosition = itemPosition;
-            // Its shape goes with the hand still holding it: the old anchor's grip opens without disposing it
+            // The grasp shape moves to the hand still holding the item, so the old anchor's grip opens without disposing it
             GraspHand oldAnchor = graspHands[newDominant ? 0 : 1];
             GraspHand newAnchor = graspHands[newDominant ? 1 : 0];
             if (newAnchor.item == heldItem && newAnchor.shape == oldAnchor.shape)
@@ -216,8 +216,8 @@ namespace TarkovVR.Source.Player.Interactions
             VRInput.Haptic.Execute(0, 0.06f, 1, 0.45f, newDominant ? primaryInputSource : secondaryInputSource);
         }
 
-        // The item's pose with both hands on it (UpdateHeldItemPosition): the anchor's grip kept, turned about it so the grip-to-grip line
-        // points at the second controller, plus secondHandRollShare of that hand's roll about the line
+        // The item's pose with both hands on it (for UpdateHeldItemPosition). It keeps the anchor's grip and turns about it so the
+        // grip-to-grip line points at the second controller, plus secondHandRollShare of that hand's roll about the line.
         private bool TryTwoHandedPose(out Vector3 position, out Quaternion rotation)
         {
             position = Vector3.zero;
@@ -229,7 +229,7 @@ namespace TarkovVR.Source.Player.Interactions
             Quaternion oneHanded = cachedHand.rotation * cachedGrabRotation;
             Vector3 anchorWorld = cachedHand.TransformPoint(cachedGrabOffset) + oneHanded * anchorInItemPosition;
             Vector3 heldLine = oneHanded * (secondHandInItemPosition - anchorInItemPosition);
-            // Where that controller puts its grip (it was snapped onto the surface, off the controller)
+            // Where the second controller puts its grip (the grip was snapped onto the surface, away from the controller)
             Vector3 wantedLine = secondRig.position + secondRig.rotation * secondGripInRig - anchorWorld;
             rotation = oneHanded;
             if (heldLine.sqrMagnitude > 1e-6f && wantedLine.sqrMagnitude > 1e-6f)

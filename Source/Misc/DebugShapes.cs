@@ -3,8 +3,8 @@ using UnityEngine.Rendering;
 
 namespace TarkovVR.Source.Misc
 {
-    // See-through debug shapes (the debugZones / debugViz spheres and capsules): made on first use, kept in the caller's field,
-    // recoloured every call.
+    // See-through debug shapes for the debugZones / debugViz spheres and capsules. Each shape is created on first use, stored in the
+    // caller's field and recoloured on every call.
     internal static class DebugShapes
     {
         internal static void Sphere(ref GameObject sphere, string name, bool show, Vector3 position, float radius, Color color)

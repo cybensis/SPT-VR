@@ -77,8 +77,8 @@ namespace TarkovVR.Patches.Core.Player
                 for (int i = 0; i < VRGlobals.handsOnlyModel.materials.Length && i < originalMaterials.Length; i++)
                 {
                     VRGlobals.handsOnlyModel.materials[i].shader = originalMaterials[i].shader;
-                    // Loaded by us, the bundle lacks the watch textures (another bundle), which fails the material copy: copy the texture onto
-                    // the original hands first, then the material properties
+                    // When we load the bundle ourselves, the watch textures (in another bundle) are missing and the material copy fails.
+                    // Copy the texture onto the original hands first, then the material properties.
                     originalMaterials[i].mainTexture = VRGlobals.handsOnlyModel.materials[i].mainTexture;
                     VRGlobals.handsOnlyModel.materials[i].CopyPropertiesFromMaterial(originalMaterials[i]);
                 }
@@ -100,7 +100,7 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.legsModel.transform.parent.gameObject.SetActive(false);
 
 
-            // Tarkov tracks the bundles it loads and fails to load one already loaded externally: unload ours
+            // Tarkov tracks the bundles it loads and fails to load one that something else already loaded, so unload ours.
             if (bundleLoadedHere) handsBundle.Unload(false);
         }
 

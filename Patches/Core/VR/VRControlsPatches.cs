@@ -16,8 +16,8 @@ namespace TarkovVR.Patches.Core.VR
         
         private static bool _snapTurned = false;
 
-        // Looking through a scope that zooms on the turning stick (VRPlayerManager.ScopeZoomOwnsStick): it turns only pushed nearly straight
-        // sideways, and not at all after a zoom push until the stick is back near the centre (a zoom push drifting sideways turned you)
+        // While looking through a scope that zooms on the turning stick (VRPlayerManager.ScopeZoomOwnsStick), the stick only turns when pushed
+        // nearly straight sideways, and not at all after a zoom push until it is back near the centre (so a zoom push drifting sideways doesn't turn)
         public static bool scopeTurnGuard = true;
         public static float scopeTurnMaxAngle = 45f;    // deg off straight sideways the stick may point and still turn
         public static float scopeTurnDeadzone = 0.15f;  // sideways push below which it doesn't turn; smooth turning ramps up from here
@@ -27,8 +27,8 @@ namespace TarkovVR.Patches.Core.VR
         private static bool zoomPushSeen;
         private static bool turnPushSeen;
 
-        // VROpticController's joystick zoom: the turning stick's up / down, only pushed more up / down than sideways and not after a turn push
-        // until the stick is back near the centre
+        // The joystick zoom input for VROpticController: the turning stick's up / down, counted only when pushed more up / down than sideways,
+        // and not after a turn push until the stick is back near the centre
         internal static float ScopeZoomAxis()
         {
             Vector2 stick = VRInput.RightJoystick.axis;
@@ -183,7 +183,6 @@ namespace TarkovVR.Patches.Core.VR
             // Apply rotation to camera root
             if (VRGlobals.camRoot != null)
             {
-                //VRGlobals.camRoot.transform.Rotate(0, axis[axisIndex], 0);
                 float rotationSpeed = VRSettings.GetRotationSensitivity() * 5;
                 VRGlobals.camRoot.transform.Rotate(0, axis[axisIndex] * rotationSpeed * Time.deltaTime, 0);
             }

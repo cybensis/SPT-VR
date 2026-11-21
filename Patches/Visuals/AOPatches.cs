@@ -10,8 +10,8 @@ namespace TarkovVR.Patches.Visuals
     [HarmonyPatch]
     internal class AOPatches
     {
-        // AOSix (standalone AO mod) replaces this Amplify path when installed; it owns SetSSAO then.
-        // Checked lazily: at Awake, BepInEx only lists the plugins loaded before us.
+        // When AOSix (a standalone AO mod) is installed, it replaces this Amplify path and owns SetSSAO.
+        // Checked lazily, because at Awake BepInEx only lists the plugins loaded before this one.
         private static bool? aoSixInstalled;
 
         [HarmonyPrefix]
@@ -50,7 +50,7 @@ namespace TarkovVR.Patches.Visuals
         }
 
 
-        // Winter season: AO shows artifacts where the grass is unless it's disabled at raid start and re-enabled after the grass loads
+        // In winter, AO shows artifacts where the grass is unless it's disabled at raid start and re-enabled after the grass loads.
         private static float aoRefreshTimer = -1f;
         private static float aoRefreshDelay = 3f;
 

@@ -23,15 +23,15 @@ namespace TarkovVR.Source.Controls
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Jump / vault. Vive wands: a physical click of the right trackpad, accepted only with the finger in the upper half of the pad
-        // (so clicking down for crouch never jumps). Short click = jump, held past VRSettings.GetVaultHoldTime() = vault.
+        // Jump / vault. On Vive wands this is a physical click of the right trackpad, accepted only with the finger in the upper half of
+        // the pad, so clicking down for crouch never jumps. A short click jumps; holding past VRSettings.GetVaultHoldTime() vaults.
         public class JumpInputHandler : IInputHandler
         {
             private enum JumpState { Idle, Held, Fired }
             private JumpState _state = JumpState.Idle;
             private float _heldTime = 0f;
 
-            // Finger y above this = upper half of the Vive trackpad; the small guard keeps the dead centre from triggering
+            // A finger y above this is the upper half of the Vive trackpad. The small margin keeps the dead centre from triggering.
             private const float UPPER_HALF_Y = 0.05f;
 
             public void UpdateCommand(ref ECommand command)
@@ -51,14 +51,14 @@ namespace TarkovVR.Source.Controls
                 }
             }
 
-            // Vive Wand: physical trackpad click + upper-half guard
+            // Vive wand: a physical trackpad click with the finger in the upper half of the pad
             private void UpdateVive(ref ECommand command)
             {
-                // Source-less: with Swap Sticks this is the left controller's click (VRInput)
+                // Read through VRInput, so with Swap Sticks this is the left controller's click
                 bool clickHeld = VRInput.ClickRightJoystick.state;
                 bool clickDown = VRInput.ClickRightJoystick.stateDown;
 
-                // Touch position: only a guard to separate jump/vault from crouch
+                // The touch position is only used to tell jump/vault apart from crouch
                 float fingerY = VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y;
                 bool fingerInUpperHalf = fingerY > UPPER_HALF_Y;
 
@@ -77,7 +77,7 @@ namespace TarkovVR.Source.Controls
                     case JumpState.Held:
                         if (!clickHeld)
                         {
-                            // Released before vault threshold → Jump
+                            // Released before the vault hold time: jump
                             command = ECommand.Jump;
                             _state = JumpState.Idle;
                         }
@@ -107,7 +107,7 @@ namespace TarkovVR.Source.Controls
                 }
             }
 
-            // Default (Index, Oculus, etc.): joystick axis
+            // Other controllers (Index, Oculus, etc.): the joystick's y axis
             private float _timeHeld = 0f;
             private const float TIME_HELD_FOR_VAULT = 0.3f;
 
@@ -160,9 +160,6 @@ namespace TarkovVR.Source.Controls
                 {
                     float poseDelta = -1.5f * Time.deltaTime;
                     VRGlobals.player.ChangePose(poseDelta);
-                    //float poseLevel = VRGlobals.player.MovementContext.PoseLevel + poseDelta;
-                    //float poseLevelResult = Mathf.Clamp(poseLevel, 0f, VRGlobals.player.Physical.MaxPoseLevel);
-                    //float characterControllerHeight = Mathf.Lerp(1.2f, 1.6f, poseLevelResult);
                     VRGlobals.vrPlayer.crouchHeightDiff = 1.6f - movementContext.CharacterController.height;
                 }
 
@@ -171,11 +168,7 @@ namespace TarkovVR.Source.Controls
                 {
                     float poseDelta = 0.05f;
                     VRGlobals.player.ChangePose(poseDelta);
-                    //float poseLevel = VRGlobals.player.MovementContext.PoseLevel + poseDelta;
-                    //float poseLevelResult = Mathf.Clamp(poseLevel, 0f, VRGlobals.player.Physical.MaxPoseLevel);
-                    //float characterControllerHeight = Mathf.Lerp(1.2f, 1.6f, poseLevelResult);
                     VRGlobals.vrPlayer.crouchHeightDiff = Mathf.Clamp(1.61f - movementContext.CharacterController.height, 0.01f, 1f);
-                    //Plugin.MyLog.LogWarning(VRGlobals.player.MovementContext.PoseLevel + "   |  " + poseLevel + "   |  " + poseLevelResult + "  |   " + characterControllerHeight + "   |   " + VRGlobals.vrPlayer.crouchHeightDiff);
                 }
 
                 // crouchHeightDiff stays at 0.01 until the right joystick Y comes back down, so standing up doesn't jump straight after
@@ -254,7 +247,7 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                // Step Or Lean To Sprint: measured every frame, acted on below when neither the click nor the stick decides
+                // Step Or Lean To Sprint (StepSprint) is measured every frame and acted on below when neither the stick click nor the stick decides
                 bool stickForward = !VRGlobals.blockLeftJoystick && VRInput.LeftJoystick.axis.y >= VRSettings.GetLeftStickSensitivity();
                 int step = StepSprint.Update(VRGlobals.player != null && VRGlobals.player.IsSprintEnabled, stickForward);
 
@@ -277,7 +270,7 @@ namespace TarkovVR.Source.Controls
                 }
                 else if (step > 0)
                 {
-                    // Only sent while the game isn't running (StepSprint): ToggleSprinting on a run would end it
+                    // StepSprint only asks for this while Tarkov isn't sprinting: ToggleSprinting during a sprint would end it
                     command = ECommand.ToggleSprinting;
                     isSprinting = true;
                     VRGlobals.vrPlayer.crouchHeightDiff = 0;
@@ -304,8 +297,8 @@ namespace TarkovVR.Source.Controls
                 if (!VRGlobals.inGame)
                     return;
 
-                // Just out of a menu, B still backing out of it (MenuExitButtonWait): no reload, no drop, and a tap from before the menu
-                // doesn't fire one on its way out either
+                // Just after leaving a menu, B may still be held from backing out of it (MenuExitButtonWait). Nothing reloads or drops then,
+                // and a tap from before the menu doesn't fire either.
                 if (MenuExitButtonWait.Blocks)
                 {
                     waitingForSecondTap = false;
@@ -321,8 +314,8 @@ namespace TarkovVR.Source.Controls
                     return;
                 }
 
-                // A pump gun the hands work: B is its slide release (VRReloadController.Shotgun), never Tarkov's reload; a break-action's,
-                // its lever (VRReloadController.BreakAction)
+                // On a pump gun worked by hand, B is the slide release (VRReloadController.Shotgun); on a break-action it is the lever
+                // (VRReloadController.BreakAction). Never Tarkov's reload.
                 if (VRReloadController.GunHandButtonIsSlideRelease(VRGlobals.firearmController) || VRReloadController.GunHandButtonIsBarrelLever(VRGlobals.firearmController))
                 {
                     waitingForSecondTap = false;
@@ -330,8 +323,8 @@ namespace TarkovVR.Source.Controls
                     return;
                 }
 
-                // Manual reload on a gun with a detachable magazine: B is only the mag release (VRReloadController:
-                // a press drops the magazine, held it lets the off hand pull it out), never Tarkov's reload
+                // With Manual Reload on a gun with a detachable magazine, B is only the mag release, never Tarkov's reload
+                // (VRReloadController: a press drops the magazine, holding it lets the off hand pull it out)
                 bool manualReload = VRReloadController.ManualReloadActive();
 
                 bool reloadButton = Handedness.GunHandUpperButton.GetStateDown(SteamVR_Input_Sources.Any);
@@ -343,7 +336,7 @@ namespace TarkovVR.Source.Controls
 
                     if (waitingForSecondTap && timeSinceLastTap < DOUBLE_TAP_WINDOW)
                     {
-                        // Detachable magazines: the double tap drops the magazine out of the gun (Manual Reload: the
+                        // With a detachable magazine, the double tap drops it out of the gun (with Manual Reload the
                         // first press already did)
                         if (!manualReload && !VRReloadController.TryReleaseMagazine())
                             command = ECommand.QuickReloadWeapon;
@@ -360,7 +353,7 @@ namespace TarkovVR.Source.Controls
                 }
                 else if (waitingForSecondTap && (Time.time - lastTapTime) >= DOUBLE_TAP_WINDOW)
                 {
-                    // A new magazine already in the off hand: you're reloading by hand, no automatic reload
+                    // A new magazine already in the off hand means a reload by hand: no automatic reload
                     if (!manualReload && !VRReloadController.HoldingMagazine)
                         command = ECommand.ReloadWeapon;
                     waitingForSecondTap = false;
@@ -401,7 +394,7 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                // A mounted gun: aimed with the eye at its sight (MountedGun)
+                // A mounted gun is aimed by putting the eye at its sight (MountedGun)
                 if (TarkovVR.Source.Player.Interactions.MountedGun.Mounted)
                 {
                     TarkovVR.Source.Player.Interactions.MountedGun.UpdateAim(ref command);
@@ -423,7 +416,7 @@ namespace TarkovVR.Source.Controls
 
                 bool isAiming = VRGlobals.firearmController.IsAiming;
 
-                // Slung (ChestHang): the gun hangs on the chest, no aiming down its sights. Let go into the sling while aiming: out of it.
+                // A slung gun (ChestHang) hangs on the chest and can't be aimed. Slinging it while aiming ends the aim.
                 if (TarkovVR.Source.Player.Interactions.ChestHang.Hanging)
                 {
                     if (isAiming)
@@ -570,7 +563,6 @@ namespace TarkovVR.Source.Controls
             private void ExitAimMode(ref ECommand command)
             {
                 command = ECommand.EndAlternativeShooting;
-                //VRPlayerManager.smoothingFactor = 50f;
                 VRGlobals.scopeSensitivity = 0;
                 lastToggleTime = Time.time;
             }
@@ -583,7 +575,7 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                // A mounted gun: the trigger of a hand on its handle (MountedGun)
+                // A mounted gun fires from the trigger of a hand on its handle (MountedGun)
                 if (TarkovVR.Source.Player.Interactions.MountedGun.Mounted)
                 {
                     bool pulled = TarkovVR.Source.Player.Interactions.MountedGun.TriggerPulled;
@@ -606,9 +598,9 @@ namespace TarkovVR.Source.Controls
                 float primaryHandTriggerAmount = Handedness.GunHandTrigger.axis;
                 bool detached = TarkovVR.Source.Player.Interactions.ChestHang.Detached;
 
-                // No trigger finger on the grip (slung, or support-hand-only hold) = no firing; a burst under way ends. Same while
-                // VRReloadController has the gun apart: the magazine out in the hand (Tarkov still thinks it's in the gun), the charging
-                // handle being worked, or the chambered round not racked yet.
+                // With no trigger finger on the grip (slung, or held by the support hand only) the gun can't fire, and a burst under way
+                // ends. The same applies while VRReloadController has the gun apart: the magazine out in the hand (Tarkov still thinks
+                // it's in the gun), the charging handle being worked, or the chambered round not racked yet.
                 if (detached || VRReloadController.BlocksFiring)
                 {
                     if (isShooting)
@@ -616,7 +608,7 @@ namespace TarkovVR.Source.Controls
                         command = ECommand.EndShooting;
                         isShooting = false;
                     }
-                    // On the round Tarkov's insert chambered, not racked yet: the trigger only clicks
+                    // On a round that Tarkov's insert chambered but that hasn't been racked yet, the trigger only clicks
                     bool dryFiring = !detached && VRReloadController.TriggerOnlyClicks && primaryHandTriggerAmount > 0.5f;
                     if (dryFiring != isDryFiring)
                     {
@@ -626,7 +618,7 @@ namespace TarkovVR.Source.Controls
                     return;
                 }
 
-                // Racked with the trigger still held from a click: it fires on the next pull, not this one
+                // Racked while the trigger is still held from a dry click: the gun fires on the next pull, not this one
                 if (isDryFiring)
                 {
                     isDryFiring = false;
@@ -746,7 +738,7 @@ namespace TarkovVR.Source.Controls
                 if ((swapPrimaryWeapon) || swapWeapon || (WeaponPatches.grenadeEquipped && cancelGrenadeButtonClick))
                 {
                     if (VRGlobals.player.ActiveSlot == null || WeaponPatches.rangeFinder)
-                        // If the first weapon slot is null then attempt select secondary
+                        // If the first weapon slot is empty, select the second primary weapon
                         if (VRGlobals.player.Equipment._cachedSlots[0].ContainedItem != null)
                             command = ECommand.SelectFirstPrimaryWeapon;
                         else
@@ -839,26 +831,6 @@ namespace TarkovVR.Source.Controls
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        /*
-        public class ScopeZoomHandler : IInputHandler
-        {
-            private bool swapZooms = false;
-
-            public void UpdateCommand(ref ECommand command)
-            {
-                if (!VRGlobals.firearmController)
-                    return;
-                if (VRGlobals.firearmController.IsAiming && swapZooms) {
-                    command = ECommand.ChangeScopeMagnification;
-                    swapZooms = false;
-                }
-            }
-            public void TriggerSwapZooms()
-            {
-                swapZooms = true;
-            }
-        }
-        */
         public class VRScopeZoomHandler : IInputHandler
         {
             private bool swapZooms = false;
@@ -944,7 +916,7 @@ namespace TarkovVR.Source.Controls
         public class QuickSlotHandler : IInputHandler
         {
             private EBoundItem currentSlot;
-            // The user set quick slots start at 4, 1-3 are weapon slots
+            // The user-set quick slots start at 4; 1-3 are the weapon slots
             private Dictionary<EBoundItem, ECommand> quickSlotCommands = new Dictionary<EBoundItem, ECommand>();
             public QuickSlotHandler() {
                 quickSlotCommands.Add(EBoundItem.Item4, ECommand.SelectFastSlot4);
@@ -980,7 +952,7 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                // On a mounted gun the interact key is Tarkov's way off it: letting go of it is ours (MountedGun)
+                // On a mounted gun Tarkov's interact key would take you off it; MountedGun handles letting go instead
                 if (TarkovVR.Source.Player.Interactions.MountedGun.Active)
                 {
                     offTriggerWasDown = false;
@@ -989,8 +961,9 @@ namespace TarkovVR.Source.Controls
                 bool interactButtonUp = Handedness.GunHandLowerButton.GetStateDown(SteamVR_Input_Sources.Any);
                 bool interactButtonDown = Handedness.GunHandLowerButton.GetStateUp(SteamVR_Input_Sources.Any);
 
-                // Off-hand trigger executes a reach-selected weapon part (offHandInteract) with the A-button's edge mapping. Only while a
-                // part is selected: the off trigger otherwise belongs to breath-hold (ADS) and UI, and selection excludes aiming/supporting.
+                // The off-hand trigger runs the weapon part selected by reaching to it, with the same edge mapping as the A button. Only while
+                // a part is selected: otherwise the off trigger belongs to breath-hold (ADS) and the UI. Parts can't be selected while
+                // aiming or supporting.
                 bool offTriggerPress = false, offTriggerRelease = false;
                 if (WeaponPatches.currentGunInteractController != null
                     && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1)
@@ -1021,7 +994,7 @@ namespace TarkovVR.Source.Controls
                 bool inventoryButtonUp = Handedness.OffHandLowerButton.GetStateUp(SteamVR_Input_Sources.Any);
                 float secondaryHandTriggerAmount = Handedness.OffHandTrigger.axis;
 
-                // Not after a click made with it held as Alt (MenuModifiers): that press was the modifier
+                // Skipped when the button was held as Alt for a click (MenuModifiers): that press was the modifier
                 if (inventoryButtonUp && secondaryHandTriggerAmount < 0.1f && !MenuModifiers.ReleaseWasModifier(Handedness.OffHandLowerButton))
                     command = ECommand.ToggleInventory;
             }
@@ -1035,7 +1008,7 @@ namespace TarkovVR.Source.Controls
 
             private float plantHoldStart = -1f;     // when the dominant face button started being held (-1 = up)
             private bool tripwireToggled = false; // one mode-toggle per hold
-            private bool tripwireFireHeld = false;    // edge-detect the place-post trigger
+            private bool tripwireFireHeld = false;    // edge-detects the trigger that places a tripwire post
 
             public void UpdateCommand(ref ECommand command)
             {
@@ -1051,7 +1024,8 @@ namespace TarkovVR.Source.Controls
                         HandleTripwirePlacement(grenadeController);
                         return;
                     }
-                    // Held by its button, the ring pulled by the other hand (GrenadeHold); below = the flow without it (trigger = pin, let go = throw)
+                    // GrenadeHold: the grenade is held by its button and the other hand pulls the ring. The code below runs only for other
+                    // hands controllers (trigger = pin, let go = throw).
                     GrenadeHold.UpdateCommand(grenadeController, ref command);
                     return;
                 }
@@ -1119,9 +1093,6 @@ namespace TarkovVR.Source.Controls
                     return;
 
                 string grenadeName = VRGlobals.player.HandsController.HandsHierarchy.name;
-
-                //if (grenadeName == "weapon_grenade_rdg2.generated(Clone)")
-                    //return;
 
                 // Default position for most grenades
                 VRGlobals.weaponHolder.transform.localPosition = new Vector3(-0.1f, -0.43f, -0.25f);
@@ -1264,19 +1235,6 @@ namespace TarkovVR.Source.Controls
                 examineWeapon = true;
             }
         }
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        /*
-        public class EFTConfigHandler : IInputHandler
-        {
-            public void UpdateCommand(ref ECommand command)
-            {
-                if (!InstalledMods.EFTApiInstalled)
-                    return;
-                if (VRInput.Start.GetStateDown(SteamVR_Input_Sources.Any))
-                    EFTApiSupport.OpenCloseConfigUI();
-            }
-        }
-        */
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class HeadMountedDeviceHandler : IInputHandler
         {

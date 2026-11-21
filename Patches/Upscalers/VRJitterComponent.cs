@@ -9,16 +9,15 @@ namespace TarkovVR.Patches.Upscalers
         private SSAAImpl _ssaaImpl;
         public static Vector2 CurrentJitter { get; private set; }
 
-        // The render dimensions the jitter magnitude was sized against (eyeTextureWidth * scale), so the FSR bridge can
-        // compare against the actual render-target width (a mismatch = wrong jitter magnitude = sub-pixel edge
-        // misalignment). Diagnostic.
+        // The render size the jitter magnitude was computed for (eyeTextureWidth * scale). The FSR bridge compares it with the
+        // actual render-target width: a mismatch means a wrong jitter magnitude and sub-pixel edge misalignment. Diagnostic only.
         public static int LastScaledWidth;
         public static int LastScaledHeight;
 
-        // Jitter the raster like the game's flatscreen upscaler path: BSG's scene shaders add the _JitterOffsets global
-        // (NDC units) to clip position in the vertex stage; the projection matrices are untouched. The shaders only read
-        // _JitterOffsets in their "TAA" keyword variant, which the game's PP layer (destroyed in VR) enables around every
-        // camera render; without the keyword the raster stays unjittered under a nonzero FSR feed (whole-image wobble).
+        // The raster is jittered the way the game's flatscreen upscaler path does it. BSG's scene shaders add the _JitterOffsets
+        // global (NDC units) to the clip position in the vertex stage; the projection matrices are untouched. The shaders only read
+        // _JitterOffsets in their "TAA" keyword variant, which the game's PP layer (destroyed in VR) enables around every camera
+        // render. Without the keyword the raster stays unjittered while FSR is fed a nonzero jitter, and the whole image wobbles.
         private static readonly int JITTER_OFFSETS_ID = Shader.PropertyToID("_JitterOffsets");
         private static bool _wroteJitterGlobal;
         private static bool _loggedViewport;
@@ -29,9 +28,9 @@ namespace TarkovVR.Patches.Upscalers
             _ssaaImpl = GetComponent<SSAAImpl>();
         }
 
-        // Written at OnPreCull like the game's PP layer, before the depth-texture/motion-vector prepasses: written only in
-        // OnPreRender, those passes would raster with last frame's _JitterOffsets (depth vs color misaligned = FSR edge
-        // crawl). Re-written per eye in OnPreRender (same value) in case something stomps the global mid-frame.
+        // Written in OnPreCull, like the game's PP layer, so the depth-texture and motion-vector prepasses use this frame's
+        // _JitterOffsets. Written only in OnPreRender, they would use last frame's value, and the depth/color mismatch shows as
+        // FSR edge crawl. OnPreRender writes it again per eye (same value) in case something overwrites the global mid-frame.
         private void OnPreCull()
         {
             if (_ssaaImpl == null || !(_ssaaImpl.EnableFSR3 || _ssaaImpl.EnableDLSS))
@@ -48,7 +47,7 @@ namespace TarkovVR.Patches.Upscalers
                 return;
             }
 
-            // Same jitter for both eyes (Time.frameCount-indexed); fed to FSR per-eye unchanged.
+            // Both eyes get the same jitter (indexed by Time.frameCount), fed to FSR per eye unchanged.
             CurrentJitter = VRJitterHelper.GetJitterPixelSpace();
 
             ApplyGameJitterGlobals();
@@ -56,22 +55,22 @@ namespace TarkovVR.Patches.Upscalers
 
         private void ApplyGameJitterGlobals()
         {
-            // The shaders' variant gate. Kept on while the upscaler runs (off in ClearJitterGlobal): a
-            // per-render bracket that failed to re-arm for one eye/pass would leave it unjittered. Nothing else in VR needs
-            // the keyword off (UI shaders don't read _JitterOffsets; the optic render jitters like flatscreen).
+            // The keywords select the shader variant that reads the jitter. They stay on while the upscaler runs (ClearJitterGlobal
+            // turns them off): switching them per render could miss one eye or pass and leave it unjittered. Nothing else in VR
+            // needs them off: UI shaders don't read _JitterOffsets, and the optic render jitters like flatscreen.
             Shader.EnableKeyword("TAA");
             Shader.EnableKeyword("TAA_HIGH");
 
-            // No matrix is jittered, so non-jittered == live; keeps NonJitteredProj consumers (SSAAPropagator
-            // optic redraw) fresh.
+            // No matrix is jittered, so the non-jittered projection is the live one. This keeps NonJitteredProj users
+            // (the SSAAPropagator optic redraw) current.
             _camera.nonJitteredProjectionMatrix = _camera.projectionMatrix;
 
-            // Game units (GetJitterPerspectiveOffsetsUV): pixels -> NDC on the actual rect-scaled viewport.
+            // Pixels to NDC on the actual rect-scaled viewport, in the game's units (GetJitterPerspectiveOffsetsUV).
             int viewWidth = _camera.pixelWidth;
             int viewHeight = _camera.pixelHeight;
             if (!_loggedViewport)
             {
-                // pixelWidth must be the render viewport (eyeTex*scale); if it tracks the mirror window, the jitter
+                // pixelWidth must be the render viewport (eye texture * scale). If it follows the mirror window, the jitter
                 // magnitude is wrong.
                 _loggedViewport = true;
                 int eyeWidth = (int)(XRSettings.eyeTextureWidth * VRGlobals.upscalingMultiplier);
@@ -108,8 +107,8 @@ namespace TarkovVR.Patches.Upscalers
     {
         public static int CurrentSampleCount { get; private set; } = 8;
 
-        // FSR's documented jitter sequence length, ceil(8*n^2) (18 @1.5x, 23 @1.7x, 32 @2x), instead of rounding up to a
-        // power of two: a longer sequence over-spreads the samples and worsens specular shimmer
+        // FSR uses its documented jitter sequence length, ceil(8*n^2) (18 at 1.5x, 23 at 1.7x, 32 at 2x), not one rounded up to a
+        // power of two: a longer sequence spreads the samples too far and worsens specular shimmer.
 
         public static void SetSampleCountForScale(float scale, bool isDLSS)
         {
@@ -128,12 +127,12 @@ namespace TarkovVR.Patches.Upscalers
             }
         }
 
-        // 1-based like the game's TAA (GetUnityHaltonSequence uses (index & 0x3FF) + 1): 0-based hits Halton(0) = the
-        // (-0.5,-0.5) pixel corner once per cycle, the worst-case sample.
+        // The Halton index is 1-based like the game's TAA (GetUnityHaltonSequence uses (index & 0x3FF) + 1). A 0-based index
+        // hits Halton(0), the (-0.5,-0.5) pixel corner, once per cycle: the worst-case sample.
 
-        // Scales the whole jitter, both rendered and fed to FSR (both read CurrentJitter), so they stay matched. The
-        // stability vs sharpness dial: smaller = crisper but more aliased, larger = more stable/softer. The game's TAA
-        // uses 0.75. The FSR bridge's "Jitter Scale" only touches the fed side and desyncs when != 1.
+        // Scales the whole jitter, both the rendered offset and the value fed to FSR (both read CurrentJitter), so they stay
+        // matched. Smaller is crisper but more aliased, larger is more stable but softer. The game's TAA uses 0.75.
+        // The FSR bridge's "Jitter Scale" only scales the fed side, so the two go out of sync when it isn't 1.
         public static float jitterSpread = 0.75f;
 
         public static Vector2 GetJitterPixelSpace()

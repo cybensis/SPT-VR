@@ -37,9 +37,8 @@ namespace TarkovVR.Source.Weapons
             GatherWeaponParts(weaponRoot, newWeaponMeshParts);
 
             weaponMeshDictionary.Add(weaponName, newWeaponMeshParts);
-            //Plugin.MyLog.LogInfo($"Added weapon {weaponName} with detected parts to dictionary.");
 
-            return weaponMeshDictionary[weaponName];//newWeaponMeshParts;
+            return weaponMeshDictionary[weaponName];
         }
 
         private static void GatherWeaponParts(Transform root, WeaponMeshParts newWeaponMeshParts)

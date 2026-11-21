@@ -4,7 +4,7 @@ using UnityEngine.XR;
 
 namespace TarkovVR.Source.XR
 {
-    // Debug logging for the OpenXR test: every few seconds, the display state and each tracked device's pose,
+    // OpenXR debug logging: every logInterval seconds, the display state and each tracked device's pose,
     // trigger, grip, stick and A/B. Each device's list of inputs is logged once when it first shows up.
     public class OpenXRProbe : MonoBehaviour
     {

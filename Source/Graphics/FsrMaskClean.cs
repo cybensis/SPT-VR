@@ -6,17 +6,17 @@ using UnityEngine.XR;
 
 namespace TarkovVR.Source.Graphics
 {
-    // The game's FSR2/3 with the VR hidden-area mask: masked pixels hold depth ~1 cm from the eye and the camera motion of
-    // such a point, so FSR's nearest-depth motion dilation and its previous-depth scatter spread them into the visible
-    // image and its depth clip drops the history there (mask-shaped aliased patches). Before each eye's FSR, depth and
-    // motion are copied with masked pixels set to far depth + zero motion (shader Hidden/SPTVR/FsrMaskClean, bundle
-    // sptvr/Assets/fsrmask) and FSR reads the copies (Remap). Only while the occlusion mesh is on; no bundle = the originals.
+    // Cleans the VR hidden-area mask out of the game's FSR2/3 inputs. Masked pixels hold a depth ~1 cm from the eye and that point's
+    // camera motion. FSR's nearest-depth motion dilation and previous-depth scatter spread them into the visible image, and its depth
+    // clip drops the history there, which shows as mask-shaped aliased patches. Before each eye's FSR, depth and motion are copied with
+    // masked pixels set to far depth and zero motion (shader Hidden/SPTVR/FsrMaskClean, bundle sptvr/Assets/fsrmask), and FSR reads
+    // the copies (Remap). Only while the occlusion mesh is on; without the bundle FSR reads the originals.
     public static class FsrMaskClean
     {
 
-        // For FSR4 Bridge (typed, behind its SPT-VR check): the same masked copy straight into its depth / motion
-        // textures, run now (FSR4 copes with the raw mask; this removes the bad data for two tiny passes). False = not
-        // done (cleaner off, no mask, no bundle, sizes not matching) and the caller copies plainly.
+        // Used by FSR4 Bridge (typed, behind its SPT-VR check): writes the same masked copy straight into its depth / motion
+        // textures, immediately. FSR4 copes with the raw mask; this removes the bad data for the cost of two tiny passes.
+        // Returns false when nothing was done (no XR or mask, no bundle, sizes don't match); the caller then copies plainly.
         public static bool CopyClean(Texture depthSrc, Texture motionSrc, RenderTexture depthDst, RenderTexture motionDst)
         {
             if (!XRSettings.enabled || !XRSettings.useOcclusionMesh
@@ -44,7 +44,7 @@ namespace TarkovVR.Source.Graphics
         private static CommandBuffer ownCb;
         private static readonly int MaskDepthId = Shader.PropertyToID("_SptvrMaskDepth");
         private static readonly int SrcId = Shader.PropertyToID("_SptvrSrc");
-        private const string ShaderName = "Hidden/SPTVR/FsrMaskClean2";   // the explicit-input version; an older bundle = cleaner off
+        private const string ShaderName = "Hidden/SPTVR/FsrMaskClean2";   // the explicit-input version; with an older bundle nothing is cleaned
         private static readonly int CameraDepthId = Shader.PropertyToID("_CameraDepthTexture");
         private static readonly int CameraMvId = Shader.PropertyToID("_CameraMotionVectorsTexture");
         private static string lastLog;
@@ -66,9 +66,9 @@ namespace TarkovVR.Source.Graphics
             Ensure(ref depthCopy, width, height, RenderTextureFormat.RFloat, "SPT-VR FSR depth (mask as sky)");
             Ensure(ref mvCopy, width, height, RenderTextureFormat.RGHalf, "SPT-VR FSR motion (mask still)");
 
-            // The real textures, not BuiltinRenderTextureType.ResolvedDepth / MotionVectors: those don't resolve as blit
-            // sources in a buffer run outside a camera event, and the wrong copies break FSR3 (no AA, raw jitter). Same
-            // objects FSR4 Bridge reads.
+            // Use the real textures, not BuiltinRenderTextureType.ResolvedDepth / MotionVectors: those don't resolve as blit
+            // sources in a buffer run outside a camera event, and the wrong copies break FSR3 (no AA, raw jitter). These are
+            // the same objects FSR4 Bridge reads.
             Texture depthTexture = Shader.GetGlobalTexture(CameraDepthId), motionTexture = Shader.GetGlobalTexture(CameraMvId);
             if (depthTexture == null || motionTexture == null)
             {
@@ -88,8 +88,8 @@ namespace TarkovVR.Source.Graphics
                 ownCb.Clear();
                 commandBuffer = ownCb;
             }
-            // Inputs as explicit globals: the blit's own _MainTex binding doesn't reach the shader's Texture2D (the
-            // copies would read the camera's colour image).
+            // Bind the inputs as explicit globals: the blit's own _MainTex binding doesn't reach the shader's Texture2D, so the
+            // copies would read the camera's colour image.
             commandBuffer.SetGlobalTexture(MaskDepthId, depthTexture);
             commandBuffer.SetGlobalTexture(SrcId, depthTexture);
             commandBuffer.Blit(depthTexture, depthCopy, mat, 0);

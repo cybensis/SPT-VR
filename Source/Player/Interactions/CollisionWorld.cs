@@ -4,10 +4,10 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // What the gun (WeaponPhysicsProxy) and the free hands (HandCollision) hit, beyond their layer mask. The bullet layer
-    // (HighPolyCollider) is the detailed world, except that each tree's bullet mesh is the whole tree with every branch
-    // ("LOD0Collider"): those are skipped for the tree's movement-layer capsule (its trunk). The rest of the movement layer stays
-    // out: it has pane-sized blockers in window openings. Triggers aren't solid, glass excepted.
+    // Decides what the gun (WeaponPhysicsProxy) and the free hands (HandCollision) hit, beyond their layer mask. The bullet layer
+    // (HighPolyCollider) is the detailed world, except that each tree's bullet mesh ("LOD0Collider") is the whole tree with every
+    // branch. Those are skipped, and the tree's movement-layer capsule (its trunk) is used instead. The rest of the movement layer is
+    // left out because it has pane-sized blockers in window openings. Triggers aren't solid, except glass.
     internal static class CollisionWorld
     {
         public static string treeBranchesName = "LOD0Collider";
@@ -26,7 +26,7 @@ namespace TarkovVR.Source.Player.Interactions
             doorLayer = LayerMask.NameToLayer("DoorLowPolyCollider");
         }
 
-        // A world mask + the movement layer (for the trunks) + the doors' own colliders
+        // The world mask plus the movement layer (for the trunks) and the doors' own colliders
         internal static int Mask(int worldMask)
         {
             ResolveLayers();
@@ -48,7 +48,7 @@ namespace TarkovVR.Source.Player.Interactions
             return door;
         }
 
-        // Out of a raid (WeaponPhysicsProxy): the doors held here would keep the map's doors alive
+        // Called by WeaponPhysicsProxy out of a raid: the doors cached here would keep the map's doors alive
         internal static void Clear()
         {
             solid.Clear();
@@ -64,7 +64,7 @@ namespace TarkovVR.Source.Player.Interactions
             solidClearTime = Time.time + 10f;
         }
 
-        // Cached by instance id (a collider's name and kind don't change; reading a name allocates)
+        // Cached by instance id: a collider's name and kind don't change, and reading a name allocates
         internal static bool Solid(Collider collider)
         {
             ClearCachesNow();

@@ -10,29 +10,28 @@ using static EFT.Player;
 namespace TarkovVR.Patches.Core.Player
 {
     // ===========================================================================
-    // Temporary recon: profiles a food's vanilla eat to gather what a new FoodDef in EatingInteractionController needs.
-    // Decoupled from the manual-eating flow (it just watches the normal eat).
-    // Usage: set EatingRecon.enabled = true (UnityExplorer), eat the food normally (no FoodDef for it, or it's
-    // gesture-gated), read the [FoodRecon] log lines:
-    //  * [TREE]   — transform tree under the controller object: prop bone names + renderer type/mesh/enabled
-    //  * [SOUND]  — every sound event name + the arms-animator state hash & normalizedTime when it fired
-    //  * [STATE]  — arms layer-1 state transitions (OPEN->USE->EAT->END) + normalizedTime
+    // Temporary recon tool: watches a food's vanilla eat and logs what a new FoodDef in EatingInteractionController needs.
+    // Usage: set EatingRecon.enabled = true (UnityExplorer), eat the food the vanilla way (no FoodDef for it, or Manual
+    // Eating off), then read the [FoodRecon] log lines:
+    //  * [TREE]   — the transform tree under the controller object: prop bone names, renderer type, mesh, enabled
+    //  * [SOUND]  — every sound event name, with the arms-animator state hash and normalizedTime when it fired
+    //  * [STATE]  — arms layer-1 state transitions (OPEN->USE->EAT->END) with normalizedTime
     //  * [GRIP]   — every plausible prop tracked against both palms; at eat end the longest stable in-hand run per
-    //               (prop, palm) prints as a paste-ready V(...)/V(...)
+    //               (prop, palm) is printed as a paste-ready V(...)/V(...)
     // ===========================================================================
     internal static class EatingRecon
     {
-        public static bool enabled = false;            // master toggle — flip on live
+        public static bool enabled = false;            // turns the recon on; can be switched live
 
-        // Optional manual pair: tracked in addition to the auto-discovered candidates and spot-logged raw at
-        // gripLogInterval. Empty gripPropName = auto only.
+        // Optional extra (prop, palm) pair. It is tracked along with the auto-discovered props, and its raw pose is logged
+        // every gripLogInterval seconds. Leave gripPropName empty for auto-discovery only.
         public static string gripPropName = "";
         public static string gripPalmName = "Base HumanLPalm"; // or "Base HumanRPalm"
         public static float gripLogInterval = 0.25f;
 
-        // Stable grips: palm->prop is sampled every frame for each tracked (prop, palm) pair; the longest run where it
-        // barely moves is averaged and printed at eat end. Out-of-hand samples (prop in the can/bag, or mid-air to the
-        // mouth) reset the run, so a taken piece measures its in-hand window.
+        // Each tracked (prop, palm) pair is sampled every frame. The longest run where the prop barely moves in the palm
+        // is averaged and printed at eat end. Samples with the prop out of the hand (in the can or bag, or on its way to
+        // the mouth) reset the run, so a taken piece measures only its time in the hand.
         public static float gripStableMaxDist = 0.25f; // ignore samples this far from the palm (m)
         public static float gripStablePosTol = 0.02f;  // frame-to-frame pos move that still counts as "still" (m)
         public static float gripStableAngTol = 8f;      // frame-to-frame rot move that still counts as "still" (deg)
@@ -44,7 +43,7 @@ namespace TarkovVR.Patches.Core.Player
         private static int lastState;
         private static float nextGripLog;
 
-        // One stability tracker per (prop, palm) pair — built at spawn, reported + cleared at eat end.
+        // One stability tracker per (prop, palm) pair. Built at spawn, reported and cleared at eat end.
         private sealed class GripTrack
         {
             public string propName; public string palmLabel;
@@ -58,12 +57,12 @@ namespace TarkovVR.Patches.Core.Player
         private static Transform manualProp, manualPalm; // the optional manual spot-log pair
 
         // --- Open-hand path capture ([HANDPATH] — the pull-to-open HandPath bake) -----
-        // While the arms are in the food's open state, both palms are sampled relative to the held item root every frame
-        // (in a vanilla eat this window holds the raw clip pose). At eat end the palm that moved vs the item (the opener)
-        // is trimmed of its leading draw arc, resampled to handPathKeys keys and printed as a HandPath(...) wrapper.
-        // Needs an existing FoodDef (root-name/open-state lookup) and a vanilla eat (enableManualEating=false).
+        // While the arms are in the food's open state, both palms are sampled every frame relative to the held item root.
+        // In a vanilla eat this is the raw clip pose. At eat end, the palm that moved relative to the item (the opening
+        // hand) has its leading draw arc trimmed, is resampled to handPathKeys keys, and is printed as a HandPath(...) wrapper.
+        // Needs an existing FoodDef (for the root name and open state) and a vanilla eat (Manual Eating off).
         public static int handPathKeys = 10;
-        public static float handPathMaxDist = 0.35f; // leading samples farther than this from the root = the draw arc, trimmed
+        public static float handPathMaxDist = 0.35f; // m; leading samples farther than this from the root are the draw arc and are trimmed
         private static Transform pathRoot, pathPalmL, pathPalmR;
         private static int pathOpenHash;
         private static readonly List<float> pathTimes = new List<float>();
@@ -71,8 +70,9 @@ namespace TarkovVR.Patches.Core.Player
         private static readonly List<Vector3> pathPosR = new List<Vector3>();
         private static readonly List<Quaternion> pathRotL = new List<Quaternion>();
         private static readonly List<Quaternion> pathRotR = new List<Quaternion>();
-        // ReachBag only: a second capture on the STATE_USE reach segment (the axis the reach scrub seeks on; first pass
-        // through the state = the first reach), emitted as a ReachPath(...) wrapper for DriveReachLatch. Hash 0 = off.
+        // ReachBag only: a second capture over the STATE_USE reach segment, the state the reach scrub seeks in. Only the
+        // first pass through the state (the first reach) is kept. Printed as a ReachPath(...) wrapper for DriveReachLatch.
+        // Hash 0 = off.
         private static int pathReachHash;
         private static readonly List<float> reachTimes = new List<float>();
         private static readonly List<Vector3> reachPosL = new List<Vector3>();
@@ -105,9 +105,9 @@ namespace TarkovVR.Patches.Core.Player
             catch (Exception exception) { Plugin.MyLog.LogError($"[FoodRecon] OnSpawn error: {exception}"); }
         }
 
-        // Guesses the archetype + prop names from the tree (BSG naming) and prints a paste-ready factory line for
+        // Guesses the archetype and prop names from the tree (BSG naming) and prints a paste-ready factory line for
         // EatingInteractionController.Defs. The root is the first direct child of 'weapon' that has a Renderer.
-        // Grips/timings are left to the archetype defaults — paste it, then tune live + DumpFoodDef.
+        // Grips and timings stay at the archetype defaults: tune them live, then use DumpFoodDef.
         private static void SuggestEntry(MedsController instance)
         {
             try
@@ -122,7 +122,7 @@ namespace TarkovVR.Patches.Core.Player
                 string food = NameContaining(root, "foodpiece") ?? NameContaining(root, "_food");
                 string cover = NameContaining(root, "cover");
                 string catGroup = NameContaining(root, "_cat");
-                // Bag (pour-into-hand) cues: a packaging root + "hold" food pieces.
+                // Bag cues (food poured into the hand): a packaging root and "hold" food pieces.
                 string bagRoot = NameContaining(root, "upakovka");
                 string holdPiece = NameContaining(root, "_hold_") ?? NameContaining(root, "suharik");
                 bool hasCap = FindDeep(root, "cap") != null; // drinks' cap node is exactly "cap"
@@ -153,9 +153,9 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         // --- Auto grip-candidate discovery ---------------------------------------
-        // Builds a (prop, palm) tracker for every plausible prop vs both palms. Candidates = nodes with a renderer (LOD
-        // meshes resolve to their parent group, e.g. the beer LODs -> mod_item) + name cues for bone groups without
-        // renderers (pack_CAT, tc_root, the exact "cap" node...). Arm/finger rigs, cameras, fx and markers are skipped.
+        // Builds a tracker for every plausible prop against both palms. Candidates are nodes with a renderer (LOD meshes
+        // resolve to their parent group, e.g. the beer LODs -> mod_item), plus bone groups without renderers matched by
+        // name (pack_CAT, tc_root, the exact "cap" node). Arm and finger rigs, cameras, fx and markers are skipped.
         private static void BuildGripTracks(MedsController instance)
         {
             gripTracks.Clear();
@@ -171,7 +171,7 @@ namespace TarkovVR.Patches.Core.Player
                 var props = new List<Transform>();
                 CollectGripCandidates(root, props);
 
-                // Optional manual extra pair (something discovery missed) + raw spot log.
+                // Optional manual pair, for a prop the discovery missed.
                 if (!string.IsNullOrEmpty(gripPropName))
                 {
                     manualProp = FindDeep(root, gripPropName);
@@ -196,8 +196,8 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (into.Count >= maxGripCandidates) return;
             string n = t.name;
-            // Whole subtrees that can't be a held prop: arm/finger rigs, cameras, fx,
-            // markers, bend goals — and our own Eat*Holder objects during a manual eat.
+            // Skip whole subtrees that can't be a held prop: arm and finger rigs, cameras, fx,
+            // markers, bend goals, and our own Eat*Holder objects during a manual eat.
             if (n.StartsWith("Base Human", StringComparison.Ordinal)
                 || n.StartsWith("Bend_Goal", StringComparison.Ordinal)
                 || n.StartsWith("Camera", StringComparison.Ordinal)
@@ -214,10 +214,10 @@ namespace TarkovVR.Patches.Core.Player
             for (int i = 0; i < t.childCount; i++) CollectGripCandidates(t.GetChild(i), into);
         }
 
-        // A grip candidate matches a prop-name cue (bone-group roots without renderers) or has a Renderer. LOD mesh nodes
-        // resolve to their parent group (mod_item), unless the parent is the weapon node (the chocolate bar's root is its
-        // LOD0 mesh). The weapon chain never qualifies. "cap" is matched exactly (drinks) so the saira lid-bone chain
-        // (saira_cap01…), which never leaves the can, doesn't flood the report.
+        // A grip candidate either matches a prop-name cue (for bone-group roots without renderers) or has a Renderer. LOD
+        // mesh nodes resolve to their parent group (mod_item), unless the parent is the weapon node (the chocolate bar's
+        // root is its LOD0 mesh). The weapon chain never qualifies. "cap" is matched exactly (the drinks' cap) so the saira
+        // lid-bone chain (saira_cap01…), which never leaves the can, doesn't flood the report.
         private static Transform CandidateFor(Transform t)
         {
             string n = t.name;
@@ -283,11 +283,11 @@ namespace TarkovVR.Patches.Core.Player
         public static void OnSound(BaseSoundPlayer sp, string name)
         {
             if (!enabled || sp == null) return;
-            // Vanilla eats only: a manual eat's pull-to-open scrub re-enters the open state every frame, re-firing the
-            // clip's sound events (suppressed by the AllowSound gate) and flooding the log.
+            // Vanilla eats only. In a manual eat the pull-to-open scrub seeks the open state every frame, which re-fires the
+            // clip's sound events (the AllowSound gate mutes them) and floods the log.
             if (EatingInteractionController.ManualActive) return;
-            // Filter to our food's sound player when we know it (else log all — at eat
-            // start soundPlayer may not be cached yet).
+            // Only our food's sound player once it is known. At eat start soundPlayer may
+            // not be cached yet, so everything is logged.
             if (soundPlayer != null && sp != soundPlayer) return;
             Plugin.MyLog.LogInfo($"[FoodRecon][SOUND] '{name}'{StateStr()}");
         }
@@ -297,8 +297,8 @@ namespace TarkovVR.Patches.Core.Player
             if (!enabled || activeController == null || player == null) return;
             if (!player.IsYourPlayer) return;
 
-            // Stop once the food controller has been switched away — print the auto-averaged
-            // stable grips + the open-hand path on the way out.
+            // Once the hands switch away from the food controller, print the stable grips
+            // and the open-hand path, then stop.
             if (!ReferenceEquals(player.HandsController, activeController)) { ReportStableGrips(); ReportHandPath(); activeController = null; return; }
 
             // State transitions (arms layer 1 — the eat state machine).
@@ -349,9 +349,9 @@ namespace TarkovVR.Patches.Core.Player
             catch (Exception exception) { Plugin.MyLog.LogError($"[FoodRecon] SetupHandPathCapture error: {exception}"); pathRoot = null; }
         }
 
-        // Samples both palms vs the item root while the arms are in the open state. Vanilla eats only (a manual eat has
-        // the props reparented + wrists pinned), and only increasing normalizedTime = the first pass through the state
-        // (later re-entries, e.g. the chocolate's reused STATE_USE, reset to 0 and are dropped).
+        // Samples both palms relative to the item root while the arms are in the open state. Vanilla eats only, because a
+        // manual eat reparents the props and pins the wrists. Only increasing normalizedTime is kept (the first pass through
+        // the state); later re-entries, e.g. the chocolate's reused STATE_USE, restart at 0 and are dropped.
         private static void CaptureHandPath(EFT.Player player)
         {
             if (pathRoot == null || EatingInteractionController.ManualActive) return;
@@ -404,9 +404,9 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
-        // Pick the palm that MOVED vs the item (the holding palm is near-static), trim the
-        // leading approach arc (samples farther than handPathMaxDist from the root),
-        // resample to handPathKeys evenly spaced keys and print the paste-ready wrapper.
+        // Picks the palm that moved relative to the item (the holding palm barely moves), trims the
+        // leading approach arc (samples farther than handPathMaxDist from the root), resamples
+        // to handPathKeys evenly spaced keys and prints the paste-ready wrapper.
         private static void EmitPath(string wrapper, string what, List<float> times,
             List<Vector3> posL, List<Quaternion> rotL, List<Vector3> posR, List<Quaternion> rotR)
         {
@@ -428,8 +428,8 @@ namespace TarkovVR.Patches.Core.Player
                 return;
             }
 
-            // Resample to evenly spaced keys over the kept t-range; quats sign-aligned
-            // key-to-key so the replay's Slerp takes the short way.
+            // Resample to evenly spaced keys over the kept time range. Each quaternion is sign-aligned
+            // with the previous key so the replay's Slerp takes the short way.
             int keys = Mathf.Max(2, handPathKeys);
             var builder = new StringBuilder();
             builder.AppendLine($"[FoodRecon][HANDPATH] {what} path: {(useR ? "R" : "L")} palm vs '{pathRoot.name}', "
@@ -518,8 +518,8 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         // Prints every qualifying (prop, palm) pair's longest stable run as a paste-ready V(...)/V(...), longest first.
-        // A piece held in both palms prints both windows: pick the one that matches the def's holder. Props that never
-        // sat still in either hand are listed once at the end (SkinnedMeshRenderer phantoms, or never held).
+        // A piece held in both palms prints both: pick the one that matches the def's holder. Props that never sat still
+        // in either hand are listed once at the end (SkinnedMeshRenderer phantoms, or props that were never held).
         private static void ReportStableGrips()
         {
             if (gripTracks.Count == 0) return;

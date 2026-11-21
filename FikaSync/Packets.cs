@@ -4,7 +4,7 @@ using UnityEngine;
 namespace SptVrFikaSync
 {
     // One VR player's two hand poses in their own body frame (Player.Transform), keyed by NetId. Internal: the VR mod
-    // never touches the packet type, it just calls FikaVrSync.SendArmPose(...) with the components.
+    // never uses the packet type, it calls FikaVrSync.SendArmPose(...) with the values.
     internal struct VRArmsPacket : INetSerializable
     {
         public int NetId;
@@ -30,8 +30,8 @@ namespace SptVrFikaSync
         }
     }
 
-    // One VR player's head (the headset) in their body's frame (Player.Transform), keyed by NetId: the observers turn and bend their copy's
-    // upper body to it and turn its head (HeadSyncApply). Active false = not tracked now.
+    // One VR player's headset pose in their body's frame (Player.Transform), keyed by NetId. Observers turn and bend their copy's
+    // upper body toward it and turn its head (HeadSyncApply). Active = false means the head is not tracked right now.
     internal struct VRHeadPacket : INetSerializable
     {
         public int NetId;
@@ -57,9 +57,9 @@ namespace SptVrFikaSync
     }
 
     // One VR player's held weapon pose (the gun's WeaponRoot transform) in their own body frame (Player.Transform),
-    // keyed by NetId. Sent instead of the arm packet while a firearm is held: the remote overrides the
-    // observed weapon to this pose and re-IKs the hands onto it, so the gun aims where the controller
-    // points (not where FIKA aims it from the head rotation).
+    // keyed by NetId. Sent instead of the arm packet while a firearm is held. The observer moves its copy
+    // of the weapon to this pose and runs the hand IK onto it, so the gun aims where the controller
+    // points, not where FIKA would aim it from the head rotation.
     internal struct VRWeaponPacket : INetSerializable
     {
         public int NetId;
@@ -88,10 +88,10 @@ namespace SptVrFikaSync
         }
     }
 
-    // One VR player's finger pose: per-hand joint local eulers (15 = 5 fingers x 3 joints, palm
-    // child-order - both rigs are the same EFT prefab so the order matches), keyed by NetId. Sent
-    // while the sender's hand-pose systems are driving (authored open poses / Index skeletal curls);
-    // an all-inactive packet is the one-shot stop so observers hand the fingers back to the animator.
+    // One VR player's finger pose, keyed by NetId: per hand, the local euler angles of 15 joints (5 fingers x 3 joints)
+    // in the palm's child order. Both rigs are the same EFT prefab, so the order matches. Sent while the sender's own
+    // code poses the fingers (baked open poses or Index skeletal curls). A packet with both hands inactive is sent
+    // once to stop, so observers give the fingers back to the animator.
     internal struct VRFingersPacket : INetSerializable
     {
         public const int JointCount = 15;
@@ -135,9 +135,9 @@ namespace SptVrFikaSync
         }
     }
 
-    // A VR melee surface hit (wall sparks / glass break). The custom VR melee runs its collider only
-    // on the swinger, so observers never spawn the surface effect; this carries the hit so they can
-    // replay GameWorld.HackShot at the point. Player/AI hits are not sent (damage already syncs).
+    // A VR melee hit on a surface (wall sparks, glass break). The VR melee runs its collider only on the
+    // swinging player's machine, so observers never spawn the surface effect. This packet carries the hit so
+    // they can replay GameWorld.HackShot at the point. Hits on players and AI are not sent (damage already syncs).
     internal struct VRMeleeHitPacket : INetSerializable
     {
         public Vector3 Point;
@@ -162,21 +162,20 @@ namespace SptVrFikaSync
         }
     }
 
-    // One VR player's manual-eating state: the two rendered wrist poses (so observers drive the
-    // arms like empty hands) plus every live food prop's pose + visibility, all body-local. The
-    // props are matched on the observer by a stable hash of the prop transform's name (same prefab
-    // -> same bone names), and their world poses overridden after the observed meds animator, so the
-    // food rides the synced hands. Active=false is a one-shot stop (restore hidden renderers + drop
-    // the override).
+    // One VR player's manual-eating state, all body-local: the two rendered wrist poses (observers drive
+    // the arms as with empty hands) and every food prop's pose and visibility. The observer matches the
+    // props by a stable hash of the prop transform's name (the same prefab has the same bone names) and
+    // overrides their world poses after the observed meds animator, so the food follows the synced hands.
+    // Active = false is sent once to stop: the observer shows hidden renderers again and drops the override.
     internal struct VREatingPacket : INetSerializable
     {
         public int NetId;
         public bool Active;                                   // false = stop (restore + clear)
         public Vector3 LeftPos;   public Quaternion LeftRot;  // rendered left wrist, body-local
         public Vector3 RightPos;  public Quaternion RightRot; // rendered right wrist, body-local
-        // Food animator (ObjectInHandsAnimator) state per layer, mirrored so the observer's food shows
-        // the same skinned deformation (lid bone, bag rip, chew squash): a seek, not a play, so it never
-        // loops. All layers, because a food's eat can live on any of them.
+        // Food animator (ObjectInHandsAnimator) state per layer, copied so the observer's food shows the
+        // same skinned deformation (lid bone, bag rip, chew squash). The observer seeks to it instead of
+        // playing it, so it never loops. All layers are sent, because a food's eat can be on any of them.
         public byte AnimLayerCount;
         public int[] AnimHashes;
         public float[] AnimTimes;
@@ -184,7 +183,7 @@ namespace SptVrFikaSync
         public int[] NameHashes;        // stable hash of each prop transform's name
         public Vector3[] Positions;     // body-local
         public Quaternion[] Rotations;  // body-local
-        public bool[] Visible;          // mirror the local renderer-enabled state
+        public bool[] Visible;          // the local renderer-enabled state
 
         public void Serialize(NetDataWriter writer)
         {
@@ -233,12 +232,12 @@ namespace SptVrFikaSync
         }
     }
 
-    // One eat sound event the local eater played, so observers hear the real gesture audio
-    // (open/scoop/gulp/bite) instead of the looping vanilla observed-meds sound (which is frozen out).
-    // Carried as a stable hash of the event name, not the string: FIKA's bundled NetDataWriter has no
-    // runtime Put(string) (the publicized stub is wrong; the real DLL only has Put(string,int) /
-    // PutLargeString), so a plain Put(string) throws MissingMethodException. The observer resolves the
-    // hash against the food model's own sound bank. Sent Unreliable: a dropped one is harmless.
+    // One eating sound event the local player played, so observers hear the real gesture audio
+    // (open, scoop, gulp, bite) instead of the vanilla observed-meds sound, which is frozen out.
+    // Sent as a stable hash of the event name, not the string: FIKA's bundled NetDataWriter has no
+    // Put(string) at runtime (the publicized stub is wrong; the real DLL only has Put(string,int) and
+    // PutLargeString), so a plain Put(string) throws MissingMethodException. The observer looks the
+    // hash up in the food model's own sound bank. Sent unreliable, because a dropped one is harmless.
     internal struct VREatingSoundPacket : INetSerializable
     {
         public int NetId;
@@ -257,11 +256,12 @@ namespace SptVrFikaSync
         }
     }
 
-    // One VR player's MANUAL RELOAD state, sent with the weapon pose while a firearm is in hands (SPT-VR's VRReloadController.Sync):
-    // the rendered wrists and which arms to drive to them, the props in the hands (magazines, a round) by item id, every part of the
-    // gun it moves or hides by path under the gun's root (local pose + shown), the bolt catch / bolt-open layer, and event counters.
-    // Wrists and props are in the gun's frame (Weapon_root), so they ride the observed gun ArmSyncApply placed. Ids and paths are
-    // FikaVrSync.StableHash'd (no strings at runtime). Active=false is the one-shot stop (put the observed gun back).
+    // One VR player's manual reload state, sent with the weapon pose while a firearm is in hands (SPT-VR's VRReloadController.Sync).
+    // It holds the rendered wrists and which arms to drive to them, the props in the hands (magazines, a round) by item id, every gun
+    // part the reload moves or hides (by path under the gun's root, with local pose and visibility), the bolt catch and bolt-open
+    // layer, and event counters. Wrists and props are in the gun's frame (Weapon_root), so they follow the observed gun that
+    // ArmSyncApply placed. Ids and paths are hashed with FikaVrSync.StableHash, so no strings are sent at runtime.
+    // Active = false is sent once to stop, and the observer puts its copy of the gun back.
     internal struct VRReloadPacket : INetSerializable
     {
         public const byte ManualReload = 1, ManualBolt = 2, DriveLeft = 4, DriveRight = 8, BoltCatch = 16, BoltOpenDriven = 32;
@@ -270,7 +270,7 @@ namespace SptVrFikaSync
         public bool Active;
         public byte Flags;
         public float BoltOpen;
-        public int ShellsThrown;        // counters: each change = one event (a dropped packet can't lose one)
+        public int ShellsThrown;        // counters: each change is one event, so a dropped packet can't lose one
         public int RoundsShown;
         public int HiddenGroundItem;    // the ground magazine whose model is in the hand (0 = none)
         public Vector3 LeftPos;   public Quaternion LeftRot;
@@ -353,8 +353,8 @@ namespace SptVrFikaSync
         }
     }
 
-    // One reload sound the VR player's manual reload played, by a stable hash of its event name (as VREatingSoundPacket): their copy
-    // of the gun skips Tarkov's reload animations, whose sound events these replace
+    // One sound the VR player's manual reload played, by a stable hash of its event name (like VREatingSoundPacket). The observer's
+    // copy of the gun skips Tarkov's reload animations, so these replace the animations' sound events.
     internal struct VRReloadSoundPacket : INetSerializable
     {
         public int NetId;
@@ -374,8 +374,8 @@ namespace SptVrFikaSync
     }
 
     // A body drag: the full ragdoll pose (one world transform per RigidbodySpawner bone), or a release
-    // marker. The receiver freezes the corpse's ragdoll kinematic and snaps every bone to this pose.
-    // Syncing a single bone lets local physics diverge (the body stretches).
+    // marker. The receiver makes the corpse's ragdoll kinematic and snaps every bone to this pose.
+    // Syncing a single bone lets the local physics drift apart and the body stretches.
     internal struct BodyDragPacket : INetSerializable
     {
         public int CorpseId;        // GameWorld.ObservedPlayersCorpses key (dead player's NetId)
@@ -415,20 +415,19 @@ namespace SptVrFikaSync
         }
     }
 
-    // A FIKA downed/revive teammate being dragged. Unlike BodyDragPacket (a dead Corpse keyed by
-    // GameWorld.ObservedPlayersCorpses), a downed teammate is a still-live player keyed by NetId, and
-    // the receiver applies this two ways:
-    //   * the downed player's own client teleports itself to RootPos, so a revive lands them where they
-    //     were dragged (their position is owned by their client; nothing else can move it);
-    //   * every other client drives that player's revive-ragdoll bones to the synced world pose (all
-    //     bones, as BodyDragPacket: one transform per RigidbodySpawner bone).
-    // RootPos is sent on every packet (incl. the reliable release marker, which carries the final spot so
-    // a dropped drag packet can't strand the teammate); the bone arrays are empty on the release marker.
+    // A downed teammate (FIKA's downed/revive state) being dragged. Unlike BodyDragPacket (a dead Corpse keyed by
+    // GameWorld.ObservedPlayersCorpses), a downed teammate is a live player keyed by NetId. The receiver applies it two ways:
+    //   * The downed player's own client teleports itself to RootPos, so a revive puts them where they were dragged.
+    //     Their position is owned by their client; nothing else can move it.
+    //   * Every other client drives that player's revive-ragdoll bones to the synced world pose (all bones, like
+    //     BodyDragPacket: one transform per RigidbodySpawner bone).
+    // RootPos is sent in every packet, including the reliable release marker. The release marker carries the final spot,
+    // so a dropped drag packet can't strand the teammate. The bone arrays are empty on the release marker.
     internal struct DownedDragPacket : INetSerializable
     {
         public int NetId;            // the downed player's NetId (CoopHandler.Players key)
         public bool Released;
-        public Vector3 RootPos;      // relocate target for the downed player (ground-projected body centroid)
+        public Vector3 RootPos;      // where the downed player is moved to (the body's centre, projected onto the ground)
         public byte BoneCount;       // 0 on release
         public Vector3[] Positions;  // world-space, per ragdoll bone
         public Quaternion[] Rotations;
@@ -462,21 +461,21 @@ namespace SptVrFikaSync
         }
     }
 
-    // A corpse a VR player grabbed / dropped while dragging it, signalled to the host/headless: the machine
-    // that runs the bots + looting AI (SPT-VR.dll needs SteamVR, so it does not run on a headless; only this
-    // companion does). Keeps the AI's idea of the body in sync:
-    //   * Grab  (Released=false): the body is in transit - pull its ORBIT loot waypoint so bots can't loot
-    //     it from the death spot while it's carried.
-    //   * Settle (Released=true): it's resting at RestPos - re-add the ORBIT waypoint there and relocate the
-    //     server's ragdoll copy there (so live collider scanners like LootingBots find it).
-    // Keyed by the dead entity's ProfileId: the only identity that's stable on a headless-local Corpse (which
-    // is never in GameWorld.ObservedPlayersCorpses - that's client-only), identical on every machine, and
-    // resolvable via GameWorld.GetEverExistedPlayerByID + matches ORBIT's corpse-waypoint Target.PlayerProfileID.
+    // A corpse a VR player grabbed or let go while dragging it, sent to the host/headless, which runs the bots and the
+    // looting AI. SPT-VR.dll needs SteamVR, so it does not run on a headless; only this companion module does.
+    // It keeps the AI's idea of where the body is in sync:
+    //   * Grab (Released = false): the body is being carried. Its ORBIT loot waypoint is removed so bots can't loot
+    //     it at the death spot.
+    //   * Settle (Released = true): the body rests at RestPos. The ORBIT waypoint is added there, and the server's
+    //     ragdoll copy is moved there so collider scanners like LootingBots find it.
+    // Keyed by the dead player's ProfileId, the only stable identity for a Corpse local to the headless (that Corpse is never
+    // in GameWorld.ObservedPlayersCorpses, which is client-only). The ProfileId is the same on every machine, resolves via
+    // GameWorld.GetEverExistedPlayerByID, and matches ORBIT's corpse-waypoint Target.PlayerProfileID.
     internal struct CorpseLootPacket : INetSerializable
     {
         public string ProfileId;
-        public bool Released;   // false = grabbed (in transit), true = settled at RestPos
-        public Vector3 RestPos; // resting position (only meaningful when Released)
+        public bool Released;   // false = grabbed (being carried), true = settled at RestPos
+        public Vector3 RestPos; // resting position (only used when Released)
 
         public void Serialize(NetDataWriter writer)
         {
@@ -495,8 +494,8 @@ namespace SptVrFikaSync
         }
     }
 
-    // A door a VR player's hand moves (SPT-VR's PhysicalDoors), by its Id: its angle and its handle's turn (0 rest .. 1 down).
-    // FIKA syncs the door's state only (open / shut). Final = the last one of a move (sent reliable).
+    // A door a VR player moves by hand (SPT-VR's PhysicalDoors), by its Id: its angle and its handle's turn (0 = rest, 1 = down).
+    // FIKA itself only syncs the door's state (open or shut). Final marks the last packet of a move, which is sent reliable.
     internal struct VRDoorPacket : INetSerializable
     {
         public string DoorId;

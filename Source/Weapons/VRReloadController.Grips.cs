@@ -17,14 +17,14 @@ namespace TarkovVR.Source.Weapons
     // from the same animation set, moved along the magazine so the hand stays the same distance from its bottom.
     public static partial class VRReloadController
     {
-        public static bool saveReloadGrips = false;      // temporary: reloads with Manual Reload off record any hold that's missing
+        public static bool saveReloadGrips = false;      // reloads with Manual Reload off record any hold that's missing
         public static bool rerecordReloadGrips = false;  // true = replace recordings, except the built in one below
 
         private const string BUILT_IN_GRIP = "m4a1|0";   // a recording never replaces it
         private const int HIGHEST_MAGAZINE_TYPE = 15;
         private const int FIRST_THUMB_BONE = 1;          // palm bones in GetComponentsInChildren order: 0 is the palm
         private const int LAST_THUMB_BONE = 3;
-        public static float sameHoldDistance = 0.04f;    // m pull and insert holds may differ and still be the same way of holding it
+        public static float sameHoldDistance = 0.04f;    // m, pull and insert holds closer than this count as the same way of holding it
         public static float sameHoldAngle = 15f;         // deg, same
         private static readonly string RELOAD_GRIPS_FILE = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\sptvr\\ReloadGrips.json");
         // Generated from every gun's own clips (Tools/gen_reload_holds), for all that haven't been recorded. Recordings win.
@@ -38,7 +38,7 @@ namespace TarkovVR.Source.Weapons
             public float magazineLength;
             public Vector3[] fingers;        // null = the M4A1's
             public bool inBoneFrame;         // generated: the pose of the magazine's slot bone (the clips move the bone, not the model)
-            public bool rightHand;           // read on the right palm (a belt gun's box the gun hand carries: the PKM's), not the left
+            public bool rightHand;           // read on the right palm, not the left (a belt gun's box carried by the gun hand: the PKM's)
         }
 
         private sealed class ReloadGrip
@@ -71,7 +71,7 @@ namespace TarkovVR.Source.Weapons
             public float travel;
         }
 
-        // A knob's fold as it's taken (the MDR's paddles): its bone, the turn's axis in its own frame, how far
+        // How a knob folds when it's grabbed (the MDR's paddles): its bone, the turn axis in its own frame, and the angle
         public sealed class SavedKnobFold
         {
             public string bone;
@@ -173,9 +173,10 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, float> magwellGripBottoms;
         }
 
-        // A belt-fed machine gun (gen_lmgs.py), by its clips' family: the feed cover and the scope mount's latch as hinges (bone, axis in its
-        // closed frame, degrees; the latch's button and how far it presses in its parent's frame), the belt as Tarkov's box insert clip leaves
-        // it hanging (every link's position + quaternion in the box root's frame, the last one still in the box), the way the box leaves
+        // A belt-fed machine gun (gen_lmgs.py), keyed by its clips' family. The feed cover and the scope mount's latch are hinges (bone,
+        // axis in its closed frame, degrees; the latch's button and how far it presses, in its parent's frame). The belt is stored as
+        // Tarkov's box insert clip leaves it hanging (every link's position + quaternion in the box root's frame, the last one still in
+        // the box). Also the direction the box comes off.
         public sealed class SavedLmg
         {
             public SavedHinge cover;
@@ -212,7 +213,7 @@ namespace TarkovVR.Source.Weapons
             public List<float[]> poses;
         }
 
-        // The palm in the part's frame (the box's: the box in the palm's frame, like the magazine holds); hand = the clip's palm
+        // The palm in the part's frame (for the box: the box in the palm's frame, like the magazine holds); hand = the clip's palm
         public sealed class SavedPartHold
         {
             public string hand;
@@ -244,7 +245,7 @@ namespace TarkovVR.Source.Weapons
             public SavedIdleLocals idleLocals;  // the box's other bones as the idle clip has them (the spent links, the lid...)
         }
 
-        // A tube shotgun (gen_shotguns.py), by its clips' family: the pump stroke's bones, the shell's paths into the tube and through the
+        // A tube shotgun (gen_shotguns.py), keyed by its clips' family: the pump stroke's bones, the shell's paths into the tube and through the
         // ejection port, the shell in the left palm. Poses are position + quaternion (7 numbers), in the weapon bone's frame (metres).
         public sealed class SavedShotgun
         {
@@ -255,9 +256,10 @@ namespace TarkovVR.Source.Weapons
             public SavedShotgunHandle handle;   // a semi-auto's bolt handle (the M3's in its semi-auto mode)
         }
 
-        // The bone the hand pulls (the M3: its mod_charge, found as on the magazine guns; the MR-153 / MP-155: the slide bone its knob is part
-        // of), the bone that comes back with it (null = found as on the magazine guns), the knob in that bone's frame (null = the handle
-        // model's back end), the right hand's hold on it all the way back (that bone's frame, closed)
+        // A semi-auto shotgun's bolt handle: the bone the hand pulls (the M3: its mod_charge, found as on the magazine guns; the MR-153 /
+        // MP-155: the slide bone that includes its knob), the bone that comes back with it (null = found as on the magazine guns), the
+        // knob in that bone's frame (null = the handle model's back end), and the right hand's hold on it all the way back (in that
+        // bone's frame, closed).
         public sealed class SavedShotgunHandle
         {
             public string bone;
@@ -321,7 +323,7 @@ namespace TarkovVR.Source.Weapons
             public float[] joints;      // that finger's three joints pressing it, local eulers
         }
 
-        // By animation set: the way the magazine leaves the well, in the well bone's frame, where the mesh can't say
+        // Per animation set: the direction the magazine leaves the well, in the well bone's frame, for guns where the mesh can't tell
         private static readonly Dictionary<string, Vector3> wellAxes = new Dictionary<string, Vector3>();
 
         private static readonly Dictionary<string, ReloadGrip> reloadGrips = new Dictionary<string, ReloadGrip>
@@ -379,7 +381,7 @@ namespace TarkovVR.Source.Weapons
             return nameEnd > 0 && Array.IndexOf(reloadNamedMagazineSets, clipName.Substring(0, nameEnd).ToLowerInvariant()) >= 0;
         }
 
-        // The name the gun's reload clips start with (m4a1_mag_in_0 = m4a1). No magazine clips: its own template id.
+        // The name the gun's reload clips start with (m4a1_mag_in_0 = m4a1). With no magazine clips, its own template id.
         private static string AnimationFamily(FirearmController firearmController)
         {
             string templateId = firearmController.Item.TemplateId.ToString();
@@ -387,13 +389,13 @@ namespace TarkovVR.Source.Weapons
                 return family;
 
             family = templateId;
-            // The shotgun families come from the data (below): loaded before this is worked out once and kept
+            // The shotgun families come from the data (used below), so load it first. The result is worked out once and cached.
             LoadRecordedGrips();
             RuntimeAnimatorController animatorController = firearmController.FirearmsAnimator?.Animator?.runtimeAnimatorController;
             if (animatorController != null)
             {
-                // Then "_reload_in", the SR-2M's magazine clips (sr2m_reload_in_0), only with no magazine clip at all: on other guns
-                // reload_in is a grenade launcher's or sits beside their own mag_in
+                // Pass 0 looks for magazine clip names. Pass 1 looks for "_reload_in" (the SR-2M's magazine clips, sr2m_reload_in_0),
+                // only when there's no magazine clip at all: on other guns reload_in is a grenade launcher's or sits beside their mag_in.
                 for (int pass = 0; pass < 2 && family == templateId; pass++)
                 {
                     foreach (AnimationClip clip in animatorController.animationClips)
@@ -408,8 +410,8 @@ namespace TarkovVR.Source.Weapons
                         }
                     }
                 }
-                // A tube shotgun (no magazine clips): the shotgun data's family its clips are named after (TryGetShotgun's rule: the MP-155
-                // plays the MR-153's), so its bolt handle's data is found by it
+                // A tube shotgun (no magazine clips): use the shotgun data family its clips are named after (TryGetShotgun's rule: the
+                // MP-155 plays the MR-153's), so its bolt handle's data can be found
                 if (family == templateId && firearmController.Item.ReloadMode == Weapon.EReloadMode.InternalMagazine)
                 {
                     foreach (AnimationClip clip in animatorController.animationClips)
@@ -456,8 +458,8 @@ namespace TarkovVR.Source.Weapons
                     fingers = grip.insert.fingers, rightHand = grip.pull.rightHand };
                 pullSource += ", the insert's fingers";
             }
-            // A belt gun's box: the hand the clips carry it with, on it as they have it (gen_lmgs; the PKM's right hand). Not the magazine
-            // reader's, which only ever reads the left palm - on a PKM that hand never leaves the foregrip.
+            // A belt gun's box: use the hand the clips carry it with, held as the clips hold it (gen_lmgs; the PKM's right hand). Not the
+            // magazine reader's hold, which only reads the left palm; on a PKM that hand never leaves the foregrip.
             if (TryGetLmg(firearmController, out LmgData lmg) && lmg.belt != null && BeltFits(magazine, lmg.belt))
             {
                 if (lmg.boxPull != null)
@@ -476,13 +478,14 @@ namespace TarkovVR.Source.Weapons
             return grip.pull != null || grip.insert != null ? grip : null;
         }
 
-        // The AK-12 magazine (type 4) on every AK set: one clip's data, whose pull fingers (its most closed moment) are off the magazine; the
-        // pull and insert hold it the same way, and the insert's fingers fit
+        // The AK-12 magazine (type 4) on every AK set: its pull fingers (taken at the most closed moment) miss the magazine. The pull and
+        // insert hold it the same way, so the insert's fingers are used.
         private static readonly HashSet<string> pullFingersFromInsert = new HashSet<string>
             { "ak100|4", "ak74m|4", "ak74n|4", "aks74n|4", "aks74u|4", "rpk16|4", "nl545_di|4" };
 
-        // Animation sets whose clips gave no hold at all, on guns that take another set's magazines: that set's holds, which are where
-        // the magazine sits in the hand, not on the gun (MCX .300 BLK: its clips leave the hand marker off the palm; M4 magazines)
+        // Animation sets whose clips gave no hold at all, on guns that take another set's magazines, borrow that set's holds. A hold is
+        // where the magazine sits in the hand, not on the gun, so it carries over (MCX .300 BLK: its clips leave the hand marker off the
+        // palm; it takes M4 magazines).
         private static readonly Dictionary<string, string> magazineHoldsFrom = new Dictionary<string, string> { { "mcx_4", "m4a1" } };
 
         private static MagazineHold ResolveHold(string family, int magazineType, bool pull, GameObject prop, Vector3 lengthAxis, float length, out string source)
@@ -843,7 +846,7 @@ namespace TarkovVR.Source.Weapons
                         if (shotgun == null)
                             continue;
                         shotgunGuns[entry.Key] = shotgun;
-                        // Its bolt handle: worked as a magazine gun's (TryGetChargingHandle, by the family AnimationFamily gives a shotgun)
+                        // Its bolt handle works like a magazine gun's (TryGetChargingHandle, keyed by the family AnimationFamily gives a shotgun)
                         SavedShotgunHandle handle = entry.Value.handle;
                         if (handle == null || string.IsNullOrEmpty(handle.bone))
                             continue;
@@ -883,7 +886,7 @@ namespace TarkovVR.Source.Weapons
                         if (lmg == null)
                             continue;
                         lmgGuns[entry.Key] = lmg;
-                        // The box's own way off the gun (it hooks on and swings off; the box mesh's long side runs along the gun)
+                        // The box's own direction off the gun: it hooks on and swings off, and the box mesh's long side runs along the gun
                         if (entry.Value.wellAxis != null && entry.Value.wellAxis.Length >= 3 && !wellAxes.ContainsKey(entry.Key))
                             wellAxes[entry.Key] = new Vector3(entry.Value.wellAxis[0], entry.Value.wellAxis[1], entry.Value.wellAxis[2]);
                     }

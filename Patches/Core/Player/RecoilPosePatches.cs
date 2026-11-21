@@ -7,7 +7,7 @@ namespace TarkovVR.Patches.Core.Player
     [HarmonyPatch]
     internal class RecoilPosePatches
     {
-        // Every procedural strategy that turns the gun goes through ApplyComplexRotation; RecoilPose keeps our player's only
+        // Every procedural strategy that turns the gun goes through ApplyComplexRotation. RecoilPose.Capture ignores everyone but our player.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ProceduralWeaponAnimation), nameof(ProceduralWeaponAnimation.ApplyComplexRotation))]
         private static void CaptureRecoil(ProceduralWeaponAnimation __instance)
@@ -24,6 +24,6 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
-        private static bool warned;     // every frame: once
+        private static bool warned;     // runs every frame, so warn only once
     }
 }

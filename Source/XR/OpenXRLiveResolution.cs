@@ -6,9 +6,9 @@ using UnityEngine.XR.OpenXR.Features;
 
 namespace TarkovVR.Source.XR
 {
-    // SteamVR's resolution slider while the game runs. Unity's OpenXR plugin asks the runtime for the recommended eye size once, when
-    // the session starts, and keeps it; this asks again every second and scales Unity's eye textures (eyeTextureResolutionScale, which
-    // remakes its swapchains) by the new size over the one the session started with.
+    // Applies SteamVR's resolution slider while the game runs. Unity's OpenXR plugin asks the runtime for the recommended eye size only
+    // once, when the session starts. This asks again every second and scales Unity's eye textures (eyeTextureResolutionScale, which
+    // remakes its swapchains) by the new size divided by the size the session started with.
     public class OpenXRLiveResolution : OpenXRFeature
     {
         public static bool followSlider = true;
@@ -117,7 +117,7 @@ namespace TarkovVR.Source.XR
             return width > 0 && height > 0;
         }
 
-        // Once a frame (OpenXRLiveResolutionWatch)
+        // Called once a frame by OpenXRLiveResolutionWatch
         internal static void Check()
         {
             if (startWidth == 0 || Time.unscaledTime < nextCheck)

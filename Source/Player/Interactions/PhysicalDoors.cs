@@ -13,50 +13,50 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Doors by hand. A grip on the handle takes it: the hand's arc about the handle's own axis turns it, and once it's turned far
-    // enough (unlatchTurn) the door follows the hand, only within its one-way range (CloseAngle..OpenAngle). A grip on the door
-    // itself moves an open door, or a door without a turnable handle. A locked door's handle stops short and the door only rattles
-    // in its frame. Tarkov's own Open / Close run when the door leaves / reaches its frame, so FIKA, bots, quests and sound occlusion
-    // follow the state; only their automatic swing is skipped (DoorSwingPatches). FIKA syncs the state only: the angle and the
-    // handle go to the other players through SPT-VR-FikaSync. Breaching with the gun: PhysicalDoors.Breach; keys: PhysicalDoors.Keys.
+    // Doors by hand. Gripping the handle takes it, and the hand's arc about the handle's axis turns it. Once it's turned far enough
+    // (unlatchTurn) the door follows the hand within its one-way range (CloseAngle..OpenAngle). Gripping the door itself moves an open
+    // door, or a door without a turnable handle. A locked door's handle stops short and the door only rattles in its frame.
+    // Tarkov's own Open / Close run when the door leaves / reaches its frame, so FIKA, bots, quests and sound occlusion follow the state;
+    // only the automatic swing is skipped (DoorSwingPatches). FIKA syncs only the state; the angle and handle turn go to other players
+    // through SPT-VR-FikaSync. Breaching with the gun: PhysicalDoors.Breach. Keys: PhysicalDoors.Keys.
     internal static partial class PhysicalDoors
     {
-        public static float handleReach = 0.09f;        // m from the palm to the handle's meshes that takes the handle
+        public static float handleReach = 0.09f;        // m from the palm to the handle's meshes to take the handle
         public static float leverReach = 0.14f;         // m off the handle's turning axis, and...
-        public static float axisReach = 0.16f;          // ...m along it from the pivot: the lever on the far side of the door, a knob
-        public static float panelReach = 0.07f;         // m from the palm to the door that takes the door itself
+        public static float axisReach = 0.16f;          // ...m along it from the pivot, to take the lever on the far side of the door, or a knob
+        public static float panelReach = 0.07f;         // m from the palm to the door to take the door itself
         public static float searchRadius = 0.3f;
         public static float unlatchTurn = 0.6f;         // handle turn (0 rest .. 1 fully down) that frees the latch
         public static float lockedHandleTurn = 0.25f;   // a locked door's handle stops here
         public static float handleReturnTime = 0.15f;   // s the let-go handle takes to spring back up
         public static float twistLeverRadius = 0.025f;  // m: a hold closer than this to the axis turns the handle by wrist twist
-        public static float openStateAngle = 4f;        // deg off its frame that tells the game the door is open
-        public static float rattleDegrees = 0.8f;       // how far a latched door gives
+        public static float openStateAngle = 4f;        // deg off its frame at which the game is told the door is open
+        public static float rattleDegrees = 0.8f;       // deg a latched door gives
         public static float rattleVolume = 0.15f;
         public static float maxSwingSpeed = 720f;       // deg/s the hand can swing it
         public static float minHingeRadius = 0.08f;     // m: a hold closer to the hinge than this doesn't swing it
-        // m the controller's palm may get from where the hand holds the door before it's pulled off. Walking back while pulling stays well
-        // within it: the door swings after the hand, only the hand's distance from the hinge grows.
+        // m the controller's palm may get from the point where the hand holds the door before the hand is pulled off. Walking back
+        // while pulling stays well within it: the door swings after the hand, and only the hand's distance from the hinge grows.
         public static float breakDistance = 0.45f;
         public static float flingMinSpeed = 15f;        // deg/s at the release that keeps it swinging
-        // The release swing from the hand's own tracked velocity as the grip opens (like a grenade throw), not the door's smoothed speed,
-        // which lags and drops as the hand slows letting go. false = the smoothed speed.
-        // The let-go registers 20-70 ms after the hand starts opening (OpenXRInput's grip), the hand already slowing: the swing takes the
-        // hand's fastest over this window before it
+        // The release swing comes from the hand's own tracked velocity as the grip opens (like a grenade throw), not from the door's
+        // smoothed speed, which lags and drops as the hand slows while letting go.
+        // The let-go registers 20-70 ms after the hand starts opening (OpenXRInput's grip), when the hand is already slowing, so the
+        // swing takes the hand's fastest speed over this window before it.
         public static float releasePeakWindow = 0.12f;  // s
-        // Index: a held door lets go when the hand opens (the wrap under this), not on OpenXRInput's fast-open - that reads a squeeze
-        // relaxing onto the handle (the wrap drops from 1 to the fingers' resting curl within a frame or two) as letting go
+        // On Index, a held door is let go when the hand opens (the wrap falls below this), not on OpenXRInput's fast-open. Fast-open reads
+        // a squeeze relaxing onto the handle (the wrap drops from 1 to the fingers' resting curl within a frame or two) as letting go.
         public static float doorGripReleaseWrap = 0.3f;
-        // The player's body blocks a door a hand moves or that coasts: it stops against the body. Tarkov's character controller pushes
-        // the body out of a door's colliders at any speed, which dragged the shoulder off the held handle.
-        // The body walking into a door that's free to swing (not latched, not locked, no hand on it) pushes it out of the way, as the gun
-        // and the free hands do. A latched or locked one still stops the body.
+        // The player's body blocks a door that a hand moves or that coasts: the door stops against the body. Without this, Tarkov's
+        // character controller pushes the body out of a door's colliders at any speed, which drags the shoulder off the held handle.
+        // true = the body walking into a door that's free to swing (not latched, not locked, no hand on it) pushes it out of the way,
+        // as the gun and the free hands do. A latched or locked door still stops the body.
         public static bool bodyPushesDoors = true;
-        // m ahead of the body's step the door already gives: the character controller stops the body at a door's surface, so it never
-        // sinks into one walking with the stick
+        // m ahead of the body's step at which the door already gives. The character controller stops the body at a door's surface,
+        // so it would never sink into one while walking with the stick.
         public static float bodyContactMargin = 0.03f;
         public static float bodyPushMaxTurn = 30f;      // deg a door turns for the body in one frame at most
-        // A door let go of coasts on its hinges: their friction (a steady slowdown) and the air's drag (growing with the speed squared)
+        // A released door coasts on its hinges, slowed by their friction (a steady deceleration) and air drag (growing with speed squared)
         public static float swingFriction = 45f;        // deg/s^2
         public static float swingDrag = 0.0005f;        // deg/s^2 per (deg/s)^2
         public static float swingStopSpeed = 8f;        // deg/s
@@ -64,10 +64,10 @@ namespace TarkovVR.Source.Player.Interactions
         public static float handReleaseTime = 0.12f;    // s the hand takes back to the controller
         public static float handleSnapTime = 0.08f;     // s the hand takes onto the handle at the grab
         public static float handleSnapSkin = 0.03f;     // m from the palm point (the knuckle line) to the handle's surface
-        public static float pushLeadDegrees = 0.3f;     // a door pushed by a hand turns this much beyond the contact (not touching it again at once)
+        public static float pushLeadDegrees = 0.3f;     // deg a hand-pushed door turns past the contact, so it isn't touched again at once
         public static float syncInterval = 1f / 15f;    // s between the angle packets of a moving door
-        public static bool logGrabs = true;             // a line per grab: the door, its handle, its angles
-        internal static bool syncBroken;                // SPT-VR-FikaSync older than 2.2.0: no door packet to send
+        public static bool logGrabs = true;             // logs a line per grab: the door, its handle, its angles
+        internal static bool syncBroken;                // SPT-VR-FikaSync older than 2.2.0: it has no door packet to send
 
         public static bool Active => VRSettings.GetPhysicalDoorsOn();
 
@@ -85,28 +85,28 @@ namespace TarkovVR.Source.Player.Interactions
             public Transform savedTarget;
             public Transform latch;
             public Vector3 palmInRig;                   // the palm in the rig hand's frame at the grab
-            public Vector3 controllerAtGrab;            // world: that palm on the controller (HandCollision's clamp left out)
-            public Vector3 heldPointAtGrab;             // world: where the palm took the door
+            public Vector3 controllerAtGrab;            // world: that palm point on the controller, without HandCollision's clamp
+            public Vector3 heldPointAtGrab;             // world: where the palm took hold of the door
             public Vector3 heldPointInDoor;
             public float angleAtGrab;
             public float turnAtGrab;
-            public Vector3 leverAtGrab;                 // the handle's parent frame, across its axis
+            public Vector3 leverAtGrab;                 // in the handle's parent frame, perpendicular to its axis
             public bool turnByTwist;
             public Quaternion controllerInHandleParentAtGrab;
             public float releaseStartTime;
             public Vector3 releaseStartPosition;        // in the rig's parent frame
             public Quaternion releaseStartRotation;
             public float grabTime;
-            public Vector3 latchBaseLocal;              // where it took hold, in what it holds
-            public Vector3 latchSnapLocal;              // onto the handle's surface from there
-            // The hand's swing speed (deg/s) at the held point, the last frames it moved the door
+            public Vector3 latchBaseLocal;              // where the hand took hold, in the held object's frame
+            public Vector3 latchSnapLocal;              // from there onto the handle's surface
+            // The hand's swing speed (deg/s) at the held point over the last frames it moved the door
             public readonly float[] swingSpeeds = new float[16];
             public readonly float[] swingTimes = new float[16];
             public int swingSamples;
             public int nextSwingSample;
         }
 
-        // A door a hand moves, or that still swings / has its handle springing back
+        // A door that a hand moves, or that is still swinging or has its handle springing back
         private sealed class DoorRun
         {
             public Door door;
@@ -131,7 +131,7 @@ namespace TarkovVR.Source.Player.Interactions
             public bool sent;
             public int gunFrame = -10;                  // the last frame the gun's physics body moved it (WeaponPhysicsProxy)
             public bool gunMoved;
-            public float hitSpeed;                      // deg/s the gun drove it into a stop at (the shut's volume)
+            public float hitSpeed;                      // deg/s at which the gun drove it into a stop (sets the shut sound's volume)
             public bool HasTurnableHandle => handle != null && handleFullTurn > 0f;
         }
 
@@ -147,10 +147,10 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // For the rest of the mod
 
-        // A hand holds a door, or a key out for one: its grip is taken (the loot pointer, the body grab and the corpse tap skip it)
+        // True when the hand holds a door, or a key for one. Its grip is in use, so the loot pointer, body grab and corpse tap skip it.
         internal static bool HoldsDoor(bool dominant) => holds[dominant ? 1 : 0].held || HoldsKey(dominant ? 1 : 0);
 
-        // The fingers close on this (HandsInteractionController.Grasp): the handle, or the door taken by its panel
+        // What the fingers close on (HandsInteractionController.Grasp): the handle, or the door when it was taken by its panel
         internal static bool GraspTarget(bool dominant, out Component target, out Transform latch)
         {
             Hold hold = holds[dominant ? 1 : 0];
@@ -163,7 +163,7 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // HandCollision leaves this rig hand unclamped: the controller pulls the door through where the door is
+        // HandCollision leaves this rig hand unclamped, so the controller can pull the door through where it is
         internal static bool HoldsRig(Transform rig)
         {
             if (rig == null)
@@ -174,7 +174,7 @@ namespace TarkovVR.Source.Player.Interactions
             return KeyHoldsRig(rig);
         }
 
-        // The doors this mod moves by hand (the rest keep the vanilla grip: open / close)
+        // The doors this mod moves by hand (other doors keep the vanilla grip open / close)
         internal static bool Supports(Door door)
         {
             if (door == null || !door.isActiveAndEnabled || !door.Operatable || door.NoInteractionsAllowed || door._keepRotation
@@ -186,8 +186,8 @@ namespace TarkovVR.Source.Player.Interactions
             return Mathf.Abs(Mathf.DeltaAngle(door.CloseAngle, door.OpenAngle)) > 5f;
         }
 
-        // "Disable Door Context Menu": no gaze menu for a door a hand works - not a keycard door (its card is used from the menu), nor a
-        // locked door with no lock or handle for a key
+        // "Disable Door Context Menu": no gaze menu for a door worked by hand. Keycard doors keep it (the card is used from the menu),
+        // and so do locked doors with no lock or handle for a key.
         internal static bool HidesMenu(Door door)
         {
             if (!Active || !VRSettings.GetDisableDoorContextMenu() || door is KeycardDoor || !Supports(door))
@@ -197,7 +197,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         internal static bool SkipsSwing(WorldInteractiveObject door) => door != null && door == interactionInProgress;
 
-        // The state Tarkov's swing would leave the door in, at once (DoorSwingPatches)
+        // Puts the door at once into the state Tarkov's swing would leave it in (DoorSwingPatches)
         internal static void SettleState(WorldInteractiveObject door, EDoorState state)
         {
             EDoorState result = state == EDoorState.Breaching ? EDoorState.Open : state;
@@ -215,10 +215,11 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Per frame (HandsInteractionController.Update, before its bail)
+        // Per frame (from HandsInteractionController.Update, before its early return)
 
-        // free: the hand may take a door. takenBy: what took the hand, null = a door or key it holds stays (only the hand taking something
-        // else lets go, not the hand passing a reach zone: the slung gun's grip, the holsters, the foregrip's reach by the chest)
+        // free: the hand may take a door. takenBy: what the hand is now used for; null = it keeps a door or key it holds.
+        // Only the hand taking something else lets go, not the hand passing through a reach zone (the slung gun's grip, the holsters,
+        // the foregrip's reach by the chest).
         public static void Tick(HandsInteractionController hands, bool offHandFree, bool dominantHandFree, string offHandTakenBy, string dominantHandTakenBy)
         {
             if (!VRGlobals.inGame || VRGlobals.player == null || VRGlobals.vrPlayer == null || VRGlobals.ikManager == null)
@@ -227,7 +228,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
             int playerId = VRGlobals.player.GetInstanceID();
-            // A new player = a new raid: the once-per-door grab log lines start over
+            // A new player means a new raid: the once-per-door grab log lines start over
             if (playerId != censusPlayerId)
             {
                 ResetAll();
@@ -237,7 +238,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             keyHands = hands;
             ReadTriggers();
-            // (walked into one in the room: the body follow puts the body in it without the character controller)
+            // A door walked into physically: the body follow moves the body into it without the character controller
             BodyPush(Vector3.zero, Time.deltaTime);
             string cantHold = !Active ? "physical doors off" : VRGlobals.menuOpen ? "a menu" : VRGlobals.player.IsSprintEnabled ? "sprinting" : null;
             UpdateHand(hands, holds[0], cantHold == null && offHandFree, cantHold ?? offHandTakenBy, Handedness.OffHandGrip);
@@ -265,7 +266,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static void UpdateHand(HandsInteractionController hands, Hold hold, bool free, string takenBy, VRBoolean grip)
         {
-            // A key out in this hand has it
+            // A key held out in this hand takes the hand
             KeyHold keyHold = keyHolds[hold.dominant ? 1 : 0];
             if (keyHold.state != KeyState.None)
             {
@@ -346,16 +347,16 @@ namespace TarkovVR.Source.Player.Interactions
             hold.onHandle = onHandle;
             hold.rig = rig;
             hold.armIk = armIk;
-            // (a release still easing back hands the arm over from its own latch)
+            // If a release is still easing the hand back, keep the arm target it saved (not its own latch)
             hold.savedTarget = hold.releasing ? hold.savedTarget : armIk.solver.target;
             hold.releasing = false;
             hold.held = true;
 
-            // The hand stays where it took hold, riding the handle (it turns) or the door
+            // The hand stays where it took hold, riding the handle (which turns) or the door
             hold.latch.SetParent(onHandle ? run.handle.transform : door.transform, worldPositionStays: false);
             hold.latch.SetPositionAndRotation(rig.position, rig.rotation);
             armIk.solver.target = hold.latch;
-            // On a handle the hand eases onto its surface (the mesh near the palm; not the far side's lever, across the door)
+            // On a handle, the hand eases onto its surface: the mesh near the palm, not the lever on the far side of the door
             hold.grabTime = Time.time;
             hold.latchBaseLocal = hold.latch.localPosition;
             hold.latchSnapLocal = Vector3.zero;
@@ -392,8 +393,8 @@ namespace TarkovVR.Source.Player.Interactions
                 LogGrab(hold, run);
         }
 
-        // The door the palm is on: its handle first (the meshes, or anywhere around its turning axis: the far side's lever, a knob),
-        // else the door itself
+        // Finds the door the palm is on. A handle wins first (its meshes, or anywhere around its turning axis, which covers the lever
+        // on the far side and knobs); otherwise the door itself.
         private static bool FindDoorAt(Vector3 palm, out Door found, out bool onHandle)
         {
             found = null;
@@ -420,7 +421,7 @@ namespace TarkovVR.Source.Player.Interactions
                         onHandle = true;
                     }
                 }
-                // The door itself: its solid colliders (its interaction trigger can reach past it)
+                // The door itself: only its solid colliders (its interaction trigger can reach past it)
                 if (collider.isTrigger)
                     continue;
                 float panelDistance = ColliderDistance(collider, palm);
@@ -434,7 +435,7 @@ namespace TarkovVR.Source.Player.Interactions
             return found != null;
         }
 
-        // The nearest point of the handle's meshes (their own boxes) to a point
+        // The nearest point on the handle's meshes (their local bounding boxes) to a point
         private static bool HandleContact(DoorHandle handle, Vector3 point, out Vector3 contact)
         {
             contact = point;
@@ -537,7 +538,7 @@ namespace TarkovVR.Source.Player.Interactions
             return run;
         }
 
-        // In its frame and locked, or shut with a handle to turn
+        // Latched = in its frame and either locked, or shut with a handle to turn
         private static bool StartsLatched(Door door, bool turnableHandle)
         {
             bool inFrame = Mathf.Abs(Mathf.DeltaAngle(door.CloseAngle, door.CurrentAngle)) < 0.05f;
@@ -547,7 +548,7 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The gun's physics body (WeaponPhysicsProxy) pushing doors
 
-        // Free to move and nobody else moving it: open a bit or without a handle to turn, not locked, no hand on it
+        // True when the door is free to move and nothing else is moving it: ajar or without a handle to turn, not locked, no hand on it
         internal static bool MayBePushed(Door door)
         {
             if (!Active || !Supports(door))
@@ -562,7 +563,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         internal static float AngularVelocityOf(Door door) => door != null && runs.TryGetValue(door, out DoorRun run) ? run.angularVelocity : 0f;
 
-        // Where the gun's push left it this frame: the state, the sounds and the co-op sync follow from here (UpdateRun)
+        // Sets the door where the gun's push left it this frame. UpdateRun then updates the state, sounds and co-op sync from it.
         internal static void Pushed(Door door, float angle, float angularVelocity, float hitSpeed)
         {
             if (!MayBePushed(door))
@@ -575,8 +576,8 @@ namespace TarkovVR.Source.Player.Interactions
             run.gunFrame = Time.frameCount;
         }
 
-        // A free hand pushing a door at a point (HandCollision): the door turns so that point goes the part of the move along its swing,
-        // plus pushLeadDegrees. false = it couldn't (a stop in the way): the hand is blocked as by a wall.
+        // A free hand pushes a door at a point (HandCollision). The door turns so that point moves by the part of the hand's move along
+        // its swing, plus pushLeadDegrees. false = it couldn't (a stop is in the way), and the hand is blocked as if by a wall.
         internal static bool PushedBy(Door door, Vector3 contactPoint, Vector3 displacement, float deltaTime)
         {
             if (!MayBePushed(door))
@@ -586,7 +587,7 @@ namespace TarkovVR.Source.Player.Interactions
             float radius = lever.magnitude;
             if (radius < minHingeRadius)
                 return false;
-            // A positive angle moves the point along axis x lever
+            // A positive angle moves the point along axis x lever (cross product)
             float travel = Vector3.Dot(displacement, Vector3.Cross(axis, lever) / radius);
             if (Mathf.Abs(travel) < 1e-5f)
                 return true;
@@ -601,8 +602,8 @@ namespace TarkovVR.Source.Player.Interactions
             return !(atStop && pushedSpeed != speed);
         }
 
-        // An angle kept within the door's range, measured from a known in-range angle (a wide door's range comes near 180 degrees,
-        // where an absolute DeltaAngle would wrap); a speed out past the stop is stopped
+        // Clamps an angle to the door's range, measured from a known in-range angle (a wide door's range comes near 180 degrees,
+        // where an absolute DeltaAngle would wrap). A velocity heading out past a stop is zeroed.
         internal static float ClampToRange(Door door, float referenceAngle, float angle, ref float angularVelocity, out bool atStop)
         {
             float span = Span(door);
@@ -649,7 +650,7 @@ namespace TarkovVR.Source.Player.Interactions
                     if (run.driver == null)
                     {
                         if (run.latched)
-                            run.door.CurrentAngle = run.door.CloseAngle;    // the give of a latched door back
+                            run.door.CurrentAngle = run.door.CloseAngle;    // undo a latched door's rattle
                         else
                         {
                             float releaseSpeed = 0f;
@@ -684,8 +685,8 @@ namespace TarkovVR.Source.Player.Interactions
             hold.door = null;
         }
 
-        // The door's speed (deg/s) from the hand's velocity at the point it held, as the tracking runtime reports it this frame (the
-        // grenade's throw velocity: OpenXR's palm, else SteamVR's controller), along the door's swing there
+        // The door's speed (deg/s) from the hand's velocity at the held point, along the door's swing there. The velocity is what the
+        // tracking runtime reports this frame, the same as a grenade throw uses (OpenXR's palm, else SteamVR's controller).
         private static bool TryReleaseSpeed(Hold hold, Door door, out float degreesPerSecond)
         {
             degreesPerSecond = 0f;
@@ -706,7 +707,7 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // The hand's swing speed with the most in it over releasePeakWindow, the let-go's own included
+        // The hand's fastest swing speed over releasePeakWindow, including the one at the let-go
         private static float FastestRecentSwing(Hold hold, float atLetGo)
         {
             float fastest = atLetGo;
@@ -729,7 +730,7 @@ namespace TarkovVR.Source.Player.Interactions
             hold.swingSamples = Mathf.Min(hold.swingSamples + 1, hold.swingSpeeds.Length);
         }
 
-        // How far a door let go of at this speed coasts (friction + drag, no stop in the way)
+        // How far a door released at this speed coasts (friction + drag, with no stop in the way)
         private static float CoastDegrees(float speed)
         {
             if (swingFriction <= 0f)
@@ -753,7 +754,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (hold.held)
             {
-                // (the two-handing edges and the equip paths set the arm's target: ours while the door is held)
+                // Two-handing changes and the equip paths also set the arm's target; while the door is held it must be the latch
                 if (hold.armIk != null && hold.armIk.solver.target != hold.latch)
                     hold.armIk.solver.target = hold.latch;
                 if (hold.latch != null && hold.latchSnapLocal != Vector3.zero)
@@ -766,7 +767,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!hold.releasing)
                 return;
             float progress = (Time.time - hold.releaseStartTime) / Mathf.Max(handReleaseTime, 0.001f);
-            // Something else took the arm while it eased back: it's theirs
+            // If something else took the arm while it eased back, leave the arm to it
             if (progress >= 1f || hold.rig == null || hold.latch == null || hold.armIk == null || hold.armIk.solver.target != hold.latch)
             {
                 EndRelease(hold);
@@ -824,7 +825,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return false;
             if (door.DoorState == EDoorState.Interacting || door.DoorState == EDoorState.Breaching)
             {
-                // Someone else's interaction swings it now (and no last packet of ours stops it on the other players)
+                // Someone else's interaction swings it now, and no final packet of ours may stop it for the other players
                 run.swinging = false;
                 run.angularVelocity = 0f;
                 run.sent = false;
@@ -839,7 +840,7 @@ namespace TarkovVR.Source.Player.Interactions
                     run.gunMoved = true;            // the gun's physics body moves it this frame
                 else
                 {
-                    // The gun off it: it carries on with the speed the push left it
+                    // The gun is off it: it carries on at the speed the push left it with
                     if (run.gunMoved)
                     {
                         run.gunMoved = false;
@@ -876,7 +877,7 @@ namespace TarkovVR.Source.Player.Interactions
                     handleTransform.localPosition = Vector3.Lerp(run.handle.DefaultPosition, run.handle.OpenPosition, turn);
             }
 
-            // The latch giving way, the handle back up; a locked handle hitting its stop
+            // Sounds and haptics: the latch giving way, the handle back up, a locked handle hitting its stop
             if (!locked && !run.latchClicked && turn >= unlatchTurn)
             {
                 run.latchClicked = true;
@@ -923,7 +924,7 @@ namespace TarkovVR.Source.Player.Interactions
             return hold.turnAtGrab + degrees / run.handleFullTurn;
         }
 
-        // The part of a rotation about an axis, signed by it
+        // The twist part of a rotation about an axis, in degrees, signed by the axis direction
         internal static float TwistDegrees(Quaternion rotation, Vector3 axis)
         {
             Vector3 along = Vector3.Project(new Vector3(rotation.x, rotation.y, rotation.z), axis);
@@ -938,7 +939,7 @@ namespace TarkovVR.Source.Player.Interactions
             return Vector3.Dot(twistAxis, axis) >= 0f ? angle : -angle;
         }
 
-        // The door's held point goes where the hand has moved since the grab: the angle about the hinge that puts it closest
+        // Moves the door's held point to follow the hand since the grab: picks the angle about the hinge that puts it closest
         private static void DriveByHand(DoorRun run, Hold hold, float deltaTime)
         {
             Door door = run.door;
@@ -948,7 +949,7 @@ namespace TarkovVR.Source.Player.Interactions
             Vector3 target = hold.heldPointAtGrab + (ControllerPoint(hold) - hold.controllerAtGrab);
             RememberSwing(hold, door);
 
-            // Pulled off (walked off, pulled on past the door's stop or the body)
+            // The hand was pulled off (walked away, or kept pulling past the door's stop or the body)
             if (!StillOnTheHand(hold, door, target))
             {
                 Release(hold, "pulled off");
@@ -976,7 +977,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             else
             {
-                // In its frame: it gives a little, and knocks against the latch
+                // Latched in its frame: it gives a little and knocks against the latch
                 float give = rattleDegrees / Mathf.Abs(span);
                 newOpenness = Mathf.Clamp(desiredOpenness, 0f, give);
                 bool atStop = desiredOpenness > give * 1.5f;
@@ -1023,11 +1024,11 @@ namespace TarkovVR.Source.Player.Interactions
             return from + turn * clear;
         }
 
-        // How deep the door at this angle is in the body: its colliders that collide with players (Door.CollisionColliders), turned
-        // there about the hinge (the setter only turns the door about its origin)
+        // How deep the door at this angle is in the body. Uses the colliders that collide with players (Door.CollisionColliders),
+        // turned to that angle about the hinge (the CurrentAngle setter only turns the door about its origin).
         private static float DepthInBody(Door door, float angle, Collider body) => DepthInBody(door, angle, body, body.transform.position);
 
-        // ...with the body at bodyPosition (where its next step takes it)
+        // The same, with the body at bodyPosition (where its next step takes it)
         private static float DepthInBody(Door door, float angle, Collider body, Vector3 bodyPosition)
         {
             Vector3 hinge = door.transform.position;
@@ -1049,9 +1050,9 @@ namespace TarkovVR.Source.Player.Interactions
             return deepest;
         }
 
-        // The body about to walk into a door that's free to swing: the door turned just clear of it, through the push the gun and hands use
-        // (its coast after, the state, the sounds and the co-op sync follow). intendedMove = this frame's step before the character
-        // controller's collision (MovementState.ApplyMotion), zero for the room-scale walk.
+        // When the body is about to walk into a door that's free to swing, the door is turned just clear of it through the same push the
+        // gun and hands use (so the coast, state, sounds and co-op sync follow). intendedMove = this frame's step before the character
+        // controller's collision (MovementState.ApplyMotion); zero for physical room-scale walking.
         internal static void BodyPush(Vector3 intendedMove, float deltaTime)
         {
             if (!bodyPushesDoors || !Active || VRGlobals.player == null || VRGlobals.menuOpen)
@@ -1083,7 +1084,7 @@ namespace TarkovVR.Source.Player.Interactions
             float current = door.CurrentAngle;
             if (DepthInBody(door, current, body, bodyPosition) <= 0f)
                 return;
-            // The way that frees it
+            // Find the direction that frees it
             const float probe = 2f;
             float opening = DepthInBody(door, current + probe, body, bodyPosition);
             float closing = DepthInBody(door, current - probe, body, bodyPosition);
@@ -1143,9 +1144,9 @@ namespace TarkovVR.Source.Player.Interactions
             return player != null && player.CharacterController != null ? player.CharacterController.GetCollider() : null;
         }
 
-        // The controller's palm within breakDistance of where the hand holds the door. Not the arm's reach from the shoulder: the shoulders
-        // are placed from the headset, and a real shoulder comes forward reaching out, so a hand on a handle at a comfortable stretch reads
-        // at the arm's full length already.
+        // True while the controller's palm is within breakDistance of where the hand holds the door. Not measured as arm reach from the
+        // shoulder: the shoulders are placed from the headset, and a real shoulder comes forward when reaching, so a comfortable stretch
+        // to a handle would already read as the arm's full length.
         private static bool StillOnTheHand(Hold hold, Door door, Vector3 target)
         {
             Vector3 heldNow = door.transform.TransformPoint(hold.heldPointInDoor);
@@ -1161,7 +1162,7 @@ namespace TarkovVR.Source.Player.Interactions
             return false;
         }
 
-        // Let go of while moving: it carries on, slowing down
+        // A door released while moving carries on, slowing down
         private static void Swing(DoorRun run, float deltaTime)
         {
             Door door = run.door;
@@ -1182,7 +1183,7 @@ namespace TarkovVR.Source.Player.Interactions
             float allowed = BlockedByBody(door, door.CurrentAngle, nextAngle);
             if (allowed != nextAngle)
             {
-                // Against the body: it stops there
+                // It stops against the body
                 nextAngle = allowed;
                 run.swinging = false;
                 run.angularVelocity = 0f;
@@ -1201,7 +1202,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // In its frame with the handle up (or locked): the latch holds it. A turned handle (or no handle to turn) frees it.
+        // In its frame with the handle up (or locked), the latch holds the door. A turned handle (or no handle to turn) frees it.
         private static void UpdateLatched(DoorRun run)
         {
             Door door = run.door;
@@ -1216,7 +1217,7 @@ namespace TarkovVR.Source.Player.Interactions
                 run.latched = true;
         }
 
-        // Tarkov's own Open when it leaves its frame, Close when it's back in it
+        // Runs Tarkov's own Open when the door leaves its frame, and Close when it's back in it
         private static void UpdateGameState(DoorRun run)
         {
             Door door = run.door;
@@ -1248,7 +1249,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool TryInteraction(Door door, EInteractionType type)
         {
             EFT.Player player = VRGlobals.player;
-            // (its door interaction stands the player up from prone)
+            // Not while prone: Tarkov's door interaction stands the player up
             if (player == null || player.MovementContext == null || player.MovementContext.IsInPronePose)
                 return false;
             player.MovementContext.ResetCanUsePropState();
@@ -1306,7 +1307,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         internal static Vector3 HingeAxis(Door door) => WorldInteractiveObject.GetRotationAxis(door.DoorAxis, door.transform.parent).normalized;
 
-        // The palm as the controller has it: the rig hand without HandCollision's clamp (the door is in the way of it)
+        // The palm where the controller has it: the rig hand without HandCollision's clamp (the door is in its way)
         private static Vector3 ControllerPoint(Hold hold)
         {
             Transform rig = hold.rig;
@@ -1325,7 +1326,7 @@ namespace TarkovVR.Source.Player.Interactions
                 door.PlaySoundAtPoint(position, clip, BetterAudio.AudioSourceGroupType.InteractiveObjects, rolloff, volume);
         }
 
-        // Louder the faster it hits the frame
+        // Louder the faster the door hits the frame
         private static void PlayShut(Door door, float speed)
         {
             Vector2 range = door.ShutSoundVolumeRange;
@@ -1338,11 +1339,12 @@ namespace TarkovVR.Source.Player.Interactions
             HapticMixer.PlayPulse(hold.dominant ? Handedness.GunHandSource : Handedness.OffHandSource, amplitude, duration, frequency);
         }
 
-        // FIKA syncs a door's open / shut only: the angle and the handle while a hand moves it, then a last one (reliable)
+        // FIKA only syncs a door's open / shut state. This sends the angle and handle turn while a hand moves the door,
+        // then one final reliable packet.
         private static void Sync(DoorRun run, bool final)
         {
             Door door = run.door;
-            // (not while Tarkov's own swing moves it - a kick, someone's Open: FIKA's event plays that swing on the others)
+            // Not while Tarkov's own swing moves it (a kick, someone's Open): FIKA's event plays that swing for the others
             if (!InstalledMods.FIKAInstalled || syncBroken || door.ForceLocalInteraction || door.DoorState == EDoorState.Locked
                 || door.DoorState == EDoorState.Interacting || door.DoorState == EDoorState.Breaching || string.IsNullOrEmpty(door.Id))
                 return;
@@ -1377,12 +1379,12 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Companion-DLL isolation: the SPT-VR-FikaSync reference is only JITted with FIKA installed
+        // Kept in its own method so the SPT-VR-FikaSync reference is only JIT-compiled with FIKA installed
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void FikaSendDoor(string doorId, float angle, float handleTurn, bool final)
             => SptVrFikaSync.FikaVrSync.SendDoor(doorId, angle, handleTurn, final);
 
-        // Another VR player's door (SPT-VR-FikaSync): ours wins while our hand is on it
+        // For door packets from another VR player (SPT-VR-FikaSync): ours wins while our hand moves it or it's still swinging
         internal static bool DrivesDoor(WorldInteractiveObject door)
         {
             return door is Door ownDoor && runs.TryGetValue(ownDoor, out DoorRun run) && (run.driver != null || run.swinging);

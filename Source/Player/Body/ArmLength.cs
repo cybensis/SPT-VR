@@ -9,13 +9,13 @@ namespace TarkovVR.Source.Player.VR
 {
     // Makes the rendered arm as long as the player's real one. Holding the height reset with both arms straight
     // out measures it; until then it's estimated from eye height.
-    // The bones are moved along the arm instead of scaled: a scale carries down into the hand and shears it, this
-    // only stretches the skin between the joints. The arm solver re-reads the bone lengths every frame
-    // (IKSolverTrigonometric.OnUpdate), so it just follows.
+    // The bones are moved along the arm instead of scaled: a scale carries down into the hand and shears it, while moving
+    // them only stretches the skin between the joints. The arm solver re-reads the bone lengths every frame
+    // (IKSolverTrigonometric.OnUpdate), so it follows on its own.
     internal static class ArmLength
     {
         public static float minWristSpan = 1f;            // m; arms at the sides or held forward stay well under this
-        public static float shoulderBelowHead = 0.18f;    // m; same drop OverrideShoulders places the shoulders at
+        public static float shoulderBelowHead = 0.18f;    // m; the same drop below the head that OverrideShoulders uses
         public static float maxOffShoulderHeight = 0.3f;  // m; how far above or below the shoulders still counts as arms out
         public static float maxSideDot = -0.6f;           // the two arms seen from the head, flat: -1 = exactly opposite sides
         public static float shoulderShareOfSpan = 0.23f;  // the shoulder joints take about this much of the wrist to wrist span
@@ -23,7 +23,8 @@ namespace TarkovVR.Source.Player.VR
         public static float minScale = 0.8f;
         public static float maxScale = 1.3f;              // the skin stretch starts to show past about 15%; this only guards a bad measurement
 
-        // Valve's hand skeleton measured off an Index controller (the [HandAlign] log): right hand, mirrored in X for the left
+        // The wrist in the controller's frame, from Valve's hand skeleton on an Index controller (the [HandAlign] log).
+        // Right hand; mirrored in X for the left.
         private static readonly Vector3 indexWristInController = new Vector3(0.034f, 0.037f, -0.165f);
         private const float OTHER_CONTROLLER_WRIST_BACK = 0.175f;
 
@@ -62,7 +63,7 @@ namespace TarkovVR.Source.Player.VR
                 arm.joints[i].localPosition = arm.naturalLocals[i] * scale;
         }
 
-        // Only on a new rig, so the lengths captured are always the model's own and never an already lengthened arm
+        // Runs only on a new rig, so the captured lengths are always the model's own, never an already lengthened arm
         private static void CaptureArm(ArmBones arm, LimbIK armIk)
         {
             Transform elbow = armIk.solver.bone2.transform;
@@ -111,16 +112,16 @@ namespace TarkovVR.Source.Player.VR
             float measured = VRSettings.GetArmLength();
             if (measured > 0f)
                 return measured;
-            // Sitting says nothing about how tall you are
+            // Seated eye height says nothing about the player's height
             if (VRSettings.GetSeatedMode() || VRGlobals.vrPlayer == null)
                 return 0f;
             return VRGlobals.vrPlayer.initPos.y * armPerEyeHeight;
         }
 
         //---------------------------------------------------------------------------------------------------------
-        // Called by the height reset. With the arms straight out it also measures the arm; with them anywhere else
-        // the saved length stays. Hand action poses + the raw headset pose: the only head and hand pair that's in the
-        // same space in the hideout too.
+        // Called by the height reset. With the arms straight out it also measures the arm; otherwise the saved length
+        // stays. It uses the hand action poses and the raw headset pose, the only head and hand pair that share one
+        // space in the hideout too.
         public static void TryMeasure()
         {
             if (VRSettings.GetLeftHandedMode() || !HeadTracking.RawHmdPose(out Vector3 head, out _))

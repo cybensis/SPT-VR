@@ -2,10 +2,10 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Controls
 {
-    // B (Y left-handed) is Escape in a menu and the gun's out of one: the mag release with Manual Reload on, Tarkov's reload and the
-    // double tap's drop with it off. Backing out of menus it gets pressed fast, and the presses after the one that closed the menu
-    // would go to the gun. So for a moment after a menu closes the button does nothing to the gun: each press in that moment starts
-    // it over, and one still held when it ends counts only once it's let go.
+    // B (Y in left-handed mode) is Escape in a menu and a gun button outside one: the magazine release with Manual Reload on, or Tarkov's
+    // reload and the double-tap drop with it off. Players press it quickly to back out of menus, and the presses after the one that closed
+    // the menu would reach the gun. So for a short time after a menu closes the button does nothing to the gun. Each press in that time
+    // restarts the wait, and a press still held when the wait ends only counts once it is released.
     public static class MenuExitButtonWait
     {
         public static float waitTime = 0.6f;    // s after a menu closes, or after the last press while waiting
@@ -15,8 +15,8 @@ namespace TarkovVR.Source.Controls
         private static float blockedUntil = -10f;
         private static bool downWhileBlocked;
 
-        // True while the button must not act on the gun. Worked out once a frame; VRInputManager.UpdateCommands calls Tick every frame,
-        // menus included, so the moment a menu closes is never missed.
+        // True while the button must not act on the gun. Computed once per frame. VRInputManager.UpdateCommands calls Tick every frame,
+        // menus included, so the frame a menu closes is never missed.
         public static bool Blocks
         {
             get
@@ -32,7 +32,7 @@ namespace TarkovVR.Source.Controls
                 return;
             evaluatedFrame = Time.frameCount;
 
-            // Either upper button: the off hand's is Escape in the game too
+            // Either upper button counts: the off hand's is also Escape in the game
             bool buttonDown = Handedness.GunHandUpperButton.state || Handedness.OffHandUpperButton.state;
             bool pressedNow = buttonDown && !downWhileBlocked;
             if (VRGlobals.menuOpen || (Time.time < blockedUntil && pressedNow))

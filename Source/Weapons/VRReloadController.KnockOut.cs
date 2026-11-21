@@ -6,11 +6,11 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // An AK's magazine knocked out with the next one. The new magazine in the off hand, its body pushed forward into the paddle catch
-    // behind the gun's magazine: the catch lets go and the old magazine leaves with the push - the gun's own motion plus the push's
-    // share forward, rocking off its hinge about the gun's rock-in axis - then it's loose loot like any dropped magazine. Only guns
-    // whose magazines rock in (the paddle behind the magazine), not a belt box's hinge. The B drop's path (RunDrop): synced and
-    // placed the same way.
+    // Knocking an AK's magazine out with the next one. When the body of the new magazine in the off hand is pushed forward into the
+    // paddle catch behind the gun's magazine, the catch lets go and the old magazine leaves with the push: the gun's own motion plus a
+    // share of the push forward, rocking off its hinge about the gun's rock-in axis. After that it is loose loot like any dropped
+    // magazine. Only for guns whose magazines rock in (paddle behind the magazine), not a belt box's hinge. It goes through the B
+    // drop's path (RunDrop), so it is synced and placed the same way.
     public static partial class VRReloadController
     {
         public static float knockContactRadius = 0.03f;     // m from the catch to the held magazine's body that counts as touching it
@@ -30,7 +30,7 @@ namespace TarkovVR.Source.Weapons
         private static MeshFilter knockBody;                // the held magazine's body (its biggest mesh)
         private static GameObject knockZoneViz;
 
-        // Every Tick, after the grabs: the held new magazine against the gun's catch
+        // Runs every Tick, after the grabs: checks the held new magazine against the gun's catch
         private static void TickKnockOut()
         {
             bool showZone = false;
@@ -58,7 +58,7 @@ namespace TarkovVR.Source.Weapons
                 showZone = debugZones;
                 zoneAt = catchPoint;
 
-                // The gun's own motion at the catch (the body, the gun hand): the push is the held magazine's motion against it
+                // The gun's own motion at the catch (from the body and the gun hand). The push is the held magazine's motion relative to it.
                 float now = Time.time;
                 float sinceLast = now - knockCatchLastTime;
                 bool measured = knockCatchLastTime > 0f && sinceLast > 1e-4f && sinceLast < 0.1f;
@@ -116,7 +116,8 @@ namespace TarkovVR.Source.Weapons
             }
         }
 
-        // The catch: the gun's release part as its own measure found it (else the first part named like one), at its mesh if it has one
+        // The catch: the gun's release part as EnsureReleaseParts found it (else the first part named like one), measured at its mesh
+        // if it has one
         private static bool TryGetKnockCatch(FirearmController firearmController, Weapon weapon, Slot magazineSlot, out Vector3 catchPoint)
         {
             catchPoint = Vector3.zero;

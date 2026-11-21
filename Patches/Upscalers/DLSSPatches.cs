@@ -9,7 +9,7 @@ namespace TarkovVR.Patches.Upscalers
     [HarmonyPatch]
     internal class DLSSPatches
     {
-        // This wrapper manages separate DLSSWrapper instances for each eye in VR
+        // Runs DLSS through StereoDLSSWrapper, which keeps a separate DLSSWrapper for each eye
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         private static StereoDLSSWrapper _stereoDLSSWrapper;
 
@@ -59,7 +59,7 @@ namespace TarkovVR.Patches.Upscalers
             return false;
         }
 
-        // Adds cleanup for the stereo DLSS wrapper
+        // Destroys the stereo DLSS wrapper along with SSAAImpl
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SSAAImpl), "OnDestroy")]
@@ -93,7 +93,7 @@ namespace TarkovVR.Patches.Upscalers
         // One DLSSWrapper instance per eye
         private DLSSWrapper[] _wrappers = new DLSSWrapper[NUM_EYES];
 
-        // Expose properties from the active wrapper (or sync across both)
+        // The setters write to both eyes' wrappers; the getters read the first one.
         public float Sharpness
         {
             get => _wrappers[0].Sharpness;

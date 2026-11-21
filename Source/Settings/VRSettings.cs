@@ -95,25 +95,25 @@ namespace TarkovVR.Source.Settings
             public int opticRenderResolution { get; set; }
             public float lodBias { get; set; }
             public float cullDistance { get; set; }
-            // Start with OpenXR (default) or the OpenVR / SteamVR plugin (false; no menu setting yet)
+            // true = start with OpenXR (default), false = the OpenVR / SteamVR plugin. No menu setting yet.
             public bool useOpenXR { get; set; }
             public bool virtualStock { get; set; }
             public bool chestSling { get; set; }
             // Guns only (the gun's grip, the foregrip, a mounted gun): a grip press takes hold, the next press lets go
             public bool gunGripToggle { get; set; }
-            // Doors by hand (PhysicalDoors): turn the handle, swing the door. Off = the grip opens / closes them as before.
+            // Doors by hand (PhysicalDoors): turn the handle, swing the door. Off = a grip opens / closes the door.
             public bool physicalDoors { get; set; }
-            // The gaze menu (open / breach / unlock...) hidden for the doors a hand works (PhysicalDoors.HidesMenu)
+            // Hides the gaze menu (open / breach / unlock...) for doors moved by hand (PhysicalDoors.HidesMenu)
             public bool disableDoorContextMenu { get; set; }
-            // The guns' body spots placed by hand (GunSpots), per slot: the grip point x, y, z and the Weapon_root rotation x, y, z, w in
-            // the body's frame. null = the default spot. Plain floats: Newtonsoft can't write a Vector3 (its normalized loops).
+            // Gun body spots placed by hand (GunSpots), per slot: the grip point x, y, z and the Weapon_root rotation x, y, z, w in the
+            // body's frame. null = the default spot. Plain floats, because Newtonsoft can't write a Vector3 (its normalized property loops).
             public float[] gunSpotChest { get; set; }
             public float[] gunSpotBack { get; set; }
             public float[] gunSpotHip { get; set; }
-            // The grenade slot moved by hand (GrenadeSlot): the grenade's middle x, y, z from the neck and its body's rotation x, y, z, w,
-            // body frame
+            // The grenade slot placed by hand (GrenadeSlot): the grenade's middle x, y, z relative to the neck and its body's rotation
+            // x, y, z, w, in the body frame
             public float[] grenadeSlotMiddle { get; set; }
-            // Older saved format: the grenade model root's pose (~40 cm off the grenade), turned into grenadeSlotMiddle once and cleared
+            // Older saved format: the grenade model root's pose (~40 cm from the grenade). Converted to grenadeSlotMiddle once, then cleared.
             public float[] grenadeSlot { get; set; }
             public float armLength { get; set; }    // m, shoulder joint to wrist; 0 = never measured
             // On guns with detachable magazines B doesn't run Tarkov's reload: a press drops the magazine, held = the off hand can pull it out
@@ -184,7 +184,6 @@ namespace TarkovVR.Source.Settings
                 viveWandCrouchTrackpadThreshold = 0.7f;
                 viveWandVaultHoldTime = 0.3f;
             }
-            // Add more settings as needed
         }
 
         private static SettingsScreen settingsUi;
@@ -228,7 +227,7 @@ namespace TarkovVR.Source.Settings
             }
             else
             {
-                settings = new ModSettings(); // Return default settings if file doesn't exist
+                settings = new ModSettings(); // Default settings if the file doesn't exist
             }
         }
 
@@ -243,10 +242,10 @@ namespace TarkovVR.Source.Settings
         }
 
         // Turns one of EFT's discrete SelectSlider controls into a continuous slider over [min,max]. SelectSlider.Awake()
-        // forces wholeNumbers = true + an int-flooring listener + one notch per value, and our panels are cloned from an
+        // forces wholeNumbers = true, an int-flooring listener and one notch per value, and our panels are cloned from an
         // inactive tab, so that Awake runs when the tab is first shown, after this method. The SmoothSlider component
         // therefore re-applies the continuous config in OnEnable (after Awake, every time the panel is shown).
-        // Call after BindIndexTo (which builds + shows the control).
+        // Call after BindIndexTo (which builds and shows the control).
         private static void MakeSliderSmooth(SettingSelectSlider control, float min, float max,
                                              Func<float> getValue, Action<float> onChange, Func<float, string> format)
         {
@@ -261,8 +260,8 @@ namespace TarkovVR.Source.Settings
             }
 
             // BindIndexTo bound this slider to the real OverallVolume (master volume) GameSetting: it sets
-            // SelectSlider.action_0 = (index => OverallVolume.Value = index), applied to the audio on save. Sever it, or
-            // saving pushes our slider value into the master volume and mutes the game. SmoothSlider writes the actual
+            // SelectSlider.action_0 = (index => OverallVolume.Value = index), applied to the audio on save. That binding must be
+            // cut, or saving pushes our slider value into the master volume and mutes the game. SmoothSlider writes the actual
             // setting through the Unity slider's own onValueChanged.
             sel._onValueChanged = null;
 
@@ -277,7 +276,7 @@ namespace TarkovVR.Source.Settings
             cfg.getValue = getValue;
             cfg.onChange = onChange;
             cfg.format = format;
-            // Apply now only if the panel is already active (SelectSlider.Awake has run). Cloned inactive (the usual case),
+            // Apply now only if the panel is already active (SelectSlider.Awake has run). If it was cloned inactive (the usual case),
             // don't: our onChange listener must not be attached when the deferred Awake rounds the handle on first show.
             // OnEnable does the full setup (and reseeds from getValue) once the panel appears.
             if (sel.gameObject.activeInHierarchy)
@@ -286,12 +285,12 @@ namespace TarkovVR.Source.Settings
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The "VR" tab: one panel, a category picker on top and that category's rows under it (the other categories' rows hidden). A row
-        // that only matters with another option on (Row.shownWhen) is hidden while it's off; RefreshRows after every change.
+        // that only matters while another option is on (Row.shownWhen) is hidden while that option is off; RefreshRows re-checks after every change.
 
         private enum Category { Movement, Weapons, HandsAndBody, Interaction, Graphics, DesktopView }
         private static readonly string[] CATEGORY_NAMES = { "Movement", "Weapons", "Hands & Body", "Interaction", "Graphics", "Desktop View" };
         private const int EVERY_CATEGORY = -1;
-        // Adds its own settings tab to this screen (a registered group, shown by SettingsScreen.ShowScreen - which hides ours)
+        // This mod adds its own settings tab to this screen (a registered group shown by SettingsScreen.ShowScreen, which hides ours)
         private const string INTEGRATED_CONFIGURATION_MANAGER_ID = "com.sage.integratedconfigurationmanager";
 
         private static readonly string[] MOVEMENT_MODES = { "Head-based", "Controller-based", "Joystick only" };
@@ -323,8 +322,8 @@ namespace TarkovVR.Source.Settings
             vrSettingsButton.transform.localRotation = Quaternion.identity;
             vrSettingsButton.transform.localPosition = Vector3.zero;
             vrSettingsButton.name = "vrSettingsToggle";
-            // Straight after the game's own tabs, whichever runs first: another mod's tab added at the end of the row (Integrated
-            // Configuration Manager's PLUGINS) then sits next to VR
+            // Placed straight after the game's own tabs, whichever mod runs first, so another mod's tab added at the end of the row
+            // (Integrated Configuration Manager's PLUGINS) sits next to VR
             vrSettingsButton.transform.SetSiblingIndex(settingsUi._controlsButton.transform.GetSiblingIndex() + 1);
             if (BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(INTEGRATED_CONFIGURATION_MANAGER_ID))
                 Plugin.MyLog.LogInfo("[VRSettings] Integrated Configuration Manager found: its tab goes after the VR tab");
@@ -490,7 +489,8 @@ namespace TarkovVR.Source.Settings
             shadowOptsToggle = AddDropDown(graphics, "Shadows", SHADOW_OPTIONS, SHADOW_OPTIONS[Mathf.Clamp((int)settings.shadowOpt, 0, 2)], ChangeShadowOpts);
             // The hideout's ~100 shadowed lights are most of its frame time
             AddToggle(graphics, "Disable Hideout Shadows (Saves FPS)", settings.hideoutShadowsOff, SetHideoutShadowsOff);
-            // FoveatedMask's values are BepInEx config entries (SixBench A/Bs them), not ModSettings; its debug options stay in F12
+            // FoveatedMask's values are BepInEx config entries (so the SixBench benchmark tool can switch them), not ModSettings;
+            // its debug options stay in the F12 config menu
             foveatedToggle = AddToggle(graphics, "Foveated Rendering", TarkovVR.Source.Graphics.FoveatedMask.IsEnabled,
                 TarkovVR.Source.Graphics.FoveatedMask.SetEnabled, tooltip: "Less detail toward the edges of each lens, for GPU time");
             AddSlider(graphics, "Foveated Inner Radius", 0.2f, 1.2f, () => TarkovVR.Source.Graphics.FoveatedMask.InnerRadius,
@@ -529,8 +529,8 @@ namespace TarkovVR.Source.Settings
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Rows. Each control is built off a real game setting (BindTo / BindIndexTo make the control); its change action is replaced, so
-        // nothing is ever written to that setting (a slider: MakeSliderSmooth cuts it).
+        // Rows. Each control is built from a real game setting (BindTo / BindIndexTo create the control). Its change action is replaced, so
+        // nothing is ever written to that setting (for a slider, MakeSliderSmooth cuts the binding).
 
         private static SettingToggle AddToggle(int category, string label, bool value, Action<bool> onChange, Func<bool> shownWhen = null,
                                                string tooltip = null)
@@ -581,7 +581,7 @@ namespace TarkovVR.Source.Settings
         {
             SettingSelectSlider control = rowBuilder.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, rowsPanel);
             control.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            // (it's bound to the master volume, which a save applies)
+            // It is bound to the master volume, which a save applies, so the binding is cut
             control.Slider._onValueChanged = null;
             control.Slider.gameObject.SetActive(false);
             control.Text.gameObject.SetActive(false);
@@ -638,7 +638,7 @@ namespace TarkovVR.Source.Settings
         private static ScrollRect SetupScrollbar(GameObject vrSettings)
         {
             const float scrollbarWidth = 10f;
-            const float reservedVertical = 200f;  // canvas space taken by header + tabs above the panel; tune to taste
+            const float reservedVertical = 200f;  // canvas space taken by the header and tabs above the panel
 
             SoundSettingsTab tab = vrSettings.GetComponent<SoundSettingsTab>();
             RectTransform contentRT = tab._slidersSection.GetComponent<RectTransform>();
@@ -753,7 +753,7 @@ namespace TarkovVR.Source.Settings
                 return;
             settingsUi._currentTab.gameObject.active = false;
             vrSettingsObject.active = true;
-            // (its value is a BepInEx config entry, which F12 can change while the menu is shut)
+            // Its value is a BepInEx config entry, which the F12 menu can change while this menu is closed
             if (foveatedToggle != null)
                 foveatedToggle.Toggle.UpdateValue(TarkovVR.Source.Graphics.FoveatedMask.IsEnabled, sendCallback: false);
             RefreshRows();
@@ -889,8 +889,8 @@ namespace TarkovVR.Source.Settings
             SaveSettings();
         }
 
-        // The grenade slot moved by hand (GrenadeSlot): the grenade's middle from the neck and its body's rotation, body frame. Saved
-        // straight away.
+        // The grenade slot placed by hand (GrenadeSlot): the grenade's middle relative to the neck and its body's rotation, in the body
+        // frame. Saved straight away.
         public static bool GetGrenadeSlot(out Vector3 middle, out Quaternion rotation)
         {
             return ReadPose(settings != null ? settings.grenadeSlotMiddle : null, out middle, out rotation);
@@ -904,8 +904,8 @@ namespace TarkovVR.Source.Settings
             SaveSettings();
         }
 
-        // The older saved placement (grenadeSlot): the pose of the model's root, which sits ~40 cm off the grenade. GrenadeSlot turns
-        // it into the middle-and-body pose once it has a model to measure.
+        // The older saved placement (grenadeSlot): the pose of the model's root, which sits ~40 cm from the grenade. GrenadeSlot converts
+        // it to the middle-and-body pose once it has a model to measure.
         public static bool GetOldGrenadeSlot(out Vector3 rootPosition, out Quaternion rootRotation)
         {
             return ReadPose(settings != null ? settings.grenadeSlot : null, out rootPosition, out rootRotation);
@@ -935,7 +935,7 @@ namespace TarkovVR.Source.Settings
             settings.grenadeSlotMiddle = null;
             SaveSettings();
             Plugin.MyLog.LogInfo("[GunSpots] placed gun spots reset to the defaults");
-            // Back off without calling this again: a button, not a setting
+            // Switch the toggle back off without calling this again: it acts as a button, not a setting
             if (resetGunSpotsToggle != null)
                 resetGunSpotsToggle.Toggle.UpdateValue(false, sendCallback: false);
         }
@@ -1067,8 +1067,8 @@ namespace TarkovVR.Source.Settings
             return settings.enableSharpen;
         }
 
-        // The "Laser Pointer In Left Hand" toggle (stored as leftHandedMode, so saved settings keep their value): the laser and the
-        // menu controls on the left controller. The gun goes into the left hand by the hand swap (ChestHang), not by this.
+        // The "Laser Pointer In Left Hand" toggle (stored as leftHandedMode, so saved settings keep their value) puts the laser and the
+        // menu controls on the left controller. The gun goes into the left hand through the hand swap (ChestHang), not through this.
         private static void SetLeftHandedMode(bool toggle)
         {
             settings.leftHandedMode = toggle;
@@ -1076,8 +1076,8 @@ namespace TarkovVR.Source.Settings
                 VRGlobals.menuVRManager.SetLaserHand(toggle);
         }
 
-        // The mirrored left-handed mode is retired: always false, so everything that reads it (the arms' mirror, the gun hand's
-        // controller, the sticks, the holsters, the wrist panels) plays right-handed. The setting itself is the laser's hand
+        // Always false: the mirrored left-handed mode is not used, so everything that reads this (the arms' mirror, the gun hand's
+        // controller, the sticks, the holsters, the wrist panels) plays right-handed. The stored setting only picks the laser's hand
         // (GetLaserInLeftHand).
         public static bool GetLeftHandedMode()
         {
@@ -1089,7 +1089,7 @@ namespace TarkovVR.Source.Settings
             return settings.leftHandedMode;
         }
 
-        // Everything on the right stick on the left one and back (VRInput): for left-handed play, apart from the laser's hand
+        // Swaps what the right and left sticks do (VRInput), for left-handed play. The laser's hand is a separate setting.
         private static void SetSwapSticks(bool toggle)
         {
             settings.swapSticks = toggle;
@@ -1122,7 +1122,7 @@ namespace TarkovVR.Source.Settings
             settings.hideoutShadowsOff = off;
         }
 
-        // Degrees across the desktop window (a settings file without this field reads 0: the default then)
+        // Degrees across the desktop window (a settings file without this field reads 0, which gives the default)
         public static float GetDesktopViewFieldOfView()
         {
             return settings == null || settings.desktopViewFieldOfView < 1f ? 80f : Mathf.Clamp(settings.desktopViewFieldOfView, 30f, 150f);
@@ -1224,7 +1224,7 @@ namespace TarkovVR.Source.Settings
             settings.disableRunAnimation = turnOn;
         }
 
-        // A quick step or lean forward starts the run, back ends it (StepSprint)
+        // A quick step or lean forward starts a sprint, a step back ends it (StepSprint)
         public static bool GetStepToSprint()
         {
             return settings != null && settings.stepToSprint;

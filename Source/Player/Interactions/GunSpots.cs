@@ -9,19 +9,20 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // The guns' body spots placed by hand: a free hand on a gun at its spot (the chest sling, the shoulder, the hip - the gun in hands
-    // too while it hangs there), the trigger held holdSeconds -> the gun comes off its spot and rides that controller, position and
-    // angle -> letting go of the trigger leaves the slot's spot there, saved in ModSettings.json ("Reset Placed Gun Spots" clears them).
-    // Per slot, not per gun: the grip point (the R-hand marker) and the Weapon_root's rotation in the body's frame (ChestHang.BodyYaw:
-    // the neck and the body's yaw). ChestHang.SpotPose draws a placed spot instead of the default; the shoulder and hip zones stop
-    // taking a placed slot's gun (BodyWeapons). Not mirrored when the left-handed setting changes.
-    // Free hand: the off hand off the foregrip and not on a reload part, the scope, a weapon part, loot or the breath hold; the gun hand
-    // only with its gun slung or the hands empty (its trigger fires the gun in hand otherwise).
+    // Lets the player place the guns' body spots by hand. With a free hand on a gun at its spot (the chest sling, the shoulder or the
+    // hip; also the gun in hands while it hangs there), holding the trigger for holdSeconds takes the gun off its spot, and it follows
+    // that controller in position and angle. Releasing the trigger saves the slot's spot there, in ModSettings.json ("Reset Placed Gun
+    // Spots" clears them).
+    // Spots are per slot, not per gun: the grip point (the R-hand marker) and the Weapon_root's rotation, in the body's frame
+    // (ChestHang.BodyYaw: the neck and the body's yaw). ChestHang.SpotPose draws a placed spot instead of the default, and the shoulder
+    // and hip zones stop taking a placed slot's gun (BodyWeapons). Spots are not mirrored when the left-handed setting changes.
+    // A free hand is the off hand when it is off the foregrip and not on a reload part, the scope, a weapon part, loot or the breath
+    // hold. The gun hand counts only with its gun slung or the hands empty (otherwise its trigger fires the gun in hand).
     public static class GunSpots
     {
         public static bool enabled = true;
         public static float holdSeconds = 1f;   // trigger held on the gun before it comes off its spot into the hand
-        public static float holdSlack = 1.5f;   // the hold lasts while the hand stays within this much of grab reach (BodyWeapons' measure)
+        public static float holdSlack = 1.5f;   // the hold lasts while the hand's reach score (BodyWeapons.HandReach) stays under this
         public static bool debugLog = false;
 
         private static readonly EquipmentSlot[] slots = { EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster };
@@ -39,7 +40,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static readonly Hand offHand = new Hand { gunHand = false };
         private static readonly Hand gunHand = new Hand { gunHand = true };
 
-        // The placement under way: the gun rides placingHand's controller at the pose it had when it came off its spot
+        // The placement in progress: the gun follows placingHand's controller, keeping its pose relative to it from when it came off its spot
         private static Hand placingHand;
         private static EquipmentSlot placingSlot;
         private static Transform placingRoot;
@@ -51,19 +52,19 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool lastGunInLeftHand;
 
         private static bool Ticking => Time.frameCount - lastTickFrame <= 1;
-        // A hold or a placement under way (the off hand's weapon-part selection yields)
+        // A hold or placement is in progress (the off hand's weapon-part selection gives way to it)
         public static bool Busy => Ticking && (offHand.holding || gunHand.holding || placingHand != null);
         internal static bool IsPlacing(EquipmentSlot slot) => Ticking && placingHand != null && placingSlot == slot;
-        // The slot's gun is somewhere else than its old zone (BodyWeapons' shoulder / hip zones leave it alone)
+        // The slot's gun is not at its default zone (BodyWeapons' shoulder and hip zones leave it alone)
         internal static bool MovedOffZone(EquipmentSlot slot) => IsPlacing(slot) || (enabled && VRSettings.GetGunSpot(SlotIndex(slot), out _, out _));
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // From HandsInteractionController.Update (before its bail: also while supporting, menus excepted)
+        // Called from HandsInteractionController.Update before its early return, so it also runs while supporting (not in menus)
         public static void Tick()
         {
-            // After a gap (a menu), or with the gun changed hands (the off / gun hand are the other controllers now): nothing carries
-            // over, and a trigger already held isn't a fresh press
+            // After a gap (a menu), or when the gun changed hands (the off and gun hands are now the other controllers), nothing
+            // carries over, and a trigger already held doesn't count as a new press
             bool resync = !Ticking || Handedness.GunInLeftHand != lastGunInLeftHand;
             lastTickFrame = Time.frameCount;
             lastGunInLeftHand = Handedness.GunInLeftHand;
@@ -89,7 +90,7 @@ namespace TarkovVR.Source.Player.Interactions
             UpdateHold(gunHand, gunPressed, other: offHand);
         }
 
-        // Called by ChestHang.SpotPose for every gun it places: the spot being placed (on the hand), or the slot's placed spot
+        // Called by ChestHang.SpotPose for every gun it places. Returns the spot being placed (on the hand), or the slot's saved spot.
         internal static bool TryGetSpot(EquipmentSlot slot, Vector3 gripLocal, out Vector3 position, out Quaternion rotation)
         {
             if (IsPlacing(slot) && HandPose(placingHand, out Vector3 handPosition, out Quaternion handRotation))
@@ -114,7 +115,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (!hand.holding)
             {
-                // A fresh press on a gun at its spot, the other hand not already at it
+                // A new press on a gun at its spot, while the other hand isn't already holding it
                 if (!pressed || other.holding || !HandFree(hand) || !NearestSpotGun(hand, out EquipmentSlot slot, out Transform weaponRoot, out _))
                     return;
                 hand.holding = true;
@@ -124,7 +125,7 @@ namespace TarkovVR.Source.Player.Interactions
                 Haptic(hand, 0.15f, 0.04f);
                 return;
             }
-            // Let go, gone off the gun, or the hand taken by something else: no placement
+            // Trigger released, hand moved off the gun, or hand busy with something else: no placement
             if (!hand.triggerDown || !HandFree(hand) || ReachOf(hand, hand.slot, hand.weaponRoot) > holdSlack)
             {
                 hand.holding = false;
@@ -155,7 +156,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static void UpdatePlacing()
         {
-            // The gun left its spot meanwhile (taken into hands, a switch): nothing to place
+            // The gun left its spot meanwhile (taken into the hands, a weapon switch): nothing to place
             if (!SpotGun(placingSlot, out Transform weaponRoot, out _, out _, out _) || weaponRoot != placingRoot)
             {
                 CancelAll();
@@ -205,7 +206,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return false;
             if (hand.gunHand)
                 return (ChestHang.Hanging || VRGlobals.player.HandsIsEmpty) && !VRReloadController.GunHandHolds;
-            // Holding, not OwnsOffHand: its zones are grip zones, and the chest pouch's overlaps the chest sling
+            // OffHandHolds, not OwnsOffHand: OwnsOffHand's zones are grip zones, and the chest pouch zone overlaps the chest sling
             GunInteractionController parts = WeaponPatches.currentGunInteractController;
             return !VRGlobals.vrPlayer.isSupporting && !ChestHang.SupportOnly && !VRReloadController.OffHandHolds
                 && !VRReloadController.OffHandAtChargingHandle && !VRReloadController.OffHandAtBolt && hands.scopeTransform == null
@@ -252,7 +253,7 @@ namespace TarkovVR.Source.Player.Interactions
             return nearestRoot != null;
         }
 
-        // How near the hand is to that gun, still at that spot (MaxValue when it's gone)
+        // How near the hand is to that gun at that spot (MaxValue when the gun is no longer there)
         private static float ReachOf(Hand hand, EquipmentSlot slot, Transform expectedRoot)
         {
             if (!SpotGun(slot, out Transform weaponRoot, out Transform meshRoot, out _, out Vector3 grabPoint) || weaponRoot != expectedRoot)
@@ -261,14 +262,14 @@ namespace TarkovVR.Source.Player.Interactions
             return BodyWeapons.HandReach(weaponRoot, meshRoot, grabPoint, hand.touchPoints);
         }
 
-        // The rendered hand's palm, knuckles and fingertips: the arm that draws it (the off hand on the right arm while the gun is in the left hand)
+        // The rendered hand's palm, knuckles and fingertips, from the arm that draws it (the off hand is the right arm while the gun is in the left hand)
         private static void TouchPoints(Hand hand)
         {
             bool rightArm = hand.gunHand != Handedness.GunInLeftHand;
             VRGlobals.handsInteractionController.GetHandTouchPoints(rightArm, hand.touchPoints);
         }
 
-        // The controller's pose in the world: its tracking pose through the rig, the same frame the rig's hands are placed in
+        // The controller's world pose: its tracking pose transformed by the rig, the same frame the rig's hands are placed in
         private static bool HandPose(Hand hand, out Vector3 position, out Quaternion rotation)
         {
             position = Vector3.zero;

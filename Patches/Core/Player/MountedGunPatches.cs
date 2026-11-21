@@ -8,8 +8,9 @@ namespace TarkovVR.Patches.Core.Player
     [HarmonyPatch]
     internal class MountedGunPatches
     {
-        // Letting go of a mounted gun you took with empty hands: back to empty hands, not Tarkov's draw of your active weapon. FIKA's
-        // override calls this base and still sends the Leave (its observers do nothing on it; the hands change syncs itself).
+        // Letting go of a mounted gun that was taken with empty hands goes back to empty hands, instead of Tarkov drawing the
+        // active weapon. FIKA's override calls this base method and still sends the Leave. Its observers do nothing with it;
+        // the hands change syncs on its own.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), nameof(EFT.Player.OperateStationaryWeapon))]
         private static bool LeaveToEmptyHands(EFT.Player __instance, StationaryWeapon stationaryWeapon, StationaryWeaponPacket.EStationaryCommand command)
@@ -20,7 +21,7 @@ namespace TarkovVR.Patches.Core.Player
             return false;
         }
 
-        // On the gun: the body faces the aim and stands under your head, no step clips (MountedGun.MoveBody)
+        // While on the gun, MountedGun.MoveBody turns the body to the aim and keeps it under the head, without step animations
         [HarmonyPrefix]
         [HarmonyPatch(typeof(StationaryPlayerState), nameof(StationaryPlayerState.ManualAnimatorMoveUpdate))]
         private static bool BodyUnderTheHead(StationaryPlayerState __instance, float deltaTime)

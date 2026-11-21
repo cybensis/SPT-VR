@@ -6,10 +6,10 @@ using UnityEngine.XR.OpenXR.Features;
 
 namespace TarkovVR.Source.XR
 {
-    // A space Unity lets go of while the session runs (OpenXRFloorOrigin's request rebuilds the tracking space) is destroyed
-    // keepSeconds later, not at once. An OpenXR layer that queues frames (OFXR-Bridge's frame generation) can still hold a frame naming
-    // it: the runtime rejects that frame, the layer latches the error for every later frame call, and Unity shuts XR down (black
-    // headset). Hooked through the function lookup Unity lets every feature hook. Spaces still kept when the session ends go then.
+    // A space Unity releases while the session runs (OpenXRFloorOrigin's request rebuilds the tracking space) is destroyed keepSeconds
+    // later, not at once. An OpenXR layer that queues frames (OFXR-Bridge's frame generation) can still hold a frame that names it: the
+    // runtime rejects that frame, the layer latches the error for every later frame call, and Unity shuts XR down (black headset).
+    // Hooked through the function lookup Unity lets every feature hook. Spaces still kept when the session ends are destroyed then.
     public class OpenXRLateSpaceDestroy : OpenXRFeature
     {
         public static double keepSeconds = 1.0;
@@ -46,14 +46,14 @@ namespace TarkovVR.Source.XR
             sessionRunning = true;
         }
 
-        // The spaces are still valid until the session is destroyed: the kept ones go now
+        // The spaces are still valid until the session is destroyed, so the kept ones are destroyed now
         protected override void OnSessionEnd(ulong xrSession)
         {
             sessionRunning = false;
             DestroyKept(all: true);
         }
 
-        // Anything left went with the session
+        // Anything left was destroyed with the session
         protected override void OnSessionDestroy(ulong xrSession)
         {
             sessionRunning = false;
@@ -61,8 +61,8 @@ namespace TarkovVR.Source.XR
                 kept.Clear();
         }
 
-        // Every OpenXR function Unity looks up comes through here: xrDestroySpace is answered with ours. Called from native code, where
-        // an exception would take the game down: anything going wrong leaves the runtime's own answer.
+        // Every OpenXR function Unity looks up comes through here; xrDestroySpace is answered with ours. This is called from native code,
+        // where an exception would take the game down, so anything going wrong leaves the runtime's own answer.
         private static int LookUpFunction(ulong instance, IntPtr name, IntPtr function)
         {
             int result = nextGetInstanceProcAddr(instance, name, function);
@@ -103,7 +103,7 @@ namespace TarkovVR.Source.XR
             }
         }
 
-        // Each frame (OpenXRFloorOrigin.Update): the spaces kept long enough go
+        // Called each frame (OpenXRFloorOrigin.Update): destroys the spaces kept long enough
         internal static void DestroyDue() => DestroyKept(all: false);
 
         private static void DestroyKept(bool all)

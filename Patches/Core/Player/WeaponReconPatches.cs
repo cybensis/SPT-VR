@@ -12,20 +12,20 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Patches.Core.Player
 {
-    // Temporary recon: profiles a vanilla magazine reload (Manual Reload off, press B) to gather what the hand-driven
+    // Recon tool: profiles a vanilla magazine reload (Manual Reload off, press B) to record what the hand-driven
     // reload needs to look and sound like Tarkov's.
     //
-    // The reload animation lives on the gun model: its clip moves the magazine, the left-hand IK marker the arm reaches
+    // The reload animation lives on the gun model. Its clip moves the magazine, the left-hand IK marker the arm reaches
     // for (weapon_L_IK_marker), and an animated copy of the left hand (the gun's HumanLPalm) whose fingers Tarkov's
     // HandPoser copies onto your hand. All three are in the gun's own space, so their relations are exact even though
     // the mod moves the gun and keeps your arm on the controller.
     //
     // Per reload, in the BepInEx log:
-    //  * [EVENT]    each step of Tarkov's reload (mag out, mag to rig, new mag appears, mag in, chamber) + the clip time
-    //  * [SOUND]    every sound event + the clip time; [SOUNDS] lists every sound name the gun can play
+    //  * [EVENT]    each step of Tarkov's reload (mag out, mag to rig, new mag appears, mag in, chamber) and the clip time
+    //  * [SOUND]    every sound event and the clip time; [SOUNDS] lists every sound name the gun can play
     //  * [STATE]    arms layer-1 state changes
-    //  * [GRIP-AVG] the magazine in the left IK marker's frame while the hand holds it (old mag and new mag): where the
-    //               magazine sits in YOUR hand, since your hand takes the marker's place
+    //  * [GRIP-AVG] the magazine in the left IK marker's frame while the hand holds it (old mag and new mag). This is where the
+    //               magazine sits in your hand, since your hand takes the marker's place.
     //  * [AXIS]     the direction the magazine leaves / enters the well, in the gun's frame
     //  * [FINGERS]  the gun's left-hand finger pose while holding the new magazine (index-matched to your hand)
     internal static class WeaponRecon
@@ -40,7 +40,7 @@ namespace TarkovVR.Patches.Core.Player
 
         private enum ReloadPhase { MagazineInWell, OldMagazineInHand, BetweenMagazines, NewMagazineInHand, Finished }
 
-        // Longest run where the magazine barely moves in a frame (= held still in the hand), averaged
+        // Averages the longest run of frames where the magazine barely moves, i.e. is held still in the hand
         private sealed class StableRelation
         {
             public string label;
@@ -127,17 +127,17 @@ namespace TarkovVR.Patches.Core.Player
         private static StableRelation oldMagazineInMarker, oldMagazineInGunPalm, newMagazineInMarker, newMagazineInGunPalm;
         private static Quaternion[] oldMagazineFingers, newMagazineFingers;
 
-        // The pull grip: the most closed fingers while the hand is on the old magazine, from the start of the reload (the
-        // hand grabs it and pulls it out well before Tarkov's "pulled out" event, and opens again to drop it in the pouch)
-        public static float pullGripReach = 0.25f;     // m magazine to the left IK marker that counts as the hand on it
-        public static float pullGripHoldTolerance = 0.03f;     // m the pull grip may be off the still hold and still be the same grip
+        // The pull grip is the most closed finger pose while the hand is on the old magazine, sampled from the start of the reload.
+        // The hand grabs and pulls the magazine well before Tarkov's "pulled out" event, and opens again to drop it in the pouch.
+        public static float pullGripReach = 0.25f;     // m, magazine distance from the left IK marker that counts as the hand on it
+        public static float pullGripHoldTolerance = 0.03f;     // m, how far the pull grip may be from the still hold and still count as it
         private static float pullGripCurl;
         private static Quaternion[] pullGripFingers;
         private static Vector3 pullGripPosition;
         private static Vector3 pullGripRotation;
         private static float pullGripTime;
 
-        // Every frame the old magazine is on its way out, to find the most closed moment once the still hold is known
+        // One sample per frame while the old magazine is on its way out, to find the most closed moment once the still hold is known
         private struct PullSample
         {
             public Vector3 position;
@@ -323,15 +323,15 @@ namespace TarkovVR.Patches.Core.Player
                 haveRestPosition = true;
             }
 
-            // From the moment the magazine starts to move (the hand is on it; before that it's closed on the handguard)
+            // Sample from the moment the magazine starts to move, when the hand is on it. Before that the hand is closed on the handguard.
             bool magazineMoving = haveRestPosition && (positionInGun - magazineRestPosition).magnitude > 0.005f;
             if (phase <= ReloadPhase.OldMagazineInHand && magazineMoving)
             {
                 if (gunLeftPalmChildren != null)
                     pullSamples.Add(new PullSample { position = leftIkMarker.InverseTransformPoint(magazineView.position), curl = FingerCurl(), fingers = SnapshotFingers() });
                 SamplePullGrip(magazineView);
-                // The first axisDistance of travel out of the well (it leaves at the mag-out sound, before Tarkov's
-                // "pulled out" event)
+                // The out axis is the first axisDistance of travel out of the well. The magazine leaves at the mag-out sound,
+                // before Tarkov's "pulled out" event.
                 if (!haveOutAxis && (positionInGun - magazineRestPosition).magnitude >= axisDistance)
                 {
                     outAxis = (positionInGun - magazineRestPosition).normalized;
@@ -385,7 +385,7 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
-        // How closed the four fingers are: their joints' total bend (the thumb's base sits at a large fixed angle)
+        // How closed the four fingers are: the total bend of their joints. The thumb is left out because its base sits at a large fixed angle.
         private static float FingerCurl()
         {
             float curl = 0f;
@@ -432,7 +432,7 @@ namespace TarkovVR.Patches.Core.Player
             return VRReloadController.MeasureMagazineLength(magazineView.ItemView, magazineView.Bone.position);
         }
 
-        // The reload's holds into VRReloadController's recordings. A reload from one magazine type to another records the
+        // Saves the reload's holds into VRReloadController's recordings. A reload from one magazine type to another records the
         // pull of the first and the insert of the second.
         private static void SaveMagazineHolds()
         {
@@ -443,8 +443,8 @@ namespace TarkovVR.Patches.Core.Player
             bool saved = false;
             if (oldMagazineType >= 0)
             {
-                // The hold = where the magazine stays still in the hand. Its fingers = the most closed moment within that hold: a
-                // drum's wide grip is less closed than the hand passing the well on its way there, and the still run itself
+                // The hold is where the magazine stays still in the hand. Its finger pose is the most closed moment near that hold:
+                // a drum's wide grip is less closed than the hand passing the well on its way there, and the still run itself
                 // ends with the hand opening over the pouch.
                 if (oldMagazineInMarker.bestFrames >= stableMinimumFrames && oldMagazineFingers != null)
                 {

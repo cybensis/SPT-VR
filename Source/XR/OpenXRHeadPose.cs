@@ -3,8 +3,8 @@ using UnityEngine.XR;
 
 namespace TarkovVR.Source.XR
 {
-    // Takes the place of SteamVR_TrackedObject on the camera objects while OpenXR is running, SteamVR_TrackedObject
-    // gets no poses without OpenVR. Sets the headset pose as the local pose, like SteamVR_TrackedObject does.
+    // Replaces SteamVR_TrackedObject on the camera objects while OpenXR is running, because SteamVR_TrackedObject
+    // gets no poses without OpenVR. Like SteamVR_TrackedObject, it writes the headset pose as the local pose.
     public class OpenXRHeadPose : MonoBehaviour
     {
         private InputDevice headset;

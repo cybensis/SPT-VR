@@ -6,34 +6,34 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Controls
 {
-    // "Step Or Lean To Sprint" (VRSettings.GetStepToSprint): a quick step or lean forward starts the run while the move stick is
-    // pushed forward (or is pushed within goGrace after), a quick step or lean back ends it. Easing off the stick still ends it and
-    // the stick click still toggles it (InputHandlers.SprintInputHandler).
-    // Measured on the neck point under the raw headset pose (HeadTracking.RawHmdPose + neckLocalOffset): the headset swings ~10 cm
-    // round the neck when you look around or nod. Raw tracking space, so stick movement and turning never show up in it.
-    // "Where you stand" (settled) follows the neck slowly; a start has to end ahead of it and a stop behind it, so coming back
-    // upright after a lean doesn't undo it. Held a while, a lean becomes where you stand.
+    // "Step Or Lean To Sprint" (VRSettings.GetStepToSprint). A quick step or lean forward starts the run while the move stick is pushed
+    // forward (or if it is pushed within goGrace afterwards). A quick step or lean back ends it. Releasing the stick still ends the run,
+    // and the stick click still toggles it (InputHandlers.SprintInputHandler).
+    // Movement is measured at the neck point of the raw headset pose (HeadTracking.RawHmdPose + neckLocalOffset), because the headset
+    // itself swings ~10 cm around the neck when you look around or nod. Raw tracking space excludes stick movement and turning.
+    // `settled` (where you stand) follows the neck slowly. A start has to end ahead of it and a stop behind it, so straightening up
+    // after a lean doesn't undo it. A lean held for a while becomes the new `settled`.
     public static class StepSprint
     {
-        public static float moveTime = 0.2f;        // s a quick move is measured over...
-        public static float startDistance = 0.08f;  // ...m the neck has to go forward in that time to start the run (0.4 m/s)
-        public static float stopDistance = 0.08f;   // ...and back to stop it
-        public static float aheadMargin = 0.04f;    // m ahead of where you stand a start has to end (behind, a stop)
-        public static float settleTime = 2.5f;      // s "where you stand" takes to follow you (time constant): longer = a held lean stays a lean longer
-        public static float sidewaysShare = 0.7f;   // sideways movement allowed, as a share of the forward / back
-        public static float verticalShare = 1f;     // up / down allowed, as a share of it: crouching and standing up move the neck forward / back too
-        public static float glitchSpeed = 3f;       // m/s faster than a body moves: a tracking jump or a recenter, history dropped
-        public static float goGrace = 0.35f;        // s a step before the stick is pushed forward still starts the run
+        public static float moveTime = 0.2f;        // s, the window a quick move is measured over
+        public static float startDistance = 0.08f;  // m the neck has to move forward within moveTime to start the run (0.4 m/s)
+        public static float stopDistance = 0.08f;   // m the neck has to move back within moveTime to stop it
+        public static float aheadMargin = 0.04f;    // m ahead of `settled` a start has to end (behind it, for a stop)
+        public static float settleTime = 2.5f;      // s, time constant of `settled` following the neck: longer = a held lean counts as a lean longer
+        public static float sidewaysShare = 0.7f;   // sideways movement allowed, as a fraction of the forward / back movement
+        public static float verticalShare = 1f;     // up / down movement allowed, same fraction: crouching and standing up also move the neck
+        public static float glitchSpeed = 3f;       // m/s, faster than a body moves = a tracking jump or recenter, and the history is dropped
+        public static float goGrace = 0.35f;        // s, a step this long before the stick is pushed forward still starts the run
         public static float cooldown = 0.5f;        // s after a start / stop before another (the game's sprint state lags the command)
-        // A start also needs the head looking roughly the way you'd run (leaning out to look down off a ledge mustn't start a run).
-        // Stops don't care where you look.
+        // A start also needs the head looking roughly the way you'd run, so leaning out to look down off a ledge doesn't start a run.
+        // Stops ignore where you look.
         public static float maxLookDown = 35f;      // deg below level
         public static float maxLookUp = 45f;        // deg above level
         public static float maxLookSideways = 60f;  // deg off the way the character faces
-        public static float pulseAmplitude = 0.3f;  // the buzz once the game has started the run, both controllers; a stop gets half
+        public static float pulseAmplitude = 0.3f;  // haptic pulse on both controllers once the game has started the run; a stop gets half
         public static float pulseDuration = 0.06f;
         public static float pulseFrequency = 90f;
-        public static bool debugLog = true;         // a line per start / stop and per near miss while walking or running
+        public static bool debugLog = true;         // logs a line per start / stop and per near miss while walking or running
 
         private const int Capacity = 256;
         private static readonly float[] sampleTime = new float[Capacity];
@@ -48,15 +48,15 @@ namespace TarkovVR.Source.Controls
         private static float confirmUntil = -1f;
         private static bool confirmRunning;
 
-        // The biggest move of the one going on, for the near-miss line
+        // The biggest movement of the current move, for the near-miss log line
         private static float candidateAlong;
         private static string candidateLine;
         private static bool candidateFired;
 
-        // Once a frame from the sprint handler: +1 = start the run, -1 = stop it, 0 = nothing
+        // Called once a frame from the sprint handler. Returns +1 = start the run, -1 = stop it, 0 = nothing.
         public static int Update(bool running, bool stickForward)
         {
-            // Asked twice in a frame, the second gets nothing: a start handed out twice would toggle the run straight back off
+            // A second call in the same frame returns 0: a start returned twice would toggle the run straight back off
             if (Time.frameCount == lastFrame)
                 return 0;
             lastFrame = Time.frameCount;
@@ -79,7 +79,7 @@ namespace TarkovVR.Source.Controls
             }
             Vector3 neck = headPos + headRot * HeadTracking.neckLocalOffset;
 
-            // A gap (menus, a hitch) or a jump no body makes: the history doesn't describe this movement
+            // After a time gap (menus, a hitch) or a jump faster than a body moves, the history no longer describes this movement
             if (stored > 0)
             {
                 float gap = now - sampleTime[newest];
@@ -128,7 +128,7 @@ namespace TarkovVR.Source.Controls
             {
                 if (!backward && !running)
                 {
-                    // The grace runs from the end of the move, logged once
+                    // goGrace counts from the end of the move; logged once
                     bool fresh = startPendingUntil < 0f;
                     startPendingUntil = now + goGrace;
                     if (fresh)
@@ -153,7 +153,7 @@ namespace TarkovVR.Source.Controls
                     startPendingUntil = -1f;
                 else if (stickForward && now <= startPendingUntil && !LookingForward(headRot, forward, out string lookWhy))
                 {
-                    // Looked away (down off the ledge) between the lean and the stick
+                    // The head looked away (e.g. down off a ledge) between the lean and the stick push
                     startPendingUntil = -1f;
                     if (debugLog)
                         Plugin.MyLog.LogInfo($"[StepSprint] start dropped: {lookWhy}");
@@ -174,7 +174,7 @@ namespace TarkovVR.Source.Controls
                 }
             }
 
-            // The move is over: its near miss, if it never got through
+            // The move is over: log its near miss if it never fired
             if (size < distance * 0.25f)
             {
                 if (debugLog && candidateLine != null && !candidateFired)
@@ -186,7 +186,7 @@ namespace TarkovVR.Source.Controls
             return result;
         }
 
-        // The game confirmed the run (or its end): the buzz
+        // Plays the haptic pulse once the game has actually started (or stopped) the run
         private static void Confirm(float now, bool running)
         {
             if (confirmUntil < 0f)
@@ -219,7 +219,8 @@ namespace TarkovVR.Source.Controls
             return why == null;
         }
 
-        // The headset's look (raw tracking space, as `forward` is) within maxLookDown / maxLookUp of level and maxLookSideways of the run
+        // True when the headset's look direction (raw tracking space, like `forward`) is within maxLookDown / maxLookUp of level
+        // and within maxLookSideways of the run direction
         private static bool LookingForward(Quaternion headRot, Vector3 forward, out string why)
         {
             why = null;
@@ -236,7 +237,8 @@ namespace TarkovVR.Source.Controls
             return why == null;
         }
 
-        // The way the character faces, in tracking space (the rig's local frame = the poses' frame); the head's yaw without a rig
+        // The way the character faces, in tracking space (the rig's local frame, the same frame as the poses).
+        // Without a rig, the head's yaw is used.
         private static Vector3 TrackingForward(Quaternion headRot)
         {
             Vector3 forward;
@@ -245,7 +247,7 @@ namespace TarkovVR.Source.Controls
             else
             {
                 forward = headRot * Vector3.forward;
-                // Looking straight down the face points at the floor; the top of the head points forward
+                // Looking straight down, the face points at the floor, so the top of the head gives the forward direction
                 if (new Vector2(forward.x, forward.z).sqrMagnitude < 0.04f)
                     forward = headRot * Vector3.up;
             }

@@ -11,98 +11,96 @@ using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Chest sling + support-only hold. The gun stays in hand while the dominant grip is held (the grip boolean: the action
-    // manifest has no capacitive-touch action). Releasing it for slingDelay hands the gun to the support hand if that grips
-    // (SupportOnly, rigid on the support controller), else hangs it rigidly at its body spot; a grip press at the gun takes it back.
-    // Game-side the gun never leaves the hands (no inventory op); firing is gated while detached.
-    // A freshly equipped gun stays welded like vanilla until the first grip press on that controller.
-    // "Toggle Gun Grip" (VRSettings.GetGunGripToggle): a press lets go instead of the open hand (the foregrip in
-    // VRPlayerManager.ForegripGrip and a mounted gun in MountedGun the same).
+    // Chest sling and support-only hold. The gun stays in hand while the dominant grip is held (a boolean: the action manifest has no
+    // capacitive-touch action). Opening the hand for slingDelay hands the gun to the support hand if that one grips (SupportOnly), or
+    // else hangs it rigidly at its body spot. A grip press at the gun takes it back. Game-side the gun never leaves the hands (no
+    // inventory operation); firing is blocked while detached. A freshly equipped gun stays in the hand until the first grip press.
+    // With "Toggle Gun Grip" (VRSettings.GetGunGripToggle) a press lets go instead; VRPlayerManager.ForegripGrip and MountedGun do the same.
     public static class ChestHang
     {
         public static Vector3 chestOffset = new Vector3(0.25f, -0.05f, -0.08f); // headset-local, yaw-only: where the grip end sits (sternum height, dominant side); x mirrors left-handed
         public static float slingAcross = 0.5f;         // how far the muzzle points across toward the off side (0 = straight down)
         public static float slingForwardTilt = 0.35f;   // muzzle tips out from the body
         public static float slingYawDeg = 15f;          // whole-gun yaw toward the off side; mirrors left-handed
-        public static float slingRollDeg = 55f;          // fine roll about the barrel if the canonical pose sits face-on wrong
-        public static float attachTime = 0.10f;         // s fly-in to the sling spot, then the mount is rigid
+        public static float slingRollDeg = 55f;          // deg of roll about the barrel, to fine-tune which way the slung gun faces
+        public static float attachTime = 0.10f;         // s to fly in to the sling spot; after that the mount is rigid
         public static float rotAttachRate = 10f;        // 1/s rotation tuck-in
         public static float slingDelay = 0.1f;          // s the grip must stay fully released before letting go (debounce)
-        public static float regrabRadius = 0.13f;       // m RightHand rig transform to the regrab zone
+        public static float regrabRadius = 0.13f;       // m, RightHand rig transform to the regrab zone
         public static float regrabForwardOffset = 0.07f;// m the zone sits toward the muzzle from the R-hand marker
-        // The other spots (BodyWeapons, SpotPose): where the gun's Weapon_root sits, from the eyes looking level in the body's frame,
-        // and which way its muzzle and its grip point (x mirrors left-handed). back = the second primary, over the dominant
-        // shoulder, grip out behind you; hip = the pistol, on the dominant hip, muzzle down, grip to the rear.
+        // The other gun spots (BodyWeapons, SpotPose): where the gun's Weapon_root sits relative to the eyes looking level, in the
+        // body's frame, and which way its muzzle and grip point (x mirrors left-handed). back = the second primary, over the dominant
+        // shoulder, grip out behind you. hip = the pistol, on the dominant hip, muzzle down, grip to the rear.
         public static Vector3 backOffset = new Vector3(0.17f, -0.17f, -0.17f);
         public static Vector3 backMuzzle = new Vector3(-0.3f, -1f, -0.2f);
         public static Vector3 backGrip = new Vector3(0.3f, 0f, -1f);
         public static Vector3 hipOffset = new Vector3(0.22f, -0.68f, 0.02f);
         public static Vector3 hipMuzzle = new Vector3(0f, -1f, 0.15f);
         public static Vector3 hipGrip = new Vector3(0.2f, 0f, -1f);
-        // Done eating / using meds: the gun Tarkov draws back goes to its spot like at a raid start, unless the gun hand's grip is held
+        // After eating or using meds, the gun Tarkov draws back goes to its spot like at a raid start, unless the gun hand's grip is held
         public static bool hangAfterMeds = true;
         public static float afterMedsHangWindow = 5f;   // s after the hands change for the gun to go idle and hang
-        public static bool debugLog = false;            // 1/sec chain dump while detached + save/restore lines
+        public static bool debugLog = false;            // logs the holder chain once a second while detached, plus save/restore lines
         private static float nextDebugLog;
         public static bool gripSoundHandOn = true;      // the gun's own hand-on-the-grip sound; false = cloth foley + a hint of gun
-        public static float gripClothVolume = 0.85f;    // cloth mix: the gear (rig/backpack) pickup foley = the cloth layer
-        public static float gripGunVolume = 0.18f;      // cloth mix: the weapon's own pickup clip, quiet, underneath
+        public static float gripClothVolume = 0.85f;    // cloth mix: volume of the gear (rig/backpack) pickup foley, the cloth layer
+        public static float gripGunVolume = 0.18f;      // cloth mix: volume of the weapon's own pickup clip, quiet underneath
         private static EFT.Player.FirearmController handOnSoundFor;
         private static BaseSoundPlayer handOnSoundPlayer;
-        // The gun from one hand straight into the other (right-handed mode): the off hand at the gun hand's grip + a grip press takes it
-        // (not a pistol: its support hand cups the gun hand right there), and a pistol held two-handed goes over to the support hand
-        // when the gun hand lets go (instead of the support-only hold the long guns get)
+        // Passing the gun straight from one hand to the other (right-handed mode). handSwap: the off hand at the gun hand's grip plus a
+        // grip press takes it (not for a pistol, whose support hand cups the gun hand right there). pistolSwapOnRelease: a pistol held
+        // two-handed goes to the support hand when the gun hand lets go, instead of the support-only hold long guns get.
         public static bool handSwap = true;
         public static bool pistolSwapOnRelease = true;
-        public static float handSwapRadius = 0.13f;     // m off-hand palm / knuckles / fingertips to the gun hand's grip (regrabRadius's reach)
+        public static float handSwapRadius = 0.13f;     // m, off-hand palm / knuckles / fingertips to the gun hand's grip (same reach as regrabRadius)
 
         public static bool Hanging { get; private set; }
         public static bool SupportOnly { get; private set; }   // gun held by the support hand alone
         // Held by the gun hand on the charging handle alone: the off hand let go with the handle pulled back, so the gun rides the
-        // gun hand's controller and the off hand is free for the magazine. Ends on letting go of the handle (to the sling, or the
-        // support hold if the off hand is back on the foregrip) or the off hand taking the foregrip again. Right-handed holds only.
+        // gun hand's controller and the off hand is free for the magazine. Ends when the handle is let go (to the sling, or to the
+        // support hold if the off hand is back on the foregrip) or when the off hand takes the foregrip again. Right-handed holds only.
         public static bool HandleHeld { get; private set; }
-        public static bool Detached => Hanging || SupportOnly || HandleHeld; // fire gate
-        public static bool HandInRegrabZone { get; private set; } // dominant palm within regrab reach of the detached gun (loot pointer yields to the regrab)
-        public static bool OffHandAtGunGrip { get; private set; } // the off hand where a grip press takes the gun into it (the off-hand loot pointer and body grab yield)
+        public static bool Detached => Hanging || SupportOnly || HandleHeld; // firing is blocked while true
+        public static bool HandInRegrabZone { get; private set; } // dominant palm within regrab reach of the detached gun (the loot pointer yields to it)
+        public static bool OffHandAtGunGrip { get; private set; } // the off hand is where a grip press takes the gun into it (the off-hand loot pointer and body grab yield)
         private static bool prevOffGrip;
         private static bool prevOffGripWasLeft = true;  // which controller that was: the off hand changes sides with the gun
         private static readonly TarkovVR.Source.Misc.ZoneEntryBlip swapZoneBlip = new TarkovVR.Source.Misc.ZoneEntryBlip();
 
-        private static bool gripSeen;                   // welded like vanilla until the first grip press on this controller
-        private static int ignoredPressFrame = -1;      // a grip press BodyWeapons took (a gun off the body), not a regrab
-        private static Item gripSeenFor;                // taken off the body with the grip closed: grip-bound from the moment it's in hands
+        private static bool gripSeen;                   // the gun stays in the hand until the first grip press on this controller
+        private static int ignoredPressFrame = -1;      // frame of a grip press BodyWeapons used to take a gun off the body; not a regrab
+        private static Item gripSeenFor;                // taken off the body with the grip closed: bound to the grip as soon as it's in the hands
         private static bool prevGrip;
-        private static bool toggleModeSeen;             // the "Toggle Gun Grip" setting as the last frame held it
-        private static bool prevSupporting;             // for the foregrip-grab foley edge
+        private static bool toggleModeSeen;             // the "Toggle Gun Grip" setting as of last frame
+        private static bool prevSupporting;             // for the foregrip-grab sound edge
         private static float releaseTimer;
         private static int lastTickFrame = -10;
         private static object lastHandsController;
         private static object lastPlayer;
-        private static float hangOnArrivalUntil = -1f;  // the gun Tarkov hands you (raid start, walking into the range) goes to its spot
+        private static float hangOnArrivalUntil = -1f;  // until then, the gun Tarkov hands you (raid start, entering the range) goes to its spot
         private static bool medsSinceGun;               // a food / med came into your hands since the last hands change seen here
 
-        // MedsController.Spawn (EatingPatches) for your player: runs with menus open too
+        // Called from MedsController.Spawn (EatingPatches) for your player, also with menus open.
         internal static void NoteMedsInHands()
         {
             medsSinceGun = true;
         }
-        private static EFT.Player.FirearmController detachedGun;   // the gun slung / support-held: only its holder is ever stamped
-        // Holder local pose from before the first detach. The anchor only re-stamps rotation at equip, so it must be restored
-        // when the gun returns to the hand, and kept across a SupportOnly -> sling transition (holderSaved guards the save).
+        private static EFT.Player.FirearmController detachedGun;   // the gun that is slung or support-held; only its holder is ever written
+        // The holder's local pose from before the first detach. The anchor only sets the rotation at equip, so this must be restored
+        // when the gun returns to the hand, and kept across a SupportOnly -> sling change (holderSaved guards the save).
         private static bool holderSaved;
         private static Vector3 savedHolderLocalPos;
         private static Quaternion savedHolderLocalRot;
-        // sling pose in the yaw-only head frame (rigid under stick/physical turns)
+        // Sling pose in the yaw-only head frame, so it stays rigid under stick and physical turns.
         private static Vector3 slingLocalPos;
         private static Quaternion slingLocalRot = Quaternion.identity;
         private static Vector3 posVel;
-        // support-only hold: gun pose rigid in the support-controller frame
+        // Support-only hold: the gun pose, rigid in the support controller's frame.
         private static Vector3 supportRelPos;
         private static Quaternion supportRelRot = Quaternion.identity;
-        private static Vector3 supportGripLever;    // grab point -> WeaponRoot, in GUN space (the weight spring pivots about the grab)
+        private static Vector3 supportGripLever;    // grab point to WeaponRoot, in gun space (the weight spring pivots about the grab point)
         private static Quaternion supportSmoothedRot = Quaternion.identity;   // the spring's filtered gun rotation
-        // HandleHeld: the gun's pose rigid in the gun-hand controller's frame (rigid: a swinging gun would slide the held handle along its track)
+        // HandleHeld: the gun's pose, rigid in the gun-hand controller's frame (a swinging gun would slide the held handle along its track)
         private static Vector3 handleHoldRelPos;
         private static Quaternion handleHoldRelRot = Quaternion.identity;
 
@@ -110,7 +108,7 @@ namespace TarkovVR.Source.Player.Interactions
         // holster/radial gestures are already reflected in the ownership flag).
         public static void UpdateInput(bool grip, bool gripOwnedElsewhere, bool supporting)
         {
-            // The off hand's grip press, from the same controller as last frame only (a hand swap changes which one that is)
+            // The off hand's grip press, counted only on the same controller as last frame (a hand swap changes which one is the off hand)
             bool offGrip = Handedness.OffHandGrip.state;
             bool offIsLeft = !Handedness.GunHandIsLeft;
             bool offGripPressed = offGrip && !prevOffGrip && offIsLeft == prevOffGripWasLeft;
@@ -126,7 +124,7 @@ namespace TarkovVR.Source.Player.Interactions
                 Handedness.SetGunInLeftHand(false);
                 return;
             }
-            // The LEFT controller's grip, for taking the slung gun into the left hand (right-handed mode: that controller doesn't change)
+            // The left controller's grip, for taking the slung gun into the left hand (right-handed mode, where this controller doesn't change)
             bool leftGrip = VRInput.LeftGrip.state;
             bool leftGripPressed = leftGrip && !prevLeftGrip;
             prevLeftGrip = leftGrip;
@@ -145,14 +143,14 @@ namespace TarkovVR.Source.Player.Interactions
                 && !WeaponPatches.grenadeEquipped
                 && ReferenceEquals(player.HandsController, firearmController); // guards a stale firearmController ref
 
-            // Controller switched (holster swap, weapon change): the equip path re-stamps the holder
-            // and owns the arms - clear our state, restore nothing. New gun starts welded (gripSeen off).
+            // Hands controller switched (holster swap, weapon change): the equip path sets the holder and owns the arms,
+            // so clear our state and restore nothing. A new gun starts held in the hand (gripSeen off).
             object handsController = player != null ? player.HandsController : null;
             if (!ReferenceEquals(handsController, lastHandsController))
             {
-                // From food / meds straight back to a gun (Tarkov's draw of the item you had): hang it once it's idle (the branch
-                // below). MedsController covers every food, drink and med; medsSinceGun also catches one used from the inventory
-                // screen (this doesn't run in menus, so the meds controller can come and go unseen)
+                // From food or meds straight back to a gun (Tarkov draws the gun you had): hang it once it's idle (the branch below).
+                // MedsController covers every food, drink and med. medsSinceGun also catches one used from the inventory screen:
+                // this doesn't run in menus, so the meds controller can come and go unseen.
                 if (hangAfterMeds && (medsSinceGun || lastHandsController is EFT.Player.MedsController) && handsController is EFT.Player.FirearmController)
                     HangOnArrival(afterMedsHangWindow);
                 if (!(handsController is EFT.Player.MedsController))
@@ -162,8 +160,8 @@ namespace TarkovVR.Source.Player.Interactions
                 releaseTimer = 0f;
                 prevGrip = grip;
                 Reattach(restore: false);
-                // A new gun (or none) starts in the right hand; a grenade the left hand took off the chest stays in it (GrenadeSlot), and
-                // so does a gun it took off the body (BodyWeapons)
+                // A new gun (or none) starts in the right hand. A grenade the left hand took off the chest stays in it (GrenadeSlot),
+                // and so does a gun it took off the body (BodyWeapons).
                 if (!GrenadeSlot.KeepsLeftHand && !BodyWeapons.KeepsLeftHand)
                     Handedness.SetGunInLeftHand(false);
             }
@@ -184,7 +182,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             bool pressed = grip && !prevGrip && Time.frameCount != ignoredPressFrame;
 
-            // Update() skips frames (menu/sprint) - after a gap restart the release debounce so the
+            // Update() skips frames (menus, sprint). After a gap, restart the release debounce so the
             // gun can't let go the instant a menu closes on an open hand.
             bool resumed = Time.frameCount - lastTickFrame > 1;
             lastTickFrame = Time.frameCount;
@@ -196,8 +194,8 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            // Foregrip-grab foley on the isSupporting edge seen here, not inside UpdateLeftHand's engage branches: which
-            // branch sets it depends on the snap/hold-toggle settings.
+            // The foregrip-grab sound plays on the isSupporting edge seen here, not inside UpdateLeftHand: more than one
+            // branch sets isSupporting.
             if (supporting && !prevSupporting && !Detached)
                 PlayGripSound();
             prevSupporting = supporting;
@@ -206,8 +204,8 @@ namespace TarkovVR.Source.Player.Interactions
             if (!Detached && TryGrabFromGunHand(firearmController, supporting, offGripPressed))
                 return;
 
-            // "Chest Sling" off in the VR menu: the gun stays in the hand whatever the grip does. Switched
-            // off while slung / support-held -> back into the hand (same gun: the switch check ran above).
+            // "Chest Sling" off in the VR menu: the gun stays in the hand whatever the grip does. Switched off while the gun is
+            // slung or support-held, it goes back into the hand (same gun: the hands-controller check ran above).
             if (!VRSettings.GetChestSlingOn())
             {
                 gripSeen = false;
@@ -218,8 +216,8 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            // The gun Tarkov put in your hands at a raid start or the range: straight to its spot. Its draw skipped, and the hang
-            // only once it's idle: the holder is stamped for it by then.
+            // The gun Tarkov put in your hands at a raid start or at the range goes straight to its spot. Its draw is skipped, and it
+            // hangs only once idle, because by then the holder is set up for it.
             if (hangOnArrivalUntil > 0f && !Detached && !grip && !supporting && BodyWeapons.IsActive)
             {
                 if (!(firearmController.CurrentOperation is EFT.Player.FirearmController.Idling))
@@ -240,28 +238,28 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (SupportOnly)
             {
-                // The gun in the left hand: the right hand is the one holding it, the left takes it back (at the grip, as off the sling)
+                // With the gun in the left hand, the right hand holds it and the left takes it back (at the grip, as off the sling)
                 bool near = Handedness.GunInLeftHand ? LeftHandAtGrip(firearmController) : HandNearGun(firearmController);
                 HandInRegrabZone = near;
                 RegrabZonePulse(near);
                 if (!supporting)
                 {
-                    // The gun hand holding the charging handle back: the gun hangs from that hand now (HandleHeld), the off hand free
+                    // The gun hand is holding the charging handle back: the gun now hangs from that hand (HandleHeld), the off hand is free
                     if (CanHoldByHandle())
                         BeginHandleHold(firearmController);
                     else
                     {
-                        // support hand let go too - both hands off -> straight to the sling (no flash of
-                        // the marker anchor in between)
+                        // The support hand let go too. With both hands off, go straight to the sling (no flash of
+                        // the marker anchor in between).
                         SupportOnly = false;
                         BeginHang(firearmController);
                     }
                 }
-                // (not a press on a belt gun's box: the gun hand takes the box, VRReloadController.GunHandAtBox, a frame old)
+                // A press at a belt gun's box isn't a regrab: the gun hand takes the box (VRReloadController.GunHandAtBox, one frame old)
                 else if (pressed && near && !VRReloadController.HandleInGunHand && !VRReloadController.BoltInGunHand && !VRReloadController.GunHandAtBox)
                 {
-                    // dominant hand takes the grip back -> normal (two-handed) hold. Reattach clears SupportOnly itself:
-                    // clearing it here first makes wasDetached read false inside = no retake sound/haptic.
+                    // The dominant hand takes the grip back: normal two-handed hold. Reattach clears SupportOnly itself; clearing
+                    // it here first would make wasDetached read false inside it, so no retake sound or haptic would play.
                     Reattach(restore: true);
                     if (Handedness.GunInLeftHand)
                         VRPlayerManager.CacheGunInHand();   // the holder back in its clean pose, as off the sling
@@ -276,7 +274,7 @@ namespace TarkovVR.Source.Player.Interactions
                 HandInRegrabZone = false;
                 if (!VRReloadController.HandleInGunHand)
                 {
-                    // Let go of the handle (the bolt's gone home): held up by the off hand if it's back on the foregrip, else nobody's
+                    // The handle was let go (the bolt went home): the off hand holds the gun if it's back on the foregrip, else nobody does
                     HandleHeld = false;
                     if (supporting)
                         BeginSupportHold(firearmController);
@@ -298,23 +296,24 @@ namespace TarkovVR.Source.Player.Interactions
                 bool near = HandNearGun(firearmController);
                 HandInRegrabZone = near;
                 RegrabZonePulse(near);
-                // taking it back is deliberate: a fresh grip PRESS with the palm at the gun
+                // Taking it back is deliberate: a fresh grip press with the palm at the gun
                 if (pressed && near)
                 {
                     Reattach(restore: true);
                     gripSeen = true;
                 }
-                // ...or with the LEFT hand at its grip: then it's held left-handed (Handedness.GunInLeftHand: not mirrored, the hold, arms
-                // and fingers mirrored onto the left). Right-handed mode only; the left hand free (nothing in it, not on a reload part).
+                // ...or a press with the left hand at its grip: then it's held left-handed (Handedness.GunInLeftHand: the gun isn't
+                // mirrored; the hold, arms and fingers are mirrored onto the left). Right-handed mode only, with the left hand free
+                // (nothing in it, not on a reload part).
                 else if (!Handedness.LeftHanded && leftGripPressed && LeftHandAtGrip(firearmController) && !VRReloadController.OwnsOffHand
                     && !HandsInteractionController.HoldingLoot)
                 {
                     Handedness.SetGunInLeftHand(true);
                     Reattach(restore: true);
-                    // The holder is back in its clean pose: the left-handed hold is built from it once (not from the live, nudged one)
+                    // The holder is back in its clean pose: the left-handed hold is built from it once, not from the live nudged one
                     VRPlayerManager.CacheGunInHand();
                     gripSeen = true;
-                    // From here the gun hand's grip is the left one, held now: no fresh press next frame
+                    // From here the gun hand's grip is the left one, already held: no fresh press next frame
                     prevGrip = true;
                     return;
                 }
@@ -324,7 +323,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             GiveGunArmBack();
 
-            // Switching between hold and toggle: held as it is until the next press (else hold mode drops a gun held with the button up)
+            // Switching between hold and toggle mode: the gun stays as it is until the next press (else hold mode drops a gun held with the button up)
             bool toggle = VRSettings.GetGunGripToggle();
             if (toggle != toggleModeSeen)
             {
@@ -356,15 +355,15 @@ namespace TarkovVR.Source.Player.Interactions
             if (letGo)
             {
                 releaseTimer = 0f;
-                // A pistol two-handed: the support hand becomes its gun hand (its support grip cups the gun hand, nothing to hold up)
+                // A pistol held two-handed: the support hand becomes its gun hand (its support grip cups the gun hand, nothing to hold up)
                 if (supporting && PistolSwapsOnRelease())
                 {
                     SwapHands();
                     return;
                 }
-                // the support hand still on it - hand the gun to that hand. With the gun in the left hand that's the right hand:
+                // The support hand is still on it: hand the gun to that hand. With the gun in the left hand that's the right hand.
                 // GunInLeftHand stays on (the rig's LeftHand, the support pose and isSupporting all follow the right controller
-                // then, so the hold below is the same), RealLeftHandedPatches.SupportHeld draws the arms
+                // then, so the hold below is the same), and RealLeftHandedPatches.SupportHeld draws the arms.
                 if (supporting)
                     BeginSupportHold(firearmController);
                 else
@@ -375,7 +374,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         // ---- state transitions ----
 
-        // Armed for a while: the range's gun comes after its bundles load
+        // Stays armed for a while, because the range's gun arrives after its bundles load
         internal static void HangOnArrival(float seconds = 15f)
         {
             hangOnArrivalUntil = Time.time + seconds;
@@ -389,16 +388,16 @@ namespace TarkovVR.Source.Player.Interactions
                 VRGlobals.vrPlayer == null || !HeadPose(out _, out _))
                 return;
 
-            // Must run before SaveHolderOnce: strip any live collision enact off the holder. Else releasing the grip while the
-            // gun is pressed against something (prone: the ground) saves the enacted pose, and every restore re-applies the
-            // collision offset, compounding per sling cycle. Reset also clears the rig-motion tracking. The same for a reload jolt.
+            // Must run before SaveHolderOnce: strip any live collision offset off the holder. Otherwise releasing the grip while the
+            // gun is pressed against something (prone: the ground) saves the offset pose, and every restore re-applies it,
+            // compounding each sling cycle. Reset also clears the rig-motion tracking. GunJolt.Reset does the same for a reload jolt.
             WeaponCollision.Reset();
             TarkovVR.Source.Weapons.GunJolt.Reset();
 
             VRGlobals.vrPlayer.ForceUnlockHand();      // two-handing can't survive letting go
             SaveHolderOnce();
 
-            // fly-in starts from the release pose, captured in the body's frame (where the spots are)
+            // The fly-in starts from the release pose, captured in the body's frame (where the spots are)
             Quaternion yawRot = BodyYaw(out Vector3 headPos);
             slingLocalPos = Quaternion.Inverse(yawRot) * (weaponRoot.position - headPos);
             slingLocalRot = Quaternion.Inverse(yawRot) * weaponRoot.rotation;
@@ -409,8 +408,8 @@ namespace TarkovVR.Source.Player.Interactions
                 slingLocalRot = Quaternion.Inverse(yawRot) * spotRot;
             }
 
-            // Out of the left hand too: on the sling the gun is nobody's. Before DetachCommon frees the right arm, so that starts
-            // from the arms as they were and not the left-hand hold's own right-arm target (RealLeftHandedPatches.ReleaseArms)
+            // Out of the left hand too: on the sling the gun belongs to no hand. This runs before DetachCommon frees the right arm, so
+            // that starts from the arms as they were, not from the left-hand hold's own right-arm target (RealLeftHandedPatches.ReleaseArms).
             Handedness.SetGunInLeftHand(false);
             detachedGun = firearmController;
             DetachCommon();
@@ -446,9 +445,9 @@ namespace TarkovVR.Source.Player.Interactions
 
         // ---- the gun from one hand into the other ----
 
-        // The off hand at the gun hand's grip with a grip press: the gun goes into the off hand. Not a pistol (PistolSwapsOnRelease),
-        // not at or near the foregrip (short guns: the foregrip's grab wins), not while the off hand is on a reload part or in its
-        // zone (VRReloadController.OwnsOffHand, a frame old: the magazine zone wins), holds loot or the scope dial. True = swapped.
+        // The off hand at the gun hand's grip with a grip press: the gun goes into the off hand. Not for a pistol (PistolSwapsOnRelease),
+        // not at or near the foregrip (on short guns the foregrip grab wins), and not while the off hand is on a reload part or in its
+        // zone (VRReloadController.OwnsOffHand, one frame old: the magazine zone wins), holds loot or the scope dial. True = swapped.
         private static bool TryGrabFromGunHand(EFT.Player.FirearmController firearmController, bool supporting, bool offGripPressed)
         {
             var hands = VRGlobals.handsInteractionController;
@@ -456,14 +455,14 @@ namespace TarkovVR.Source.Player.Interactions
                 && !VRReloadController.OwnsOffHand && hands != null && hands.heldItem == null && hands.scopeTransform == null
                 && !OffHandAtForegrip() ? OffHandGripScore(firearmController) : float.MaxValue;
             bool atGrip = swapScore < 1f;
-            // Nearest wins: a magazine that loads through the grip (MP7, MP9, Uzi, Vector, PP-91) sits inside this reach, and a short
-            // one is all grip. The hand nearer the magazine than the grip, each over its own reach, leaves the press to the magazine
-            // (VRReloadController.Tick, later this frame, takes it with that reach).
+            // The nearest wins. A magazine that loads through the grip (MP7, MP9, Uzi, Vector, PP-91) sits inside this reach, and a short
+            // one is all grip. When the hand is nearer the magazine than the grip, each measured against its own reach, the press goes to
+            // the magazine (VRReloadController.Tick takes it later this frame with that reach).
             bool magazineNearer = atGrip && VRReloadController.OffHandMagazineScore(offTouchPoints) < swapScore;
             if (magazineNearer)
                 atGrip = false;
             OffHandAtGunGrip = atGrip;
-            // A light blip on the off hand coming into reach of the grip (as the regrab zone's): only where a press would swap
+            // A light blip when the off hand comes into reach of the grip (like the regrab zone's), only where a press would swap
             if (swapZoneBlip.Enter(atGrip))
                 HapticMixer.PlayPulse(Handedness.OffHandSource, 0.25f, 0.07f, 95f);
             if (magazineNearer && offGripPressed)
@@ -480,12 +479,12 @@ namespace TarkovVR.Source.Player.Interactions
             return pistolSwapOnRelease && !Handedness.LeftHanded && VRGlobals.vrPlayer.isWeapPistol;
         }
 
-        // The frame a grip press in the swap's reach went to the seated magazine instead (nearer it: TryGrabFromGunHand)
+        // The frame a grip press within the swap reach went to the seated magazine instead, because it was nearer (TryGrabFromGunHand)
         internal static int GripPressLeftToMagazineFrame { get; private set; } = -1;
 
-        // The off hand's palm, knuckles or fingertips to the gun hand's grip, over handSwapRadius (under 1 = in reach): the regrab
-        // point (the R-hand marker), mirrored across the gun's centre plane while the gun is in the left hand (where that hand holds
-        // it). Leaves those points in offTouchPoints.
+        // Distance from the off hand's palm, knuckles or fingertips to the gun hand's grip, divided by handSwapRadius (under 1 = in reach).
+        // The grip is the regrab point (the R-hand marker), mirrored across the gun's centre plane while the gun is in the left hand,
+        // where that hand holds it. Leaves the touch points in offTouchPoints.
         private static float OffHandGripScore(EFT.Player.FirearmController firearmController)
         {
             offTouchPoints.Clear();
@@ -514,8 +513,8 @@ namespace TarkovVR.Source.Player.Interactions
         // The gun goes into the other hand, held as it would be taken off the sling by that hand
         private static void SwapHands()
         {
-            // The holder in its clean pose (the left hand's hold is read off it once, VRPlayerManager.CacheGunInHand: a collision nudge
-            // left on it would feed back) and the collision's rig-motion tracking re-primed (the gun jumps hands)
+            // Put the holder in its clean pose (VRPlayerManager.CacheGunInHand reads the left hand's hold off it once, so a collision
+            // nudge left on it would feed back) and re-prime the collision's rig-motion tracking (the gun jumps hands).
             WeaponCollision.Reset();
             TarkovVR.Source.Weapons.GunJolt.Reset();
             bool toLeft = !Handedness.GunInLeftHand;
@@ -532,8 +531,8 @@ namespace TarkovVR.Source.Player.Interactions
                 VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
                 VRGlobals.ikManager.leftArmIk.enabled = true;
             }
-            // Bound to the new gun hand's grip when it's closed (it is for a grab; a pistol's support hand on the toggle setting holds
-            // with it open), else held like a freshly equipped gun until its first press
+            // Bound to the new gun hand's grip if it's closed (it is for a grab; a pistol's support hand with the toggle setting holds
+            // with it open), else held like a freshly equipped gun until its first press.
             gripSeen = Handedness.GunHandGrip.state;
             prevGrip = gripSeen;
             releaseTimer = 0f;
@@ -553,7 +552,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (weaponRoot == null || leftHandObject == null || VRGlobals.weaponHolder == null || VRGlobals.ikManager == null)
                 return;
 
-            WeaponCollision.Reset();   // strip any live collision enact BEFORE saving (see BeginHang)
+            WeaponCollision.Reset();   // strip any live collision offset before saving (see BeginHang)
             TarkovVR.Source.Weapons.GunJolt.Reset();
             SaveHolderOnce();
             // Rigid attach to the support controller at the current relative pose (the left hand already grips the gun).
@@ -570,11 +569,11 @@ namespace TarkovVR.Source.Player.Interactions
             DetachCommon();
             SupportOnly = true;
             TarkovVR.Patches.Core.Player.DetachedAimPatches.StopAimingOffTheGrip();
-            // The gun hand lets go, and the support hand now carries the whole gun: it feels that through the gun
+            // The gun hand lets go and the support hand now carries the whole gun, so it feels the pulse through the gun
             Pulse(0.35f, throughGun: true);
         }
 
-        // The support hold's off hand letting go with the gun hand on the charging handle: that hand carries the gun from here
+        // True when the off hand lets go of the support hold while the gun hand is on the charging handle: that hand then carries the gun
         private static bool CanHoldByHandle()
         {
             return VRReloadController.HandleInGunHand && !Handedness.GunInLeftHand
@@ -597,7 +596,7 @@ namespace TarkovVR.Source.Player.Interactions
             handleHoldRelRot = Quaternion.Inverse(controller) * weaponRoot.rotation;
             SupportOnly = false;
             HandleHeld = true;
-            // The gun hand off the shared hand latch onto a pin on the handle: the off hand's magazine needs that latch on the track
+            // Move the gun hand from the shared hand latch onto a pin on the handle, because the off hand's magazine work needs that latch
             VRReloadController.PinGunHandOnHandle();
             Pulse(0.35f, throughGun: true);
         }
@@ -621,32 +620,32 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // The gun hand's live controller rotation in world space, as SupportControllerRot has the off hand's
+        // The gun hand's live controller rotation in world space, like SupportControllerRot for the off hand
         private static Quaternion GunHandControllerRot(Transform hand)
         {
             return (hand.parent != null ? hand.parent.rotation : Quaternion.identity) * Handedness.GunHandPose.localRotation;
         }
 
-        // Shared detach work: free the dominant arm (the HandsIsEmpty pattern). The collision Reset happens earlier, in the
-        // Begin* methods before SaveHolderOnce: the strip must precede the save.
+        // Shared detach work: free the dominant arm, as with empty hands (HandsIsEmpty). WeaponCollision.Reset runs earlier, in the
+        // Begin* methods before SaveHolderOnce, because the collision offset must be stripped before the save.
         private static void DetachCommon()
         {
             KeepGunHandFree();
             gripSeen = false;
-            // The hand is AT the gun the instant it lets go - start the zone flag "in" so the
+            // The hand is at the gun the instant it lets go, so start the zone flag inside: the
             // in-reach blip only fires after leaving and coming back.
             regrabZoneBlip.MarkInside();
         }
 
         // EFT solves the gun-hand arm onto _markers[1] (the gun's weapon_R_IK_marker) itself every LateUpdate (Player.IkProcess/IkApply),
-        // whatever our IK does, and Unity doesn't order the two. So while detached _markers[1] is our IK's own target, as on empty
-        // hands and the free left hand; every frame, since EFT gathers a fresh marker on a weapon change.
+        // whatever our IK does, and Unity doesn't order the two. So while detached, _markers[1] is set to our IK's own target, as with
+        // empty hands and the free left hand. This is done every frame, since EFT gathers a fresh marker on a weapon change.
         private static Transform gunHandMarker;     // the gun's own, given back when the hand takes the gun again
         private static Transform freedHandMarker;   // what _markers[1] was set to
 
         internal static void KeepGunHandFree()
         {
-            // A press check's marker on the gun hand: the gun's own back first, or it's saved below as the gun's and given back on the
+            // Cancel a press check first, so its marker on the gun hand isn't saved below as the gun's own and given back on the
             // next grab (the hand would fly off to it)
             VRReloadController.CancelPressCheck();
             var arm = VRGlobals.ikManager != null ? VRGlobals.ikManager.rightArmIk : null;
@@ -654,7 +653,7 @@ namespace TarkovVR.Source.Player.Interactions
             var player = VRGlobals.player;
             if (arm == null || rightHand == null || player == null)
                 return;
-            // The gun in the left hand, held by the right hand alone: that arm is on the foregrip, RealLeftHandedPatches has both
+            // The gun in the left hand, held by the right hand alone: that arm is on the foregrip, and RealLeftHandedPatches drives both arms
             if (Handedness.GunInLeftHand)
                 return;
             // The gun hand on the charging handle (VRReloadController's latch) keeps its own target
@@ -674,13 +673,13 @@ namespace TarkovVR.Source.Player.Interactions
         private static void GiveGunHandMarkerBack()
         {
             var player = VRGlobals.player;
-            // (never a press check's marker: that's no part of the gun)
+            // Never give back a press check's marker: it isn't part of the gun
             if (VRReloadController.IsPressCheckMarker(gunHandMarker))
             {
                 var gun = VRGlobals.firearmController;
                 gunHandMarker = gun != null && gun.HandsHierarchy != null ? gun.HandsHierarchy.GetTransform(ECharacterWeaponBones.weapon_R_IK_marker) : null;
             }
-            // Not when something else set it since: a new gun gathered its own, empty hands point it at the hand
+            // Not if something else set it since: a new gun gathers its own, and empty hands point it at the hand
             if (player != null && player._markers.Length > 1 && freedHandMarker != null && player._markers[1] == freedHandMarker
                 && gunHandMarker != null && !player.HandsIsEmpty)
                 player._markers[1] = gunHandMarker;
@@ -696,8 +695,8 @@ namespace TarkovVR.Source.Player.Interactions
             return freedHandMarker != null && gunHandMarker != null && player._markers[1] == freedHandMarker ? gunHandMarker : player._markers[1];
         }
 
-        // A light blip when the dominant hand comes into regrab reach of the detached gun (mirrors the
-        // support hand's snap-zone haptic), so you can find the grip without looking.
+        // A light blip when the dominant hand comes into regrab reach of the detached gun,
+        // so you can find the grip without looking.
         private static readonly TarkovVR.Source.Misc.ZoneEntryBlip regrabZoneBlip = new TarkovVR.Source.Misc.ZoneEntryBlip();
         private static void RegrabZonePulse(bool near)
         {
@@ -705,8 +704,8 @@ namespace TarkovVR.Source.Player.Interactions
                 Pulse(0.3f);
         }
 
-        // Back to the dominant hand (restore = true), or just clear state because something else owns
-        // the gun now (controller switch, raid end - restore NOTHING, the equip path re-stamps).
+        // Back to the dominant hand (restore = true), or just clear state because something else owns the gun now
+        // (hands controller switch, raid end): then nothing is restored, because the equip path sets the holder.
         private static void Reattach(bool restore)
         {
             bool wasDetached = Detached;
@@ -732,7 +731,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             if (VRGlobals.ikManager != null && VRGlobals.ikManager.rightArmIk != null)
             {
-                // back to gun-held: the gun drives the right side directly (same as the equip path)
+                // Back to gun-held: the gun drives the right side directly (same as the equip path)
                 VRGlobals.ikManager.rightArmIk.solver.target = null;
                 VRGlobals.ikManager.rightArmIk.enabled = false;
             }
@@ -744,7 +743,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // Hands going onto the held gun: the gun's own hand-on-grip sound (gripSoundHandOn), else the generic gear
-        // (rig/backpack) pickup foley with the weapon's own pickup clip quiet under it. Fired for the foregrip grab
+        // (rig/backpack) pickup foley with the weapon's own pickup clip quiet under it. Played for the foregrip grab
         // (the isSupporting edge), the grip retake, the hand swap and a gun drawn off the body (BodyWeapons).
         public static void PlayGripSound()
         {
@@ -778,8 +777,8 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // The sound Tarkov's reload plays as the support hand goes back onto the gun, from the gun's own sound player
-        // (M4A1: HandOn = hand_grip4, HandOff = hand_grip3). A gun without either stays silent. Not through VRReloadController's
-        // PlayFelt: no audio haptics (the grab already pulses) and nothing sent over FIKA.
+        // (M4A1: HandOn = hand_grip4, HandOff = hand_grip3). A gun without either stays silent. Not played through VRReloadController's
+        // PlayFelt: no audio haptics (the grab already pulses) and nothing is sent over FIKA.
         private static void PlayHandOnSound(EFT.Player.FirearmController firearmController)
         {
             if (handOnSoundFor != firearmController)
@@ -802,7 +801,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static void SaveHolderOnce()
         {
-            // A press check turns the holder: its own rotation back before it's saved (else every restore would keep the turn)
+            // A press check turns the holder: cancel it so the turn isn't saved (else every restore would keep it)
             VRReloadController.CancelPressCheck();
             if (holderSaved || VRGlobals.weaponHolder == null)
                 return;
@@ -814,7 +813,7 @@ namespace TarkovVR.Source.Player.Interactions
                 Plugin.MyLog.LogInfo($"[ChestHang] SAVE holderL={savedHolderLocalPos:F3}/{savedHolderLocalRot.eulerAngles:F1}");
         }
 
-        // 1/sec while detached: every transform in the hand->gun chain that could change the hand<->gun relationship after a regrab
+        // Once a second while detached: logs every transform in the hand-to-gun chain that could change how hand and gun line up after a regrab
         private static void DebugChainDump()
         {
             if (!debugLog || Time.time < nextDebugLog)
@@ -832,10 +831,10 @@ namespace TarkovVR.Source.Player.Interactions
                 $" posL={(positioner != null ? positioner.localPosition : Vector3.zero):F3} saved={savedHolderLocalPos:F3}/{savedHolderLocalRot.eulerAngles:F1}");
         }
 
-        // Mirrors the left hand's foregrip check (LeftHand rig transform vs weapon_L_hand_marker, Transforms[10]): the anchor is
+        // Mirrors the left hand's foregrip check (LeftHand rig transform vs weapon_L_hand_marker, Transforms[10]). The anchor is
         // the weapon's own right-grip marker (ECharacterWeaponBones.weapon_R_hand_marker = Transforms[8]), where the rendered
         // right hand sits when gripping. Not WeaponRoot: that sits at the receiver, behind the pistol grip on most guns.
-        // Anywhere on the hanging gun takes it back, as on the body guns (BodyWeapons.ReachScore): under 1 = in reach
+        // Anywhere on the hanging gun takes it back, as with the body guns (BodyWeapons.ReachScore): under 1 = in reach.
         private static bool HandNearGun(EFT.Player.FirearmController firearmController)
         {
             return RegrabScore(firearmController) < 1f;
@@ -862,8 +861,8 @@ namespace TarkovVR.Source.Player.Interactions
             return anchor.position - firearmController.WeaponRoot.up * regrabForwardOffset;
         }
 
-        // A gun in hand and not hanging owns the gun arm (Tarkov IKs it onto the grip). A gun drawn while the last one still hung
-        // gets its arm freed by its own GunInteractionController.OnEnable (it sees Detached): given back here, every frame.
+        // A gun in hand that isn't hanging owns the gun arm (Tarkov IKs it onto the grip). A gun drawn while the last one still hung
+        // has its arm freed by its own GunInteractionController.OnEnable (it sees Detached), so the arm is given back here, every frame.
         // The gun hand on the charging handle has its own target (VRReloadController's latch), not RightHand.
         private static void GiveGunArmBack()
         {
@@ -878,7 +877,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (debugLog)
                     Plugin.MyLog.LogInfo("[ChestHang] gave the gun arm back to the gun in hand");
             }
-            // And EFT's own right marker (KeepGunHandFree's), which it solves that arm onto: the gun's grip marker
+            // EFT's own right marker (set by KeepGunHandFree), which it solves that arm onto, goes back to the gun's grip marker
             var player = VRGlobals.player;
             var firearmController = VRGlobals.firearmController;
             if (player != null && player._markers.Length > 1 && player._markers[1] == rightHand.transform && firearmController != null && firearmController.HandsHierarchy != null)
@@ -903,9 +902,9 @@ namespace TarkovVR.Source.Player.Interactions
             hangOnArrivalUntil = -1f;   // a gun you took yourself
         }
 
-        // Where a gun lives on the body when it isn't in your hand, as its Weapon_root's pose: BodyWeapons draws the others there,
+        // Where a gun lives on the body when it isn't in your hand, as its Weapon_root's pose. BodyWeapons draws the other guns there,
         // and the gun in hand goes there when you let go. First primary on the chest sling, second over the dominant shoulder,
-        // pistol on the dominant hip. In the body's frame (BodyYaw), not the head's. The back and hip guns are turned by where
+        // pistol on the dominant hip. In the body's frame (BodyYaw), not the head's. The back and hip guns are oriented by where
         // their muzzle and grip point (gripLocal = the gun's R-hand marker in its Weapon_root frame), so any gun sits the same way.
         internal static bool SpotPose(EquipmentSlot slot, Vector3 gripLocal, out Vector3 position, out Quaternion rotation)
         {
@@ -928,7 +927,7 @@ namespace TarkovVR.Source.Player.Interactions
                 case EquipmentSlot.SecondPrimaryWeapon:
                     offset = Mirrored(backOffset, leftHanded);
                     rotation = bodyRot * PointGun(Mirrored(backMuzzle, leftHanded), Mirrored(backGrip, leftHanded), gripLocal);
-                    // Its grip in the over-the-shoulder zone (it rides the head)
+                    // Its grip goes in the over-the-shoulder zone (which moves with the head)
                     if (VRGlobals.backHolster != null)
                     {
                         position = VRGlobals.backHolster.position - rotation * gripLocal;
@@ -938,7 +937,7 @@ namespace TarkovVR.Source.Player.Interactions
                 case EquipmentSlot.Holster:
                     offset = Mirrored(hipOffset, leftHanded);
                     rotation = bodyRot * PointGun(Mirrored(hipMuzzle, leftHanded), Mirrored(hipGrip, leftHanded), gripLocal);
-                    // Its grip in the hip zone (on the body's holster bone's parent)
+                    // Its grip goes in the hip zone (on the parent of the body's holster bone)
                     if (VRGlobals.sidearmHolster != null)
                     {
                         position = VRGlobals.sidearmHolster.position - rotation * gripLocal;
@@ -948,7 +947,7 @@ namespace TarkovVR.Source.Player.Interactions
                 default:
                     return false;
             }
-            // The offsets are from the eyes looking level; the anchor is the neck, so take that part off
+            // The offsets are measured from the eyes looking level, but the anchor is the neck, so subtract the neck offset
             position = neck + bodyRot * (offset - HeadTracking.neckLocalOffset);
             return true;
         }
@@ -972,13 +971,13 @@ namespace TarkovVR.Source.Player.Interactions
             return Quaternion.LookRotation(gripSide, butt) * Quaternion.Inverse(Quaternion.LookRotation(gripSideLocal, Vector3.up));
         }
 
-        // The body's facing, for the guns hung on it: it follows the head's yaw only past bodyTurnDeadZone (a glance doesn't swing
-        // them away from the hand reaching for them), and comes round to the head once it has held a new facing for
-        // bodyRecenterAfter. Kept relative to the rig, so stick turns carry it 1:1. The anchor is the neck (ShoulderStock's): the
-        // HMD swings ~10 cm about it as the head turns.
+        // The body's facing, used for the guns hung on it. It follows the head's yaw only past bodyTurnDeadZone (so a glance doesn't
+        // swing the guns away from the hand reaching for them), and turns to the head once the head has held a new facing for
+        // bodyRecenterAfter. Kept relative to the rig, so stick turns carry it 1:1. The anchor is the neck (as in ShoulderStock),
+        // because the HMD swings ~10 cm about it as the head turns.
         public static float bodyTurnDeadZone = 40f;
-        public static float bodyRecenterAfter = 0.75f;  // s of a still head (under bodyStillSpeed) before the body comes round
-        public static float bodyRecenterRate = 60f;     // deg/s it comes round at
+        public static float bodyRecenterAfter = 0.75f;  // s of a still head (under bodyStillSpeed) before the body turns to it
+        public static float bodyRecenterRate = 60f;     // deg/s it turns at
         public static float bodyStillSpeed = 30f;       // deg/s of head yaw that still counts as holding a facing
         private static float bodyYawInRig;
         private static float lastHeadYawInRig;
@@ -986,9 +985,9 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool bodyYawSet;
         private static int bodyYawFrame = -1;
 
-        // The body's turn in the rig advances once a frame; the neck and the rig's own yaw are read at every call. BodyWeapons places
+        // The body's turn in the rig advances once a frame; the neck and the rig's own yaw are read on every call. BodyWeapons places
         // the guns on the body at onBeforeRender, after the rig's LateUpdate pins (FirstPersonCameraState.ManualLateUpdate, the body
-        // follow) have moved it for the frame: a neck cached by the frame's first caller (Update) leaves them a step behind while walking.
+        // follow) have moved it for the frame. A neck cached by the frame's first caller (Update) would leave them a step behind while walking.
         internal static Quaternion BodyYaw(out Vector3 neck)
         {
             HeadPose(out Vector3 headPos, out Quaternion headRot);
@@ -1032,8 +1031,8 @@ namespace TarkovVR.Source.Player.Interactions
             return BodyWeapons.enabled && BodyWeapons.SlotOf(fc.Item, out EquipmentSlot slot) ? slot : EquipmentSlot.FirstPrimaryWeapon;
         }
 
-        // The gun in hands hanging at its spot (GunSpots places it like the ones on the body): its slot, grip in its Weapon_root frame,
-        // and where the hand takes it
+        // The gun in hands hanging at its spot (GunSpots places it like the ones on the body): outputs its slot, its grip in the
+        // Weapon_root frame, and where the hand takes it
         internal static bool HangingGun(out EFT.Player.FirearmController fc, out EquipmentSlot slot, out Vector3 gripLocal, out Vector3 grabPoint)
         {
             fc = null;
@@ -1058,8 +1057,8 @@ namespace TarkovVR.Source.Player.Interactions
 
         // ---- per-frame pose drives (called from GunInteractionController.UpdateWeaponPosition) ----
 
-        // Canonical across-chest orientation in the yaw frame: muzzle down and across toward the off side, gun's face out
-        // from the chest. The same pose every sling (not the release orientation). Recomputed per frame so the knobs are live-tunable.
+        // Canonical across-chest orientation in the yaw frame: muzzle down and across toward the off side, the gun's face out
+        // from the chest. The same pose on every sling, not the release orientation. Recomputed per frame so the knobs can be tuned live.
         private static Quaternion CanonicalSlingRot(bool leftHanded)
         {
             float side = leftHanded ? 1f : -1f;   // muzzle crosses to the OFF-hand side
@@ -1070,14 +1069,14 @@ namespace TarkovVR.Source.Player.Interactions
                 face = Vector3.up;
             else
                 face.Normalize();
-            // whole-gun yaw about the vertical (side-mirrored so positive = toward the off side)
+            // Whole-gun yaw about the vertical (mirrored per side so positive = toward the off side)
             return Quaternion.AngleAxis(side * slingYawDeg, Vector3.up)
                  * Quaternion.AngleAxis(slingRollDeg, muzzle) * Quaternion.LookRotation(face, butt);
         }
 
-        // A switch away from the detached gun (a gun taken off the body while it hangs) hands Tarkov's hands,
+        // Switching away from the detached gun (a gun taken off the body while it hangs) hands Tarkov's hands,
         // VRGlobals.firearmController and VRGlobals.weaponHolder to the next gun a few frames before UpdateInput sees the new
-        // controller; a stamp in between would move that gun's holder. Not the detached gun any more = the detach ends here.
+        // controller. Placing the gun in between would move the new gun's holder. Once it isn't the detached gun, the detach ends here.
         private static bool DetachedGunGone()
         {
             var player = VRGlobals.player;
@@ -1085,13 +1084,13 @@ namespace TarkovVR.Source.Player.Interactions
                 || !ReferenceEquals(VRGlobals.firearmController, detachedGun);
         }
 
-        // Still in hands but off our holder: Tarkov has it back for its put-away, nothing of ours to place
+        // Still in hands but off our holder: Tarkov has it back for its put-away, so there is nothing of ours to place
         private static bool DetachedGunOnHolder()
         {
             return detachedGun.WeaponRoot != null && VRGlobals.weaponHolder != null && detachedGun.WeaponRoot.parent == VRGlobals.weaponHolder.transform;
         }
 
-        // false = the detached gun is gone: place the gun in hands the usual way
+        // Returns false when the detached gun is gone: then the gun in hands is placed the usual way
         public static bool DriveHangPose()
         {
             if (DetachedGunGone())
@@ -1108,15 +1107,15 @@ namespace TarkovVR.Source.Player.Interactions
             float deltaTime = Mathf.Clamp(Time.deltaTime, 1e-4f, 0.05f);
             Quaternion yawRot = BodyYaw(out Vector3 headPos);
             // Its own spot (the chest sling for the first primary, the shoulder for the second, the hip for the pistol), in the
-            // body-local frame the tuck-in runs in (from the neck, so a head turn doesn't swing it)
+            // body-local frame the tuck-in runs in (measured from the neck, so a head turn doesn't swing it)
             if (!HandsGunSpotPose(firearmController, out Vector3 spotPos, out Quaternion spotRot))
                 return true;
             Vector3 offset = Quaternion.Inverse(yawRot) * (spotPos - headPos);
             Quaternion spotLocalRot = Quaternion.Inverse(yawRot) * spotRot;
 
-            // tuck-in blend runs in the yaw-local frame (turning carries the gun 1:1; a world-space blend spins the gun
-            // under turns), then the mount is rigid: no dangle.
-            // Being placed by hand (GunSpots): it's in the hand, no tuck-in
+            // The tuck-in blend runs in the yaw-local frame, so turning carries the gun 1:1 (a world-space blend spins the gun
+            // under turns). After it the mount is rigid: no dangle.
+            // Being placed by hand (GunSpots): it's in the hand, so no tuck-in
             if (GunSpots.IsPlacing(HandsGunSlot(firearmController)))
             {
                 slingLocalPos = offset;
@@ -1150,8 +1149,8 @@ namespace TarkovVR.Source.Player.Interactions
             Quaternion controllerRotation = SupportControllerRot(leftHand);
             Quaternion target = controllerRotation * supportRelRot;
 
-            // Weight feel on the one-handed support hold: the same swing/twist spring as the main hand, on its own momentum
-            // state (SupportHold instance) so the two paths can't double-filter. Position stays pinned at the grab point;
+            // Weight feel on the one-handed support hold: the same swing/twist spring as the main hand, with its own momentum
+            // state (the SupportHold instance) so the two paths can't double-filter. Position stays pinned at the grab point;
             // the weight lives in rotation about it, so the filtered rotation swings WeaponRoot through the grip lever.
             if (VRSettings.GetWeaponWeightOn())
             {
@@ -1189,8 +1188,8 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // The holder hangs off RightHandPositioner, which HandsPositioner moves onto the free gun hand every Update, and Unity doesn't
-        // order that against the stamp: when it runs after, the detached gun rides that hand's motion for the frame (jitter).
-        // HandsPositioner calls this after it moves.
+        // order that against StampWeaponRoot. When HandsPositioner runs after, the detached gun rides that hand's motion for the frame
+        // (jitter), so HandsPositioner calls this after it moves.
         internal static void RestampDetached()
         {
             if (!Detached || stampedFrame != Time.frameCount || DetachedGunGone() || !DetachedGunOnHolder())
@@ -1198,8 +1197,8 @@ namespace TarkovVR.Source.Player.Interactions
             PlaceWeaponRoot(stampedPosition, stampedRotation);
         }
 
-        // Place WeaponRoot at the given world pose via the holder (rigid delta re-derived from the
-        // current state every frame - absolute target, nothing accumulates).
+        // Places WeaponRoot at the given world pose by moving the holder. The rigid delta is re-derived from the current state
+        // every frame (an absolute target), so nothing accumulates.
         private static void PlaceWeaponRoot(Vector3 position, Quaternion rotation)
         {
             Transform weaponRoot = VRGlobals.firearmController.WeaponRoot;
@@ -1208,10 +1207,10 @@ namespace TarkovVR.Source.Player.Interactions
             holder.SetPositionAndRotation(position + turn * (holder.position - weaponRoot.position), turn * holder.rotation);
         }
 
-        // The headset pose in the hands' space: the HMD tracking pose (the camera's local transform - SteamVR_TrackedObject
-        // writes it regardless of parent) lifted through the rig (vrOffsetter), the parent the hand transforms are driven under.
-        // Do not use VRCam.position as a head reference: in the hideout VRCam is parented ~1000m from the player rig while
-        // its local pose still tracks the HMD; world-space camera reads are only valid in raids (direct rig child).
+        // The headset pose in the hands' space: the HMD tracking pose (the camera's local transform, which SteamVR_TrackedObject
+        // writes regardless of parent) lifted through the rig (vrOffsetter), the parent the hand transforms are driven under.
+        // Don't use VRCam.position as a head reference: in the hideout VRCam is parented ~1000 m from the player rig while its
+        // local pose still tracks the HMD. World-space camera reads are only valid in raids, where it is a direct rig child.
         internal static bool HeadPose(out Vector3 pos, out Quaternion rot)
         {
             Camera camera = VRGlobals.VRCam != null ? VRGlobals.VRCam : Camera.main;
@@ -1236,8 +1235,8 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // Yaw-only head frame (nodding doesn't drag the chest around; projected-up fallback keeps yaw
-        // sane looking straight up/down).
+        // Yaw-only head frame, so nodding doesn't drag the chest around. The projected-up fallback keeps the yaw
+        // sane when looking straight up or down.
         internal static Quaternion HeadYaw(out Vector3 headPos)
         {
             HeadPose(out headPos, out Quaternion headRot);
@@ -1252,7 +1251,7 @@ namespace TarkovVR.Source.Player.Interactions
             return flat.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(flat.normalized) : Quaternion.identity;
         }
 
-        // The gun hand; throughGun = it took hold of the gun, so a hand already on it feels that through the gun (GunHaptics)
+        // Pulses the gun hand. throughGun = it took hold of the gun, so a hand already on it feels that through the gun (GunHaptics)
         internal static void Pulse(float amp, bool throughGun = false)
         {
             GunHaptics.Pulse(true, throughGun ? GunHaptics.Feel.Carried : GunHaptics.Feel.Alone, amp, 0.07f, 95f);

@@ -5,34 +5,34 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.VRManager
 {
-    // Aim steadying: a One Euro filter on the gun hand's rotation (before the weight), in the rig's frame (a stick turn isn't the hand).
-    // Its cutoff rises with how fast the hand turns, so a nearly still hand - the shake and tracking noise a scope magnifies - is
-    // smoothed hard while a deliberate move passes through (the most it lags is 1 / (2 pi speedResponse) deg as seen in the sight).
-    // Only while aiming down sights; the still cutoff drops with the sight's magnification. Holding breath is the "holding steady now":
-    // much heavier smoothing, fading out as the lungs run out; out of breath the normal steadying weakens.
-    // Holding breath the filter also carries the hand's STEADY turn (its turn rate low-passed again, cut to what the hand still does),
-    // so a pan after a moving target is steadied like a still hand with no lag; only turning off that steady turn opens it.
+    // Aim steadying: a One Euro filter on the gun hand's rotation, applied before the weapon weight, in the rig's frame (so a stick turn
+    // doesn't count as hand motion). Its cutoff rises with how fast the hand turns: a nearly still hand (the shake and tracking noise a
+    // scope magnifies) is smoothed hard, while a deliberate move passes through (at most 1 / (2 pi speedResponse) deg of lag as seen in
+    // the sight). Only active while aiming down sights; the still cutoff drops with the sight's magnification.
+    // Holding breath smooths much more heavily, fading out as the lungs run out; out of breath, the normal steadying is weaker.
+    // While holding breath the filter also carries the hand's steady turn (its turn rate low-passed again, limited to what the hand still
+    // does), so a pan after a moving target is steadied like a still hand, without lag; only turning away from that steady turn opens it.
     public static class AimSteady
     {
-        public static bool enabled = true;              // false = the old hold-breath slerp (Hold Breath Sensitivity)
+        public static bool enabled = true;              // false = a plain slerp while holding breath ("Hold Breath Sensitivity" setting)
         public static float stillCutoff = 4f;           // Hz a still hand is filtered at through a 1x sight (/ the magnification); lower = steadier, slower to settle
         public static float minCutoff = 0.15f;          // Hz floor (a high zoom)
         public static float speedResponse = 0.4f;       // Hz added per deg/s the sight's view turns: higher = less lag moving, more shake left
         public static float speedCutoff = 1f;           // Hz the turn rate is smoothed at before it opens the filter (lower = shake opens it less, a move later)
-        public static float breathStillScale = 0.25f;   // x the still cutoff holding breath
-        public static float breathSpeedScale = 0.25f;   // x the speed response holding breath (lags a move more)
-        public static float breathFollowTurn = 1f;      // x the hand's steady turn carried holding breath: 1 = a steady pan steadied like a still hand, 0 = only a still hand (a pan trails)
-        public static float steadyTurnCutoff = 0.5f;    // Hz the steady turn is taken at: lower = less sway carried, a change of pace picked up later
-        public static float breathErrorResponse = 1f;   // Hz added per deg the gun is off the hand in the sight, holding breath: catches up after a stop / turn (less overshoot), more shake left
+        public static float breathStillScale = 0.25f;   // x the still cutoff while holding breath
+        public static float breathSpeedScale = 0.25f;   // x the speed response while holding breath (lags a move more)
+        public static float breathFollowTurn = 1f;      // x the hand's steady turn carried while holding breath: 1 = a steady pan steadied like a still hand, 0 = only a still hand (a pan trails)
+        public static float steadyTurnCutoff = 0.5f;    // Hz the steady turn is low-passed at: lower = less sway carried, a change of pace picked up later
+        public static float breathErrorResponse = 1f;   // Hz added per deg the gun is off the hand in the sight, while holding breath: catches up after a stop / turn (less overshoot), more shake left
         public static float breathFadeBelow = 0.4f;     // lungs (0..1) below which the hold-breath steadying fades out
         public static float exhaustedStrength = 0.5f;   // x the steadying while out of breath
         public static float easeTime = 0.2f;            // s it fades in / out as you aim / hold breath
         public static float maxMagnification = 40f;
-        public static bool debugLog = false;            // a line a second: magnification, breath, the cutoffs, the hand's turn rate
+        public static bool debugLog = false;            // logs a line a second: magnification, breath, the cutoffs, the hand's turn rate
 
-        private static Quaternion filtered = Quaternion.identity;   // in the frame
+        private static Quaternion filtered = Quaternion.identity;   // in the rig frame
         private static Quaternion lastRaw = Quaternion.identity;
-        private static Vector3 turnRate;                            // rad/s, smoothed, the frame's axes
+        private static Vector3 turnRate;                            // rad/s, smoothed, in the frame's axes
         private static Vector3 steadyTurn;                          // rad/s, turnRate low-passed again
         private static Vector3 offHand;                             // rad, the gun off the hand, smoothed like the turn rate
         private static float lastTime = -10f;
@@ -53,7 +53,7 @@ namespace TarkovVR.Source.Player.VRManager
 
         public static bool Active => enabled && VRSettings.SmoothScopeAim() && VRSettings.GetAimSteadyStrength() > 0f;
 
-        // The hand's rotation (world) steadied for this frame. frame = what the rotation rides (the rig)
+        // Returns the hand's world rotation, steadied for this frame. frame = the transform the hand moves with (the rig).
         public static Quaternion Filter(Quaternion target, Transform frame, float dt)
         {
             Quaternion frameRotation = frame != null ? frame.rotation : Quaternion.identity;
@@ -110,7 +110,7 @@ namespace TarkovVR.Source.Player.VRManager
                 filtered = raw;
                 return target;
             }
-            // The steady turn, cut to the part of it the hand still does: a stop / reversal drops it as quickly as the hand
+            // The steady turn, limited to the part of it the hand is still doing, so a stop or reversal drops it as quickly as the hand does
             Vector3 carried = Vector3.zero;
             float steadySpeed = steadyTurn.magnitude;
             if (steadySpeed > 1e-6f)
@@ -162,7 +162,7 @@ namespace TarkovVR.Source.Player.VRManager
             catch { }
         }
 
-        // The aimed sight's magnification: 1 for irons / a red dot; a variable scope's from its camera's view against its widest
+        // The aimed sight's magnification: 1 for irons or a red dot; for a variable scope, from its camera's field of view against its widest
         private static float Magnification()
         {
             var weaponAnimation = VRGlobals.player != null ? VRGlobals.player.ProceduralWeaponAnimation : null;

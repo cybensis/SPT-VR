@@ -11,18 +11,18 @@ using UnityEngine;
 
 namespace SptVrFikaSync
 {
-    // A door another VR player's hand moves: its angle and handle as they send them, eased toward the newest packet every frame (as the
-    // arms, ArmSyncApply.smoothRate). FIKA's own Open / Close for it still arrive (the state); their swing is skipped while the door is
-    // driven from here (DoorSwingSkip), a swing already running stops, and the shut sound plays when the door drawn here reaches its
-    // frame. A kick (Tarkov's breach swing) is never skipped or stopped.
+    // Shows a door that another VR player moves by hand. Its angle and handle turn come from their packets and are eased toward the
+    // newest one every frame, like the arms (ArmSyncApply.smoothRate). FIKA's own Open / Close still arrive and set the door state, but
+    // their swing is skipped while the door is driven from here (DoorSwingSkip), and a swing already running is stopped. The shut sound
+    // plays when the door shown here reaches its frame. A kick (Tarkov's breach swing) is never skipped or stopped.
     internal static class DoorSyncApply
     {
-        public static float drivenHoldTime = 1f;        // s after the last packet that FIKA's own swing of that door is still skipped
-        public static float smoothRate = 18f;           // the angle and handle eased toward the newest packet, per s (0 = snap to each)
-        public static float shutReachedDegrees = 0.5f;  // the door drawn here this near its frame = shut: the shut sound plays
-        public static float shutSoundMaxWait = 0.3f;    // s at most the shut sound waits for that
-        public static float slamSpeed = 180f;           // deg/s the door shuts at full volume (as PhysicalDoors.slamSpeed)
-        public static float quietSpeed = 30f;           // deg/s and slower: Tarkov's own shut volume
+        public static float drivenHoldTime = 1f;        // s after the last packet during which FIKA's own swing of that door is skipped
+        public static float smoothRate = 18f;           // 1/s, how fast the angle and handle ease toward the newest packet (0 = snap)
+        public static float shutReachedDegrees = 0.5f;  // deg, the door counts as shut this close to its frame and the shut sound plays
+        public static float shutSoundMaxWait = 0.3f;    // s, the longest the shut sound waits for the door to reach its frame
+        public static float slamSpeed = 180f;           // deg/s, a door shutting this fast plays at full volume (like PhysicalDoors.slamSpeed)
+        public static float quietSpeed = 30f;           // deg/s, a door shutting this slowly or slower uses Tarkov's own shut volume
 
         private sealed class Remote
         {
@@ -33,12 +33,12 @@ namespace SptVrFikaSync
             public float shownTurn;
             public float lastPacketAngle = float.NaN;
             public float lastPacketTime;
-            public float speed;                         // deg/s between the last two packets that moved it
+            public float speed;                         // deg/s, measured between the last two packets that moved the door
             public bool shutPending;
             public float shutPendingSince;
         }
 
-        // By door Id (a string doesn't keep the raid's doors alive past it)
+        // Keyed by door Id: a string key doesn't keep the raid's doors alive after the raid
         private static readonly Dictionary<string, Remote> remotes = new Dictionary<string, Remote>();
         private static readonly List<string> finished = new List<string>();
 
@@ -56,7 +56,7 @@ namespace SptVrFikaSync
                 return;
             if (FikaVrSync.isDoorDrivenLocally != null && FikaVrSync.isDoorDrivenLocally(door))
                 return;
-            // A kick swings it: that plays out
+            // A kick is swinging the door: let it play out
             if (Kicking(door))
                 return;
             if (!remotes.TryGetValue(packet.DoorId, out Remote remote) || remote.door != door)
@@ -65,7 +65,7 @@ namespace SptVrFikaSync
                 remotes[packet.DoorId] = remote;
             }
             float now = Time.time;
-            // (the same angle again = no news: through a headless host every packet comes twice)
+            // The same angle again is not news: through a headless host every packet arrives twice.
             if (float.IsNaN(remote.lastPacketAngle) || Mathf.Abs(Mathf.DeltaAngle(remote.lastPacketAngle, packet.Angle)) > 0.01f)
             {
                 float sinceLast = now - remote.lastPacketTime;
@@ -86,7 +86,7 @@ namespace SptVrFikaSync
                 Show(remote, 1f);
         }
 
-        // Per frame (FikaSyncPlugin.LateUpdate)
+        // Called every frame from FikaSyncPlugin.LateUpdate
         public static void Tick()
         {
             if (remotes.Count == 0)
@@ -117,7 +117,7 @@ namespace SptVrFikaSync
                 remotes.Remove(finished[i]);
         }
 
-        // The door drawn a step toward the newest packet; true = it's there
+        // Moves the shown door one step toward the newest packet. Returns true once it is there.
         private static bool Show(Remote remote, float follow)
         {
             WorldInteractiveObject door = remote.door;
@@ -157,21 +157,21 @@ namespace SptVrFikaSync
                 && Time.time < remote.drivenUntil;
         }
 
-        // The hand's angles let go of it (a kick swings it now)
+        // Stops driving the door from the packets (a kick swings it now)
         internal static void Release(WorldInteractiveObject door)
         {
             if (door != null && !string.IsNullOrEmpty(door.Id))
                 remotes.Remove(door.Id);
         }
 
-        // Tarkov's breach swing runs (Door.KickOpen)
+        // True while Tarkov's breach swing (Door.KickOpen) is running
         internal static bool Kicking(WorldInteractiveObject door)
         {
             WorldInteractiveObject.InteractionState interaction = door._interaction;
             return door is Door && interaction.ResultState == EDoorState.Breaching && interaction.IsInProgress && !interaction.Break;
         }
 
-        // FIKA's Open / Close arrived first and its swing runs: it ends here, in the state it was heading for
+        // If FIKA's Open / Close arrived first and its swing is running, ends it now in the state it was heading for
         private static void StopSwing(WorldInteractiveObject door)
         {
             WorldInteractiveObject.InteractionState interaction = door._interaction;
@@ -183,7 +183,7 @@ namespace SptVrFikaSync
             door._previousInteraction.SetEndData(interaction);
         }
 
-        // The state the swing would leave the door in, at once
+        // Puts the door at once into the state the swing would have left it in
         internal static void Settle(WorldInteractiveObject door, EDoorState state)
         {
             EDoorState result = state == EDoorState.Breaching ? EDoorState.Open : state;
@@ -196,7 +196,7 @@ namespace SptVrFikaSync
                 Vector2 volume = door.OpenSoundVolumeRange;
                 door.PlaySound(EDoorState.Open, UnityEngine.Random.Range(volume.x, volume.y));
             }
-            // The shut sound when the door drawn here gets to its frame (Tick): the angles come in behind FIKA's Close
+            // The shut sound waits until the shown door reaches its frame (Tick), because the angle packets arrive after FIKA's Close
             if (result == EDoorState.Shut && !string.IsNullOrEmpty(door.Id) && remotes.TryGetValue(door.Id, out Remote remote) && remote.door == door)
             {
                 remote.shutPending = true;
@@ -206,7 +206,7 @@ namespace SptVrFikaSync
                 keycardDoor.Lock();
         }
 
-        // Louder the faster it came shut (PhysicalDoors.PlayShut on the VR player's side)
+        // Louder the faster the door shut, like PhysicalDoors.PlayShut on the VR player's side
         private static void PlayShut(WorldInteractiveObject door, float speed)
         {
             AudioClip[] clips = door.ShutSound;
@@ -227,8 +227,8 @@ namespace SptVrFikaSync
         }
     }
 
-    // FIKA's Open / Close of a door a VR player's hand drives (DoorSyncApply): the state at once, without Tarkov's swing. Every override
-    // of the swing is patched (each one is what a call on that door runs). A kick's swing always plays.
+    // When FIKA opens or closes a door that a VR player's hand drives (DoorSyncApply), sets the state at once without Tarkov's swing.
+    // Every override of SmoothDoorOpenCoroutine is patched, because a call runs the override of that door's own type. A kick always swings.
     [HarmonyPatch]
     internal static class DoorSwingSkip
     {
@@ -248,7 +248,7 @@ namespace SptVrFikaSync
         {
             if (!DoorSyncApply.Driven(__instance))
                 return true;
-            // (Door.KickOpen sets the breach result before it starts the swing)
+            // Door.KickOpen sets the breach result before it starts the swing
             if (__instance._interaction.ResultState == EDoorState.Breaching)
             {
                 DoorSyncApply.Release(__instance);
@@ -265,15 +265,15 @@ namespace SptVrFikaSync
         }
     }
 
-    // A VR player's breach on the other players' machines. A gun hit breaks the door with Tarkov's Execute alone (no Start, no kick clip),
-    // which FIKA replays through that player's copy's movement state - and a copy left in a door or kick state drops it
-    // (ObservedDoorInteractionState / ObservedBreachDoorState do nothing). When the replay didn't kick the door, it's kicked here. Not
-    // while that copy's own kick clip is still to land (a VR player's kick from the gaze menu: Tarkov kicks at its KickTime).
+    // Replays a VR player's breach on the other players' machines. A gun hit breaks the door with Tarkov's Execute stage alone (no Start,
+    // no kick clip). FIKA replays it through the observed player's movement state, and an observed player left in a door or kick state
+    // drops it (ObservedDoorInteractionState / ObservedBreachDoorState do nothing). If the replay didn't kick the door, it is kicked here,
+    // unless the observed player's own kick clip has yet to land (a kick from the gaze menu: Tarkov kicks at its KickTime).
     [HarmonyPatch(typeof(ObservedPlayer), nameof(ObservedPlayer.ExecuteInteraction))]
     internal static class BreachReplay
     {
         public static bool kickWhenDropped = true;
-        public static bool logBreaches = true;          // one line per breach: kicked by FIKA's replay, or here (and the copy's state)
+        public static bool logBreaches = true;          // one line per breach: who kicked the door and the observed player's state
 
         private static bool loggedError;
 

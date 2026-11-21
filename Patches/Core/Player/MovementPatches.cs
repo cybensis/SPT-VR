@@ -14,12 +14,10 @@ namespace TarkovVR.Patches.Core.Player
         private static float lastYRot = 0f;
 
         // --- Proper analog movement direction (see AnalogMovementDirection below) -----------------------------------
-        // ON = body physically travels in the exact analog stick heading (full 360°). OFF = vanilla EFT behaviour,
-        // i.e. travel snapped to the 8 directions Tarkov has walk animations for.
-        // Don't bother redirecting below this planar root-motion magnitude (avoids normalizing noise while idle/stopping).
+        // Below this planar root-motion magnitude the motion isn't redirected (avoids normalizing noise while idle or stopping).
         public static float analogMinPlanarMotion = 0.0001f;
-        // While SPRINTING, cap how far off the sprint's forward heading you can steer (deg). Vanilla sprint is
-        // forward-only (no sideways sprint animation), so without this the redirect lets you sprint nearly sideways.
+        // deg, how far off the sprint's forward heading you can steer while sprinting. Vanilla sprint is forward-only (there is
+        // no sideways sprint animation), so without this cap the redirect would let you sprint nearly sideways.
         public static float analogSprintMaxAngle = 5f;
 
         
@@ -51,8 +49,7 @@ namespace TarkovVR.Patches.Core.Player
                 return;
             __instance.MovementContext.TrunkRotationLimit = 0;
         }
-        // Found in Player object under CurrentState variable, and is inherited by Gclass1573
-        // Can access MovementContext and probably state through player object->HideoutPlayer->MovementContext
+        // MovementState is the Player's CurrentState (GClass1573 inherits it).
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MovementState), "Rotate")]
         private static bool SetPlayerRotate(MovementState __instance, ref Vector2 deltaRotation)
@@ -63,7 +60,7 @@ namespace TarkovVR.Patches.Core.Player
             if (VRGlobals.menuOpen || !VRGlobals.inGame)
                 return true;
 
-            // A mounted gun: the hands turn it, and Tarkov turns you onto it (MountedGun)
+            // On a mounted gun the hands turn the gun, and Tarkov turns the player with it (see MountedGun)
             if (Source.Player.Interactions.MountedGun.DriveRotation(__instance))
                 return false;
 
@@ -102,8 +99,8 @@ namespace TarkovVR.Patches.Core.Player
 
             return false;
         }      
-        // Tarkov stands left foot forward, which feels wrong in VR: the body is turned 28 degrees so both feet are in front when
-        // standing still
+        // Tarkov stands left foot forward, which feels wrong in VR. The body is turned 28 degrees so both feet are in front when
+        // standing still.
         private static void TurnBodyWithHead(MovementContext movementContext, ref Vector2 deltaRotation)
         {
             Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * movementContext._player.gameObject.transform.forward;
@@ -187,16 +184,12 @@ namespace TarkovVR.Patches.Core.Player
         }
 
 
-        // GClass1854 inherits MovementState and its version of ProcessUpperbodyRotation is ran when the player is moving, __instance ensures 
-        // the rotation when not moving is similar to that when moving otherwise the player can rotate their camera faster than the body
-        // can rotate
+        // GClass1854 inherits MovementState, and its ProcessUpperbodyRotation runs while the player moves. This makes the body turn the
+        // same way when not moving; otherwise the camera could turn faster than the body.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MovementState), "ProcessUpperbodyRotation")]
         private static bool FixBodyRotation(MovementState __instance, float deltaTime)
         {
-            //float y = Mathf.Abs(__instance.MovementContext.TransformRotation.eulerAngles.y - camRoot.transform.eulerAngles.y);
-            //if (y > 20)
-            //    __instance.MovementContext.ApplyRotation(Quaternion.Lerp(__instance.MovementContext.TransformRotation, __instance.MovementContext.TransformRotation * Quaternion.Euler(0f, y, 0f), 30f * deltaTime));
             if (!__instance.MovementContext._player.IsYourPlayer || !VRGlobals.inGame)
                 return true;
 
@@ -206,23 +199,22 @@ namespace TarkovVR.Patches.Core.Player
             float num = Mathf.InverseLerp(10f, 45f, Mathf.Abs(f)) + 1f;
             float_3 = Mathf.LerpAngle(float_3, __instance.MovementContext.Yaw, EFTHardSettings.Instance.TRANSFORM_ROTATION_LERP_SPEED * deltaTime * num);
             __instance.MovementContext.ApplyRotation(Quaternion.AngleAxis(float_3, Vector3.up) * __instance.MovementContext.AnimatorDeltaRotation);
-            //Plugin.MyLog.LogError("Process upper " + (Quaternion.AngleAxis(float_3, Vector3.up) * __instance.MovementContext.AnimatorDeltaRotation).eulerAngles);
             return false;
              
         }
 
         // -------------------------------------------------------------------------------------------------------------
-        // Proper analog (full-360°) movement direction.
+        // Analog (full 360°) movement direction.
         //
-        // Tarkov locomotion is root-motion driven (RunStateClass.UpdatePosition -> motion = PlayerAnimatorDeltaPosition ->
-        // MovementContext.ApplyMotion -> CharacterController.Move), and the walk clip is picked by binning the stick into one
-        // of 8 directions (GClass2076.ConvertToMovementDirection -> SetUpDiscreteDirection, with hysteresis), so the body can
-        // only travel in those 8. This rotates the horizontal part of the motion onto the true analog heading
-        // (MovementContext.AbsoluteMovementDirection), keeping its magnitude (EFT's accel/inertia/speed limits stay) and its y.
-        // The legs still animate in 8 directions.
+        // Tarkov locomotion is driven by root motion (RunStateClass.UpdatePosition -> motion = PlayerAnimatorDeltaPosition ->
+        // MovementContext.ApplyMotion -> CharacterController.Move). The walk clip is picked by binning the stick into one of
+        // 8 directions (GClass2076.ConvertToMovementDirection -> SetUpDiscreteDirection, with hysteresis), so the body can only
+        // travel in those 8. This rotates the horizontal part of the motion onto the true stick heading
+        // (MovementContext.AbsoluteMovementDirection) and keeps its length and its y, so EFT's acceleration, inertia and speed
+        // limits still apply. The legs still animate in 8 directions.
         //
-        // Runs before EFT's BlendMotion/ProjectMotionToSurface/ApplyGravity (this is the base MovementState.ApplyMotion,
-        // not overridden by RunStateClass), so slope projection and gravity are computed from the corrected heading.
+        // This is the base MovementState.ApplyMotion (RunStateClass doesn't override it), so it runs before EFT's
+        // BlendMotion/ProjectMotionToSurface/ApplyGravity, and slope projection and gravity use the corrected heading.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MovementState), "ApplyMotion")]
         private static void AnalogMovementDirection(MovementState __instance, ref Vector3 motion)
@@ -250,8 +242,8 @@ namespace TarkovVR.Patches.Core.Player
                 return;
             heading.Normalize();
 
-            // Sprint is forward-only in vanilla; clamp the steer to a cone around the sprint's own forward heading
-            // (the un-redirected root motion direction == body forward while sprinting) so you can't run sideways.
+            // Vanilla sprint is forward-only, so the steer is clamped to a cone around the sprint's own heading (the root motion
+            // before the redirect, which is the body's forward while sprinting). This stops you running sideways.
             if (movementContext.IsSprintEnabled)
             {
                 Vector3 forward = horizontal / planarMag; // root-motion heading (≈ body forward during sprint)
@@ -262,7 +254,8 @@ namespace TarkovVR.Patches.Core.Player
             motion = new Vector3(redirected.x, motion.y, redirected.z);
         }
 
-        // GClass1913 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
+        // GClass1913 is used by the PlayerCameraController to position and rotate the camera. PlayerCameraController holds the abstract
+        // class GClass1943, which this inherits.
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(FirstPersonCameraState), "ManualLateUpdate")]
@@ -272,7 +265,8 @@ namespace TarkovVR.Patches.Core.Player
             if (!__instance._player.IsYourPlayer || !VRGlobals.inGame || VRGlobals.menuOpen)
                 return true;
 
-            // When medding or eating, we need to rely on this code to position the upper body, and it will set the empty hands but the current gun interaction controller should be disabled
+            // While using meds or eating, this code positions the upper body. emptyHands is set then, but the current gun interaction
+            // controller is disabled.
             if (VRGlobals.emptyHands && VRGlobals.player.HandsIsEmpty)
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
             else if (VRGlobals.emptyHands && (!WeaponPatches.currentGunInteractController || !WeaponPatches.currentGunInteractController.enabled)) {
@@ -283,7 +277,6 @@ namespace TarkovVR.Patches.Core.Player
             }
             else if (!VRGlobals.emptyHands)
                 VRGlobals.camRoot.transform.position = new Vector3(__instance._player.Transform.position.x, __instance._player.Transform.position.y + 1.5f, __instance._player.Transform.position.z);
-            //Plugin.MyLog.LogError($"playerY={__instance.Player_0.Transform.position.y:F5}, camRootY={VRGlobals.camRoot.transform.position.y:F5}, rightHandY={VRGlobals.vrPlayer.RightHand.transform.position.y:F5}");
             return false;
         }
         

@@ -4,14 +4,15 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Trigger discipline: holding a gun with your finger off the trigger, the gun hand's index finger comes off it and lies straight
-    // along the gun. Needs a touch sensor on the trigger (OpenXR: Index, Touch); SteamVR has no touch action in the mod's manifest,
-    // and a trigger press alone isn't enough (the finger would only go on as you fire). The animator's trigger curl is stripped
-    // (ApplyFlatFlex, the right hand's own frame); the mag release press, later in LateUpdate, starts from this pose.
+    // Trigger discipline: while you hold a gun with your finger off the trigger, the gun hand's index finger lies straight along
+    // the gun. This needs a touch sensor on the trigger (OpenXR on Index or Touch controllers): the mod's SteamVR manifest has no
+    // touch action, and the trigger press alone isn't enough (the finger would only go on the trigger as you fire). The animator's
+    // trigger curl is removed with ApplyFlatFlex in the right hand's own frame. The mag release press, later in LateUpdate, starts
+    // from this pose.
     internal partial class HandsInteractionController
     {
         public static bool triggerDiscipline = true;
-        public static float offTriggerBend = 0f;            // deg the knuckle still bends with the finger off (0 = straight); less at each joint out
+        public static float offTriggerBend = 0f;            // deg the knuckle still bends with the finger off (0 = straight); joints further out bend less
         public static float offTriggerBlendTime = 0.08f;    // s for the finger to come off or go back on
 
         private Transform triggerFingerPalm;

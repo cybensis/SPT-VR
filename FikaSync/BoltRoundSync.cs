@@ -7,17 +7,18 @@ using HarmonyLib;
 
 namespace SptVrFikaSync
 {
-    // A VR player's single round into an open bolt-action (SPT-VR loads those by hand, one round at a time from the rig).
+    // Accepts a VR player's single hand-loaded round on every peer. SPT-VR loads open bolt-actions (and the guns below) by hand,
+    // one round at a time from the rig.
     //
-    // Every inventory move touching a gun in hands goes to that gun's hands controller after it's applied, on observed copies too
+    // After an inventory move that touches a gun in hands is applied, it is passed to that gun's hands controller, on observed copies too
     // (ObservedInventoryController.HandleInProcess -> HandsController.Execute). Tarkov's FirearmController.Idling.Execute refuses a round
-    // into the internal magazine that isn't its own reload (LoadMagOperation) and turns one into the chamber into its
-    // LoadCartridgeToChamber animation. A FIKA client only applies a move the host accepted (ClientInventoryController), so a host refusal
-    // refuses it for the VR player too. On every peer with this module the VR player's move is accepted as is, no animation
-    // (ObservedIdleOperation inherits Idling.Execute). The VR player's own game does the same (SPT-VR's BoltActionPatches.LetSingleRoundIn);
-    // IsSingleRoundIntoGun is the same rule as its VRReloadController.LetsSingleRoundIn.
+    // into the internal magazine unless it is its own reload (LoadMagOperation), and turns a round into the chamber into its
+    // LoadCartridgeToChamber animation. A FIKA client only applies a move the host accepted (ClientInventoryController), so a refusal on
+    // the host refuses the move for the VR player too. This prefix accepts the VR player's move as it is, with no animation, on every peer
+    // that has this module (ObservedIdleOperation inherits Idling.Execute). The VR player's own game does the same in SPT-VR's
+    // BoltActionPatches.LetSingleRoundIn, and IsSingleRoundIntoGun is the same rule as VRReloadController.LetsSingleRoundIn.
     //
-    // Only VR players (ArmSyncApply.IsVrPlayer): anyone else's Mosin keeps Tarkov's own chambering. Switch: enabled.
+    // Only VR players (ArmSyncApply.IsVrPlayer) are affected: anyone else's Mosin keeps Tarkov's own chambering. enabled = false turns it off.
     [HarmonyPatch]
     internal static class BoltRoundSync
     {
@@ -39,10 +40,10 @@ namespace SptVrFikaSync
             return false;
         }
 
-        // One round from outside an open-bolt-loaded gun (SupportsInternalReload + MustBoltBeOpennedForInternalReload), or a tube shotgun's
-        // shell (SPT-VR's VRReloadController.Shotgun: through the loading port or the ejection port), into its chamber or its magazine's
-        // cartridges, not as Tarkov's own reload. Not a revolver's cylinder (the MC-255 is a shotgun too). A merge asks with a sub-operation
-        // of its own: the operation it belongs to says where.
+        // True for one round moved from outside the gun into its chamber or its magazine's cartridges, other than by Tarkov's own reload.
+        // Covers guns loaded with the bolt open (SupportsInternalReload + MustBoltBeOpennedForInternalReload) and tube shotguns, which SPT-VR's
+        // VRReloadController.Shotgun loads through the loading port or the ejection port. A revolver's cylinder is excluded (the MC-255 is
+        // also a shotgun). A merge arrives as a sub-operation of its own, so the operation it belongs to is checked for the destination.
         internal static bool IsSingleRoundIntoGun(Weapon weapon, IInventoryOperation operation)
         {
             if (weapon == null || !weapon.SupportsInternalReload)
@@ -56,8 +57,9 @@ namespace SptVrFikaSync
             return IsRoundIntoGun(weapon, operation);
         }
 
-        // A break-action's chamber or a revolver's camora by hand (SPT-VR's VRReloadController.BreakAction): one round into or out of
-        // one of them, not Tarkov's own reload or discharge (both animate). The same rule as SPT-VR's LetsBreakMoveThrough.
+        // True for one round moved by hand into or out of a break-action's chamber or a revolver's camora (SPT-VR's
+        // VRReloadController.BreakAction), rather than by Tarkov's own reload or discharge, which both animate. Same rule as SPT-VR's
+        // LetsBreakMoveThrough.
         internal static bool IsBreakActionChamberMove(Weapon weapon, IInventoryOperation operation)
         {
             if (weapon == null || (weapon.ReloadMode != Weapon.EReloadMode.OnlyBarrel && !(weapon is Revolver && weapon.GetCurrentMagazine() is CylinderMagazine)))
@@ -89,13 +91,13 @@ namespace SptVrFikaSync
             return false;
         }
 
-        // The destination is To1 for a move / split, To2 for a transfer or merge onto the stack on top of the magazine (a transfer's To1
-        // is its own source)
+        // The destination is To1 for a move or split, and To2 for a transfer or a merge onto the top stack of the magazine (a transfer's
+        // To1 is its own source).
         private static bool IsRoundIntoGun(Weapon weapon, IInventoryOperation operation)
         {
             if (operation is LoadMagOperation || !(operation is IOneItemOperation move) || !(move.Item1 is Ammo))
                 return false;
-            // From outside the gun, not a round moving inside it (Tarkov's own discharge / chambering)
+            // The round must come from outside the gun. A round moving inside it is Tarkov's own discharge or chambering.
             if (move.From1 != null && move.From1.IsChildOf(weapon))
                 return false;
             return IntoGun(weapon, move.To1) || (operation is ITwoItemOperation twoItems && IntoGun(weapon, twoItems.To2));

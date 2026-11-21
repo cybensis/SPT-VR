@@ -2,25 +2,24 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.VRManager
 {
-    // Weapon weight on rawRightHand's rotation (the marker anchor keeps the gun in the hand; the position stays the hand's).
-    // physicsWeight (default): the held gun as a rigid body (its mass, a rod from the stock to the muzzle) held at the grip by a spring:
-    // the gun hand's (wristGripStiffness) + two-handed the support hand's at its distance (supportGripStiffness), x the stock's bracing.
-    // Against the gun's own inertia that sets how fast it follows (a pistol ~10 Hz, a rifle one-handed ~2 Hz, two-handed ~5 Hz); the
-    // hand's turn rate is fed forward, so a still hand or a steady pan has the gun exactly on it and only speeding up / slowing down
-    // shows the weight (it trails a move's start, carries past its end). Its weight sags the muzzle against the same spring. The arm's
-    // torque is capped (wristStrength + supportForce x the spread; brakeStrength to stop it, catchBoost as it falls behind). In the
-    // rig's frame: turning or moving the rig isn't the hand moving. Not a free simulation (that read as the gun leaving the hand), lag capped.
-    // physicsWeight = false: the older spring -
-    //  - swing/twist split about the barrel: rolling the gun (twist) is light, swinging the muzzle (swing) carries the weight.
-    //  - the swing is a second-order spring-damper: the velocity state is momentum, so heavy guns follow through on stops.
-    //  - one-handed, a constant droop torque sags the muzzle; two-handing stiffens the spring and drops the droop.
-    //  - swing lag is hard-capped (maxLagDegrees): the gun resists but never falls far behind the hand.
+    // Weapon weight, applied to rawRightHand's rotation only (the marker anchor keeps the gun in the hand; the position stays the hand's).
+    // physicsWeight = true (default): the gun is a rigid body (its mass as a rod from the stock to the muzzle) held at the grip by a spring.
+    // The spring is the gun hand's wristGripStiffness plus, two-handed, the support hand's supportGripStiffness at its distance, times the
+    // stock's bracing. Against the gun's inertia that sets how fast it follows (pistol ~10 Hz, rifle ~2 Hz one-handed, ~5 Hz two-handed).
+    // The hand's turn rate is fed forward, so the gun sits exactly on a still or steadily panning hand, and the weight only shows when the
+    // hand speeds up or slows down (the gun trails the start of a move and carries past its end). The weight also sags the muzzle against
+    // the spring. The arm's torque is capped (wristStrength, supportForce, brakeStrength, catchBoost). It runs in the rig's frame, so turning
+    // or moving the rig isn't the hand moving. The lag is capped: a free simulation makes the gun look like it leaves the hand.
+    // physicsWeight = false: a simpler spring.
+    //  - The rotation is split into swing and twist about the barrel. Rolling the gun (twist) is light; swinging the muzzle carries the weight.
+    //  - The swing is a second-order spring-damper. Its velocity is momentum, so heavy guns follow through on stops.
+    //  - One-handed, a constant droop torque sags the muzzle. Two-handing stiffens the spring and removes the droop.
+    //  - The swing lag is hard-capped (maxLagDegrees): the gun resists but never falls far behind the hand.
     public class WeaponWeightFeel
     {
         public static bool physicsWeight = true;
-        // The hold's stiffness: against the gun's inertia about the grip it's how quickly the gun follows the hand speeding up and
-        // slowing down (a heavy, long gun trails a move's start and carries a little past its end; a steady pan or a still hand it sits on),
-        // and against its weight the sag
+        // The hold's stiffness. Against the gun's inertia about the grip it sets how quickly the gun follows the hand speeding up and
+        // slowing down; against the gun's weight it sets the sag.
         public static float wristGripStiffness = 30f;     // N m/rad the gun hand alone (an M4 one-handed: ~8 deg of sag, ~2 Hz)
         public static float supportGripStiffness = 1500f; // N/m the support hand, at its distance from the gun hand (x that distance squared)
         public static float maxSag = 15f;                 // deg
@@ -31,7 +30,7 @@ namespace TarkovVR.Source.Player.VRManager
         public static float supportForce = 120f;          // N the support hand adds, at its distance from the gun hand
         public static float brakeStrength = 3f;           // x the strength while stopping the gun
         public static float catchBoost = 8f;              // the strength x (1 + this x (lag / maxLagDegrees)^2): the grip tightens as it falls behind
-        public static float stockBehindGrip = 0.25f;      // m: the gun as a rod from its stock to the muzzle (pistols: from the grip)
+        public static float stockBehindGrip = 0.25f;      // m the stock reaches behind the grip (the gun is a rod from there to the muzzle; pistols: none)
         public static float boreRadius = 0.05f;           // m radius of gyration about the bore (rolling the gun is easy)
         public static float handSpinSmoothing = 0.015f;   // s the hand's own turn rate is smoothed over (tracking noise)
         public static bool physicsDebugLog = false;       // a line a second: the gun's mass and inertia, the strength, how far behind it is
@@ -44,13 +43,13 @@ namespace TarkovVR.Source.Player.VRManager
         public static float maxLagDegrees = 20f;      // hard cap on total rotation lag behind the hand
         public static float maxSwingVel = 30f;        // rad/s safety rail on the momentum state
 
-        // Jumping: the droop is 1 g holding the muzzle down, and the body's vertical acceleration reaches the gun the same way. A push-off
-        // or landing dips the muzzle (an impulse: the body's vertical speed change over g, times the gun's weight torque); falling freely
+        // Jumping: the droop is 1 g pulling the muzzle down, and the body's vertical acceleration reaches the gun the same way. A push-off
+        // or landing dips the muzzle (an impulse: the body's vertical speed change over g, times the gun's weight torque). In free fall
         // the gun weighs nothing and the droop lifts. Rotation only, through this spring and its lag cap. Follows the Weapon Weight setting.
         public static bool jumpInertia = true;
         public static float jumpInertiaScale = 1f;    // 1 = as much as the weight that droops the muzzle; 2 = twice the dip
         public static bool airborneFloat = true;      // in the air the droop lifts (one-handed: to level)
-        public static float minAirTime = 0.12f;       // s off the ground before a fall without a jump counts (a stair edge: no)
+        public static float minAirTime = 0.12f;       // s off the ground before a fall without a jump counts (so a stair edge doesn't)
         public static float takeoffWindow = 0.15f;    // s after leaving the ground the push-off's speed is still read (it builds over frames)
         public static float maxBodySpeedChange = 8f;  // m/s cap on one dip (a teleport, a respawn)
         public static bool jumpDebugLog = false;      // a line per push-off / landing: the speed change and the dip it makes
@@ -63,7 +62,7 @@ namespace TarkovVR.Source.Player.VRManager
 
         private Vector3 swingVel;                     // rad/s, world - the momentum state
         private float lastStepTime = -10f;
-        private int lastJumpDipFrame = -1;            // this filter took this frame's dip already
+        private int lastJumpDipFrame = -1;            // this filter already applied this frame's dip
 
         // The body's vertical motion, read once a frame (whichever filter steps first)
         private static int bodyFrame = -1;
@@ -81,7 +80,7 @@ namespace TarkovVR.Source.Player.VRManager
 
         // Filters `current` (last frame's filtered rotation) toward `target` for this frame. barrelDir =
         // the gun's current muzzle direction (world). All rotation deltas are world-frame pre-multiplies.
-        // frame = what the filtered rotation rides (the rig): its own turns aren't the hand's. Null = world.
+        // frame = the transform the filtered rotation moves with (the rig); its own turns don't count as the hand's. Null = world.
         public Quaternion Step(Quaternion current, Quaternion target, Vector3 barrelDir,
                                float ergoWeight, bool twoHanded, float dt, Transform frame = null)
         {
@@ -121,7 +120,7 @@ namespace TarkovVR.Source.Player.VRManager
             float damping = 2f * dampingRatio * Mathf.Sqrt(k);
             Vector3 acceleration = k * swingError - damping * swingVel;
 
-            // Jumping: the body's vertical acceleration on the gun, against its weight torque (1 g's worth: what holds the one-handed droop)
+            // Jumping: the body's vertical acceleration acts on the gun in proportion to its weight torque (1 g = what holds the one-handed droop)
             UpdateBody();
             if (jumpInertia && (frameSpeedChange > 0f || frameWeightless))
             {
@@ -171,8 +170,8 @@ namespace TarkovVR.Source.Player.VRManager
         // The held gun as a rigid body (physicsWeight)
 
         private bool havePhysicsState;
-        private Quaternion localOrientation = Quaternion.identity;  // the gun, in the frame's
-        private Vector3 localSpin;                                  // rad/s, the frame's axes
+        private Quaternion localOrientation = Quaternion.identity;  // the gun's orientation in the frame
+        private Vector3 localSpin;                                  // rad/s, in the frame's axes
         private Quaternion lastLocalTarget = Quaternion.identity;
         private Vector3 handSpin;                                   // rad/s, the hand's own turn rate (smoothed)
         private Quaternion lastWorldOutput = Quaternion.identity;
@@ -183,8 +182,8 @@ namespace TarkovVR.Source.Player.VRManager
             Quaternion frameRotation = frame != null ? frame.rotation : Quaternion.identity;
             Quaternion toLocal = Quaternion.Inverse(frameRotation);
             Quaternion localTarget = toLocal * target;
-            // Where the gun is: our own state when the caller gave back what we gave it (as it was, or carried along by the frame), else
-            // what it set (a snap onto the hand)
+            // Where the gun is: our own state if the caller passed back what we returned (unchanged, or carried along by the frame);
+            // otherwise whatever the caller set (a snap onto the hand)
             if (havePhysicsState && Quaternion.Angle(current, frameRotation * localOrientation) > 0.05f && Quaternion.Angle(current, lastWorldOutput) > 0.05f)
                 havePhysicsState = false;
             if (!havePhysicsState)
@@ -208,7 +207,7 @@ namespace TarkovVR.Source.Player.VRManager
             Vector3 bore = (toLocal * barrelDir).normalized;
             Vector3 down = toLocal * Vector3.down;
 
-            // Its weight about the grip (none falling freely), and a push-off or landing as a jolt of it
+            // Its weight torque about the grip (none in free fall), and a push-off or landing as a jolt of that weight
             UpdateBody();
             Vector3 weightTorque = frameWeightless ? Vector3.zero : Vector3.Cross(bore * centreAhead, down * (mass * GRAVITY));
             if (jumpInertia && frameSpeedChange > 0f && lastJumpDipFrame != Time.frameCount)
@@ -234,7 +233,7 @@ namespace TarkovVR.Source.Player.VRManager
             float damping = Mathf.Max(holdDamping, 0.1f);
             float capRadians = Mathf.Max(maxLagDegrees, 1f) * Mathf.Deg2Rad;
             float weightSize = weightTorque.magnitude;
-            // (stiff: small steps, the hand's move spread over them)
+            // The hold is stiff: integrate in small steps, with the hand's move spread over them
             int steps = Mathf.Clamp(Mathf.CeilToInt(dt / 0.001f), 1, 40);
             float stepTime = dt / steps;
             for (int i = 0; i < steps; i++)
@@ -267,7 +266,7 @@ namespace TarkovVR.Source.Player.VRManager
             }
             lastLocalTarget = localTarget;
 
-            // Never further than maxLagDegrees off the hand: there it's carried along
+            // Never more than maxLagDegrees off the hand: at the cap it is carried along with the hand
             float lag = Quaternion.Angle(localOrientation, localTarget);
             if (lag > maxLagDegrees)
             {
@@ -285,8 +284,8 @@ namespace TarkovVR.Source.Player.VRManager
             return lastWorldOutput;
         }
 
-        // A damped spring toward the hand carrying the hand's own turn rate (omega = the hold against the inertia, damping its ratio),
-        // closing no faster than it can stop there with stoppingAcceleration
+        // A damped spring toward the hand that also carries the hand's own turn rate (omega = the hold against the inertia, damping = its
+        // ratio). It closes no faster than it can stop at the hand with stoppingAcceleration.
         private static Vector3 Follow(Vector3 error, Vector3 handSpin, Vector3 spin, float omega, float damping, float stoppingAcceleration)
         {
             float errorSize = error.magnitude;
@@ -353,8 +352,8 @@ namespace TarkovVR.Source.Player.VRManager
             muzzleReach = gunMuzzleReach;
         }
 
-        // Once a frame: the body's vertical speed from its position, and from it this frame's push-off / landing and whether it's falling
-        // freely. Off the ground counts once it's a jump (Tarkov's jump state as it lifts) or has lasted minAirTime.
+        // Once a frame: the body's vertical speed from its position, and from that this frame's push-off or landing and whether it is in
+        // free fall. Being off the ground counts once it is a jump (Tarkov's jump state at lift-off) or has lasted minAirTime.
         private static void UpdateBody()
         {
             if (bodyFrame == Time.frameCount)
@@ -396,7 +395,7 @@ namespace TarkovVR.Source.Player.VRManager
             }
             if (airborne)
             {
-                // The push-off: the upward speed it builds over its first frames, given to the gun as it comes
+                // The push-off: the upward speed built over its first frames, passed to the gun as it builds
                 if (airborneIsJump && now - airborneSince <= takeoffWindow && verticalSpeed > takeoffSpeedTaken)
                 {
                     frameSpeedChange += verticalSpeed - takeoffSpeedTaken;

@@ -13,8 +13,8 @@ namespace TarkovVR.ModSupport.ORBIT
 {
     internal static class OrbitSupport
     {
-        // Corpses whose waypoint is pulled while dragged -> what ORBIT knew about it (OrbitCorpseCarry, held as object: a typed
-        // static field would load ORBIT's types on a load without ORBIT)
+        // Corpses whose ORBIT waypoint is removed while dragged, mapped to the ORBIT state saved for them (an OrbitCorpseCarry, stored
+        // as object: a typed static field would load ORBIT's types when ORBIT isn't installed).
         private static readonly Dictionary<Corpse, object> _heldCorpses = new Dictionary<Corpse, object>();
 
         public static void OnCorpseGrabbed(Corpse corpse)
@@ -37,17 +37,17 @@ namespace TarkovVR.ModSupport.ORBIT
             }
             catch { return; }
 
-            // Snap to the navmesh so the bot has a reachable point (the body may rest against a wall / on
-            // cover slightly off-mesh; BSG nav-snaps the final approach within a couple metres anyway).
+            // Snap to the navmesh so bots get a reachable point. The body may rest against a wall or on cover slightly
+            // off the mesh; BSG nav-snaps the final approach within a couple of metres anyway.
             Vector3 navPos = pelvis;
             if (NavMesh.SamplePosition(pelvis, out NavMeshHit hit, 3f, NavMesh.AllAreas))
                 navPos = hit.position;
 
-            // vanilla EFT body record (for when you're not using Orbit)
+            // The vanilla EFT dead-body record, which bots use when ORBIT isn't installed.
             RefreshVanillaDeadBody(corpse, navPos, pelvis);
 
-            // ORBIT: re-add the pulled loot waypoint at the resting spot. Gated so the ORBIT-typed helper is
-            // never JITted on a no-ORBIT load.
+            // ORBIT: re-add the removed loot waypoint at the resting spot. Gated so the ORBIT-typed helper is
+            // never JIT-compiled without ORBIT.
             if (InstalledMods.ORBITInstalled)
                 ReaddCorpseWaypoint(corpse, navPos);
         }
@@ -71,8 +71,8 @@ namespace TarkovVR.ModSupport.ORBIT
                     return;
                 }
 
-                // What ORBIT keeps about it besides the waypoint (kill credit, own-kill queues, boss body...), before
-                // RemoveWaypoint drops the id-keyed parts
+                // Save what ORBIT keeps about the corpse besides the waypoint (kill credit, own-kill queues, boss body...)
+                // before RemoveWaypoint drops the parts keyed by the waypoint id.
                 OrbitCorpseCarry carry = OrbitCorpseCarry.Capture(waypointSystem, waypoint, Warn);
                 waypointSystem.RemoveWaypoint(waypoint.Id);
                 _heldCorpses[corpse] = carry;
@@ -90,7 +90,7 @@ namespace TarkovVR.ModSupport.ORBIT
         {
             try
             {
-                // Only re-add if we pulled it on grab (ORBIT was tracking it): no loot waypoint for a corpse ORBIT never knew.
+                // Only re-add if we removed it on grab (ORBIT was tracking it): no loot waypoint for a corpse ORBIT never knew.
                 if (!_heldCorpses.TryGetValue(corpse, out object held) || !(held is OrbitCorpseCarry carry))
                     return;
                 _heldCorpses.Remove(corpse);

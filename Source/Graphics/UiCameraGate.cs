@@ -6,10 +6,10 @@ using UnityEngine.UI;
 
 namespace TarkovVR.Source.Graphics
 {
-    // uiCam (the UI-layer camera drawn over the headset image) costs two camera passes a frame (~0.9 ms main thread) even with
+    // uiCam draws the UI layer over the headset image. It costs two camera passes a frame (~0.9 ms on the main thread) even with
     // nothing to draw, which is most of a raid. This switches it off while no visible (not faded out) UI-layer graphic is inside
-    // either eye's view, with a margin; on while a menu is open. Checked every few frames, kept on a moment after the last one
-    // (fade-outs finish). On the raid / hideout uiCam (InitVRPatches.SetMainCamParent).
+    // either eye's view plus a margin, and keeps it on while a menu is open. The check runs every few frames, and the camera stays on
+    // briefly after the last UI is seen so fade-outs finish. Added to the raid / hideout uiCam in InitVRPatches.SetMainCamParent.
     public class UiCameraGate : MonoBehaviour
     {
         public static int checkEveryFrames = 3;
@@ -18,7 +18,7 @@ namespace TarkovVR.Source.Graphics
         public static float marginPerMeter = 0.2f;     // ...this share of its distance from the eyes (about 11 degrees): on before it's in view
         public static float minAlpha = 0.004f;         // below this a graphic counts as faded out
         public static bool logReasons = false;         // each canvas that turns the camera on, once
-        public static float logHolderAfterSeconds = 10f; // on this long without a break: the graphic holding it logged (a new one at most every 15 s, first 60)
+        public static float logHolderAfterSeconds = 10f; // s on without a break before the graphic keeping it on is logged (at most one per 15 s, 60 total)
         public static float minAngularSize = 0.002f;    // radians across (~0.1 degree, ~2 pixels of the eye image): smaller can't be seen
 
         private const int UiLayer = 5;
@@ -47,7 +47,7 @@ namespace TarkovVR.Source.Graphics
             if (uiCamera != null) uiCamera.enabled = true;
         }
 
-        // After the wrist's look check and the UI's own fades (Update), before the cameras render
+        // Runs after the wrist's look check and the UI's own fades (both in Update), and before the cameras render
         private void LateUpdate()
         {
             if (uiCamera == null)
@@ -71,7 +71,7 @@ namespace TarkovVR.Source.Graphics
             LogLongHolder(on);
         }
 
-        // A camera that never switches off saves nothing: which graphic keeps it on (the per-canvas log names only the first)
+        // A camera that never switches off saves nothing, so log which graphic keeps it on. The per-canvas log only names the first one.
         private void LogLongHolder(bool on)
         {
             if (!on)
@@ -96,7 +96,7 @@ namespace TarkovVR.Source.Graphics
                 uiCamera.enabled = on;
         }
 
-        // Any UI-layer graphic, not faded out, inside either eye's view (grown by the margin). Unsure = true.
+        // True if any UI-layer graphic that isn't faded out is inside either eye's view, grown by the margin. Returns true when unsure.
         private bool AnyUiInView()
         {
             if (eyeCamera == null && transform.parent != null)
@@ -107,8 +107,8 @@ namespace TarkovVR.Source.Graphics
             GeometryUtility.CalculateFrustumPlanes(eyeCamera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right) * eyeCamera.GetStereoViewMatrix(Camera.StereoscopicEye.Right), eyePlanes[1]);
             Vector3 head = eyeCamera.transform.position;
 
-            // Every active, enabled graphic is registered with its canvas (Graphic.OnEnable): GraphicRegistry's private
-            // Dictionary<Canvas, IndexedSet<Graphic>>, walked through IDictionary / IList (IndexedSet is internal)
+            // Every active, enabled graphic registers with its canvas in Graphic.OnEnable. GraphicRegistry keeps them in a private
+            // Dictionary<Canvas, IndexedSet<Graphic>>, read here through IDictionary / IList because IndexedSet is internal.
             IDictionary registry = Registry();
             if (registry == null)
                 return true;
@@ -124,7 +124,7 @@ namespace TarkovVR.Source.Graphics
                     continue;   // drawn onto the desktop window, not by a camera
                 bool inFrontOfCamera = renderMode == RenderMode.ScreenSpaceCamera;
                 if (inFrontOfCamera && root.worldCamera != uiCamera)
-                    continue;   // another camera's (or none = overlay)
+                    continue;   // belongs to another camera, or to none (= overlay)
                 if (!(entries.Value is IList<Graphic> graphics))
                     return true;
                 for (int index = 0; index < graphics.Count; index++)
@@ -186,8 +186,9 @@ namespace TarkovVR.Source.Graphics
         }
 
         // An empty text is an enabled graphic with a rect that draws nothing.
-        // TMP: its character count, not .text (SetText(char[]) can leave .text stale while characters draw); not laid out yet = draws.
-        // A Mask's own graphic with showMaskGraphic off only marks the stencil (its children are checked on their own).
+        // For TMP, the character count is used, not .text: SetText(char[]) can leave .text stale while characters draw. Not laid out yet
+        // counts as drawing.
+        // A Mask's own graphic with showMaskGraphic off only writes the stencil. Its children are checked on their own.
         private static bool DrawsNothing(Graphic graphic)
         {
             if (graphic.TryGetComponent(out Mask mask) && mask.enabled && !mask.showMaskGraphic)
@@ -199,7 +200,7 @@ namespace TarkovVR.Source.Graphics
             return false;
         }
 
-        // What it saw, so a canvas that keeps the camera on all the time can be told apart from one really in view
+        // Logs what the check saw, so a canvas that keeps the camera on all the time can be told apart from one really in view
         private void LogReason(Canvas canvas, Graphic graphic, Vector3 head, RenderMode renderMode)
         {
             if (!logReasons || !loggedCanvases.Add(canvas.GetInstanceID()))

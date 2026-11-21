@@ -19,8 +19,8 @@ namespace TarkovVR.Source.UI
 
         private float rayDistance = 100f;
 
-        // The trigger holding an item drag: one shared state for this pointer and the item views (FixDragAndDropButton), so the
-        // two can't disagree on a light press. The press/release gap keeps a trigger resting at one value from flickering it.
+        // Whether the trigger holds an item drag. This pointer and the item views (FixDragAndDropButton) share this one state, so the
+        // two can't disagree on a light press. The gap between press and release stops a trigger resting at one value from flickering.
         public static float dragTriggerPress = 0.5f;
         public static float dragTriggerRelease = 0.3f;
         private static bool dragTriggerHeld;
@@ -37,14 +37,14 @@ namespace TarkovVR.Source.UI
             return dragTriggerHeld;
         }
 
-        // Drag an item off the inventory panel and release to drop it on the ground. Raid only (gated on RaidVRPlayerManager
-        // in DropDraggedItemToGround): the hideout/stash/loadout have no world to drop into.
+        // Dragging an item off the inventory panel and releasing it drops it on the ground. Raid only (checked for RaidVRPlayerManager
+        // in DropDraggedItemToGround): the hideout, stash and loadout have no world to drop into.
 
-        // A release over dead space only drops once the aim has been dragged this far (world m, on the panel's plane) from the
-        // item's origin slot; closer = cancel. A release over a grid/slot is always a move. The panel is ~1.5 m wide in world
-        // space (canvas * 0.0006 scale).
+        // m, on the panel's plane. A release over empty space only drops the item once the aim is this far from the item's origin
+        // slot; closer cancels. A release over a grid or slot is always a move. The panel is ~1.5 m wide in world space
+        // (canvas * 0.0006 scale).
         public static float dropDistance = 0.5f;
-        // Where the drag started (origin slot) + the last point/normal the ray touched the panel, for the drop gate.
+        // Where the drag started (the origin slot), and the last point and normal where the ray hit the panel, for the drop check.
         private Vector3 dragStartPanelPoint;
         private Vector3 lastUiHitPoint;
         private Vector3 lastUiHitNormal;
@@ -67,16 +67,6 @@ namespace TarkovVR.Source.UI
         private bool rightClickTriggered = false;
         private float timeAButtonHeld = 0f;
 
-        //private Transform raycastSource;
-
-        //private void Awake()
-        //{
-        //    if (this.transform.GetChild(0) != null)
-        //        raycastSource = this.transform.GetChild(0);
-        //    else
-        //        raycastSource = this.transform;
-
-        //}
         public void Update()
         {
             float primaryHandJoystickAxis = Handedness.PointerHandJoystick.axis.x;
@@ -99,13 +89,10 @@ namespace TarkovVR.Source.UI
                 LayerMask.GetMask("UI"));
             if (isHit)
             {
-                //i++;
                 eventData = new PointerEventData(EventSystem.current);
                 hitObject = RaycastFindHit(hit, ref eventData);
-                //if (hitObject)
-                //    Plugin.MyLog.LogWarning("HIT:    " + hit.collider + "    |   LAST HIT:    " + hitObject.name);
                 eventData.worldPosition = hit.point;
-                // The panel surface the ray is on, for the off-panel drop gate.
+                // The panel surface the ray is on, for the off-panel drop check.
                 lastUiHitPoint = hit.point;
                 lastUiHitNormal = hit.normal;
 
@@ -126,16 +113,12 @@ namespace TarkovVR.Source.UI
                     handleDragging(hit.point);
 
             }
-            // The ray has left every UI collider mid-drag (item pulled off the panel): the drag stays alive while the trigger
-            // is held, a release drops the item to the ground (raid only). The rest of the drag pipeline only runs on a hit.
+            // The ray left every UI collider mid-drag (the item was pulled off the panel). The drag stays alive while the trigger
+            // is held, and a release drops the item on the ground (raid only). The rest of the drag code only runs on a hit.
             else if (dragObject != null)
             {
                 HandleOffPanelDrag();
             }
-            //else
-            //{
-            //    Plugin.MyLog.LogError("NO HIT");
-            //}
         }
 
         public void EndDrop()
@@ -312,8 +295,8 @@ namespace TarkovVR.Source.UI
             dragObject = null;
         }
 
-        // Mid-drag with the ray off the panel: like a dead-space release. B/Y cancels; releasing the trigger drops the item
-        // if it's been dragged far enough from its origin.
+        // Mid-drag with the ray off the panel, handled like a release over empty space. B/Y cancels; releasing the trigger drops
+        // the item if it has been dragged far enough from its origin.
         private void HandleOffPanelDrag()
         {
             bool triggerHeld = DragTriggerHeld();
@@ -340,8 +323,8 @@ namespace TarkovVR.Source.UI
             return Vector3.Distance(ProjectAimOntoPanel(), dragStartPanelPoint);
         }
 
-        // The hand ray intersected with the panel's plane (through the last on-panel hit, along its normal). Degenerate
-        // cases (ray parallel to / behind the panel, panel never touched) return a far point, so the release drops.
+        // Intersects the hand ray with the panel's plane (through the last hit on the panel, with its normal). If the ray is
+        // parallel to or behind the panel, or the panel was never hit, it returns a far point, so the release drops.
         private Vector3 ProjectAimOntoPanel()
         {
             Vector3 origin = transform.position;
@@ -356,12 +339,12 @@ namespace TarkovVR.Source.UI
                         return origin + direction * t;
                 }
             }
-            return dragStartPanelPoint + direction * 9999f; // "way off" — always exceeds dropDistance
+            return dragStartPanelPoint + direction * 9999f; // far away: always exceeds dropDistance
         }
 
-        // Drops the dragged item on the ground through the context menu's Discard interaction (= right-click -> Discard): it
-        // spawns a lootable world item, FIKA-syncs, and respects discard limits (quest/locked items: unavailable, no-op).
-        // InteractionsHandlerClass.Discard is the wrong op here: it removes the item without spawning it in the world.
+        // Drops the dragged item on the ground through the context menu's Discard interaction (right-click -> Discard). That spawns
+        // a lootable world item, syncs over FIKA and respects discard limits (unavailable for quest or locked items, so nothing happens).
+        // Don't use InteractionsHandlerClass.Discard here: it removes the item without spawning it in the world.
         private void DropDraggedItemToGround()
         {
             GameObject dragged = dragObject;
@@ -377,7 +360,7 @@ namespace TarkovVR.Source.UI
             ExecuteEvents.Execute(dragged, eventData, ExecuteEvents.endDragHandler);
             dragObject = null;
 
-            // Raid only: the hideout/stash/loadout use HideoutVRPlayerManager or have no local Player. The one gate for this.
+            // Raid only: the hideout, stash and loadout use HideoutVRPlayerManager or have no local Player. This is the only gate for the drop.
             if (!(VRGlobals.vrPlayer is RaidVRPlayerManager))
                 return;
             if (itemView == null || itemView.Item == null)
@@ -402,10 +385,8 @@ namespace TarkovVR.Source.UI
                 return null;
 
             var pointerPosition = mainCam.WorldToScreenPoint(hit.point);
-            //Plugin.MyLog.LogWarning("WDWD: " + pointerPosition + " " + hit.point);
 
             eventData.position = pointerPosition;
-            //eventData.pressPosition = pointerPosition;
             uiPointerPos = hit.point;
             // Send a pointer enter event to the UI element
             List<RaycastResult> uiRaycasts = new List<RaycastResult>();
@@ -419,7 +400,6 @@ namespace TarkovVR.Source.UI
             if (uiRaycasts.Count > 0)
             {
                 hitObject = uiRaycasts[0].gameObject;
-                //uiPointerPos = new Vector2(uiRaycasts[0].worldPosition.x, uiRaycasts[0].worldPosition.y);
                 int i = 0;
                 // Work up the parents to see if any of them are interactable
                 while (i < 5)

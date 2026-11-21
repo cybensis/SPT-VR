@@ -3,10 +3,10 @@ using TarkovVR.Source.Player.Interactions;
 
 namespace TarkovVR.Patches.Core.Player
 {
-    // No ADS while the gun hand is off the grip (ChestHang: the gun slung, or held up by the support hand alone, e.g. mid-reload on a
-    // belt gun). Held that way the gun is placed off the support hand (ChestHang.DriveSupportPose) rather than through the gun hand's
-    // marker, which is what absorbs Tarkov's procedural aim shift on Weapon_root_anim, so aiming would move the gun and the hand on it.
-    // The trigger is off in that state too (InputHandlers.FireHandler).
+    // Blocks ADS while the gun hand is off the grip (ChestHang.Detached: the gun is slung, or held by the support hand alone, for
+    // example mid-reload on a belt gun). In that state the gun is placed from the support hand (ChestHang.DriveSupportPose) instead of
+    // the gun hand's marker. That marker is what absorbs Tarkov's procedural aim shift on Weapon_root_anim, so aiming would move the
+    // gun and the hand on it. The trigger is off in that state too (InputHandlers.FireHandler).
     [HarmonyPatch]
     internal class DetachedAimPatches
     {
@@ -19,7 +19,7 @@ namespace TarkovVR.Patches.Core.Player
                 value = false;
         }
 
-        // Already aiming as the gun hand lets go: out of it (ChestHang, the sling and the support-only hold)
+        // Stops aiming when the gun hand lets go mid-aim. Called by ChestHang when it slings the gun or starts the support-only hold.
         public static void StopAimingOffTheGrip()
         {
             EFT.Player.FirearmController firearmController = VRGlobals.firearmController;

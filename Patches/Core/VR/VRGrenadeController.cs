@@ -22,16 +22,15 @@ namespace TarkovVR.Patches.Core.VR
         public static BaseGrenadeHandsController activeGrenadeController = null;
         private static BaseGrenadeHandsController thrownBy;
 
-        // true: the grenade leaves the hand at the release and its use ends that same frame, doing what the throw clip's end does
-        // (FireEnd -> OnDropFinishedAction: the hands go back to what they held before) without the clip. false: the clip plays on from
-        // 40 % after the release and the hands come back at its end, 0.3-0.5 s later.
+        // Time of the release. The grenade leaves the hand at the release and its use ends that same frame, doing what the throw clip's
+        // end does (FireEnd -> OnDropFinishedAction: the hands go back to what they held before) without playing the clip.
         private static float releasedAt;
 
         public static float tripwireHoldDuration = 0.4f;        // long-hold time (s) on the face button to toggle plant mode
         public static float tripwireRayForwardOffset = 0.3f;    // ray start nudge ahead of the controller (matches native beacon code)
 
-        // Dominant hand = the throw/gun hand, always VRGlobals.vrPlayer.RightHand (the pose listeners swap in left-handed mode).
-        // Falls back to the headset ray if the rig isn't up yet.
+        // Aims from the dominant (throwing) hand, which is always VRGlobals.vrPlayer.RightHand: the pose listeners swap the hands in
+        // left-handed mode. Falls back to the headset ray if the rig isn't up yet.
         public static Ray GetTripwirePlacementRay()
         {
             if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.RightHand != null)
@@ -43,8 +42,8 @@ namespace TarkovVR.Patches.Core.VR
             return new Ray(cameraTransform.position + cameraTransform.forward * tripwireRayForwardOffset, cameraTransform.forward);
         }
 
-        // The first post is seeded by Player.InitFirstTripwirePoint(), which natively passes the head-bone
-        // InteractionRay. Redirect it to the dominant controller ray so the locked first post matches the ghost.
+        // Player.InitFirstTripwirePoint() seeds the first post from the head bone's InteractionRay.
+        // Use the dominant controller's ray instead, so the locked first post matches the ghost.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "InitFirstTripwirePoint")]
         private static bool VRTripwireFirstPoint(EFT.Player __instance)
@@ -105,8 +104,6 @@ namespace TarkovVR.Patches.Core.VR
                     HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
                     handsPositioner.rightHandIk = rightHandPositioner.transform;
                 }
-                //Transform handTransform = VRGlobals.vrPlayer.RightHand.transform; //figure out why this works
-                //VRGlobals.weaponHolder.transform.SetParent(handTransform, false);
 
                 __instance.WeaponRoot.transform.SetParent(VRGlobals.weaponHolder.transform, false);
                 VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
@@ -118,13 +115,10 @@ namespace TarkovVR.Patches.Core.VR
                 HandleGrenade(__instance, animationSpeed, callback);
                 return;
             }
-            //Plugin.MyLog.LogError($"Weaponroot parent: {__instance.WeaponRoot.parent.name}");
             if (VRGlobals.player)
             {
                 WeaponPatches.previousLeftHandMarker = VRGlobals.player._markers[0];
                 VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
-                //VRGlobals.leftArmBendGoal.localPosition = new Vector3(-0.5f, -0.3f, -0.4f);
-                //VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
             }
 
             if (VRSettings.GetLeftHandedMode())
@@ -144,8 +138,8 @@ namespace TarkovVR.Patches.Core.VR
             VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset;
         }
 
-        // After the prefix above placed it: a grenade taken off the chest (GrenadeSlot) has its draw skipped, and goes into the left hand
-        // if the left took it
+        // Runs after the prefix above has placed the grenade. A grenade taken off the chest (GrenadeSlot) skips its draw, and goes into
+        // the left hand if the left hand took it.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GrenadeHandsController), "Spawn")]
         private static void GrenadeFromChestSlot(GrenadeHandsController __instance)
@@ -161,17 +155,17 @@ namespace TarkovVR.Patches.Core.VR
         {
             if (!__instance.IsYourPlayer || !throwInProgress)
                 return;
-            // The grenade left the hands before the clip reached the freeze below: the throw is over. Left set, throwInProgress keeps
-            // GrenadeHold's rushes off the next grenade (its draw and pin pull would play out in full)
+            // The hands no longer hold this grenade, so the throw is over. If throwInProgress stayed set, GrenadeHold would not speed up
+            // (Rush) the next grenade, and its draw and pin pull would play out in full.
             if (activeGrenadeController == null || activeGrenadeController._firearmsAnimator == null
                 || !ReferenceEquals(__instance.HandsController, activeGrenadeController))
             {
                 EndThrow();
                 return;
             }
-            // Thrown this frame (the release runs in the input update): end the use here, not inside the release. Ending it swaps the
-            // hands' controller, which the rest of the release (the holder, emptyHands) mustn't then touch
-            // Co-op client: ending the throw sends a hands change, which the host refuses until it has answered the last move
+            // The grenade was thrown this frame (the release runs in the input update). End its use here, not inside the release:
+            // ending it swaps the hands' controller, and the rest of the release (the holder, emptyHands) must not touch the new one.
+            // As a co-op client, ending the throw sends a hands change, which the host refuses until it has answered the last move.
             if (CoopHost.HoldsBack(releasedAt))
                 return;
             BaseGrenadeHandsController thrownNow = activeGrenadeController;
@@ -185,7 +179,7 @@ namespace TarkovVR.Patches.Core.VR
             activeGrenadeController = null;
         }
 
-        // GrenadeHold: is this grenade's own throw playing (its animator ours to freeze)
+        // For GrenadeHold: true while this grenade's own throw is in progress.
         internal static bool Throwing(BaseGrenadeHandsController grenade)
         {
             return throwInProgress && grenade != null && ReferenceEquals(activeGrenadeController, grenade);
@@ -198,28 +192,29 @@ namespace TarkovVR.Patches.Core.VR
                 return true;
             if (!WeaponPatches.pinPulled)
                 return false;
-            // Thrown already: the throw clip's own drop event calls this again (Throw), with the hand slowing down by then
+            // Already thrown. The throw clip's own drop event calls this again (Throw), when the hand is already slowing down.
             if (ReferenceEquals(__instance, thrownBy))
                 return false;
             thrownBy = __instance;
 
-            // The hand holding it (the left if the left hand took it off the chest: GrenadeSlot). On OpenXR the palm's own runtime
-            // velocity (ThrowVelocity.TryPalmVelocity): the raw point's rebuilt velocity bends throws sideways. Else the runtime's.
+            // The hand holding the grenade (the left hand if it took the grenade off the chest, see GrenadeSlot). On OpenXR, use the
+            // palm's own runtime velocity (ThrowVelocity.TryPalmVelocity): a velocity rebuilt from the raw point bends throws sideways.
+            // Otherwise use the runtime's controller velocity.
             SteamVR_Input_Sources throwingHand = Handedness.GunHandSource;
             Vector3 throwVelocity = ThrowVelocity.TryPalmVelocity(throwingHand, out Vector3 palmVelocity)
                 ? palmVelocity : ControllerVelocity.GetSteamVRVelocity(throwingHand);
             Vector3 force;
             Vector3 throwPos = ControllerVelocity.GetSteamVRPosition(throwingHand);
             Quaternion throwRot = ControllerVelocity.GetSteamVRRotation(throwingHand);
-            // Released where the grenade is in the hand (Tarkov's own spot, pulled in off a wall between it and the body), not at the
-            // controller's tracking point ~13 cm from it
+            // Release the grenade where it sits in the hand (Tarkov's own spot, pulled back if a wall is between it and the body), not
+            // at the controller's tracking point about 13 cm away.
             bool fromHand = __instance._grenadeTransform != null;
-            // A fresh throw: nothing carried over from one that ended early (its freeze state, the clip time it last saw)
+            // Start a fresh throw, with nothing carried over from one that ended early.
             EndThrow();
             throwInProgress = true;
             activeGrenadeController = __instance;
             releasedAt = Time.time;
-            // Co-op client: the hands' way back (and any grab) waits for the host's copy to finish this throw
+            // As a co-op client, the hands' return (and any grab) waits until the host's copy has finished this throw.
             CoopHost.GrenadeThrown(TarkovVR.Source.Weapons.GrenadeHold.PinSentAt);
 
             if (throwVelocity.magnitude > 0.1f)
@@ -254,9 +249,9 @@ namespace TarkovVR.Patches.Core.VR
                 lowThrow
             );
 
-            // The throw clip's fuse crack (SoundAtPoint SndFuse, just after its drop on every grenade) doesn't play when the throw ends
-            // at the release. Played now, while the hands are out: their sound player lets a playing clip finish when they go back to
-            // the pool. No SndFuse in a grenade's sounds (M67, RDG-2) = silent, as in the clip.
+            // The throw clip's fuse crack (SoundAtPoint SndFuse, just after the drop on every grenade) doesn't play because the throw
+            // ends at the release. Play it now, while the hands are still out: their sound player lets a playing clip finish when the
+            // hands go back to the pool. Grenades without SndFuse (M67, RDG-2) stay silent, as in the clip.
             if (__instance._controllerObject != null)
             {
                 BaseSoundPlayer grenadeSounds = __instance._controllerObject.GetComponent<BaseSoundPlayer>();
@@ -271,10 +266,10 @@ namespace TarkovVR.Patches.Core.VR
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Diagnostics (GrenadeSlot.debugLog): a grenade drawn without a grab - who drew it (e.g. PlayerOwner's after-use callback
-        // drawing the grenade swapped from, see GrenadeSlot.SwapHeldTo)
+        // Diagnostics for GrenadeSlot.debugLog: when a grenade is drawn without a grab, log who drew it (for example PlayerOwner's
+        // after-use callback drawing the grenade that was swapped from, see GrenadeSlot.SwapHeldTo).
 
-        // The calls that led here, the game's and ours (no Harmony / System frames), newest first
+        // The calls that led here, the game's and ours (without Harmony / System / MonoMod frames), newest first
         internal static string ShortStack()
         {
             System.Diagnostics.StackFrame[] frames = new System.Diagnostics.StackTrace(2, false).GetFrames();
@@ -303,8 +298,8 @@ namespace TarkovVR.Patches.Core.VR
         {
             if (!__instance._player.IsYourPlayer)
                 return true;
-            // The hide clip ending after the put-away was already skipped (GrenadeSlot.SkipPutAway calls this event early): the hands
-            // are the next item's by now - its holder isn't ours to turn, and the put-away mustn't finish twice
+            // The hide clip has ended after the put-away was already skipped (GrenadeSlot.SkipPutAway calls this event early). The hands
+            // belong to the next item by now: don't turn its holder, and don't finish the put-away twice.
             if (!ReferenceEquals(__instance._player.HandsController, __instance))
                 return false;
 

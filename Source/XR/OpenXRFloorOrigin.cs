@@ -14,7 +14,7 @@ namespace TarkovVR.Source.XR
 
         private void Update()
         {
-            // (the spaces Unity let go of, destroyed once no queued frame can name them)
+            // Destroys the spaces Unity released, once no queued frame can still refer to them
             OpenXRLateSpaceDestroy.DestroyDue();
 
             if (logHeadHeightTime > 0f && Time.unscaledTime >= logHeadHeightTime)

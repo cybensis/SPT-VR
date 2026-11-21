@@ -8,8 +8,9 @@ using TarkovVR.Source.Player.Interactions;
 
 namespace TarkovVR.Patches.Core.Player
 {
-    // Doors by hand (PhysicalDoors): the Open / Close it runs settle the door's state at once, without Tarkov's swing (the hand moves
-    // the door). Every override of the swing (Door's, KeycardDoor's) is patched: each one is what a call on that door runs.
+    // For doors moved by hand (PhysicalDoors), the Open / Close it runs settle the door's state at once, without Tarkov's swing
+    // animation, because the hand moves the door. Every override of SmoothDoorOpenCoroutine (Door's, KeycardDoor's) is patched,
+    // since a call on a door runs that door type's own override.
     [HarmonyPatch]
     internal static class DoorSwingPatches
     {

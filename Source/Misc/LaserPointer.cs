@@ -11,7 +11,6 @@ namespace TarkovVR.Source.Misc
     {
         public SteamVR_Behaviour_Pose pose;
 
-        //public SteamVR_Action_Boolean interactWithUI = SteamVR_Input.__actions_default_in_InteractUI;
         public SteamVR_Action_Boolean interactWithUI = SteamVR_Input.GetBooleanAction("InteractUI");
 
         public bool active = true;
@@ -35,7 +34,8 @@ namespace TarkovVR.Source.Misc
         {
             if (pose == null)
                 pose = GetComponent<SteamVR_Behaviour_Pose>();
-            // None on the laser's own object (MenuVRManager.LaserHand: a pose listener places it): the click colour reads either controller
+            // The laser's object may have no pose component (MenuVRManager.LaserHand places it from a pose listener). Then the
+            // click colour reads either controller.
 
             if (interactWithUI == null && !VRInput.UsingOpenXR)
                 Debug.LogError("No ui interaction action has been set on this component.");
@@ -71,7 +71,6 @@ namespace TarkovVR.Source.Misc
             }
             Material newMaterial = new Material(Shader.Find("Unlit/Color"));
             newMaterial.SetColor("_Color", color);
-            //pointer.GetComponent<MeshRenderer>().material = newMaterial;
             pointerRenderer = pointer.GetComponent<MeshRenderer>();
             pointerRenderer.material = newMaterial;
         }

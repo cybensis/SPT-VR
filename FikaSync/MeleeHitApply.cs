@@ -5,25 +5,24 @@ using UnityEngine;
 
 namespace SptVrFikaSync
 {
-    // Replays a remote VR-melee surface hit so this client spawns the same sparks/decal/impact sound and breaks the same
-    // destructible (glass). The VR melee runs its collider only on the swinger: the packet carries the hit point/normal/swing
-    // dir, we re-find the same world surface collider here, rebuild a melee DamageInfoStruct and call GameWorld.HackShot.
-    // On a FIKA client/host (a ClientGameWorld) that runs BallisticCollider.ApplyHit (-> the collider's OnHitAction: the
-    // glass break) and EffectsCommutator.PlayKnifeHitEffect (-> Effects.Emit(isKnife:true): sparks/decal/impact sound).
-    // Surface only: body parts are filtered at both ends (their damage syncs through ApplyShot; HackShot would double it).
-    // The collider is found by casting into the surface along -normal, with the knife's own layer mask + trigger-collide:
-    // a slash's swing direction is ~tangent to the wall and misses.
+    // Replays a remote player's VR melee hit on a surface, so this client shows the same sparks, decal and impact sound and
+    // breaks the same glass. The melee collider only runs on the swinger's machine, so the packet carries the hit point, normal
+    // and swing direction. Here we find the same surface collider, build a melee DamageInfo and call GameWorld.HackShot.
+    // On a FIKA ClientGameWorld that runs BallisticCollider.ApplyHit (the glass break) and EffectsCommutator.PlayKnifeHitEffect
+    // (sparks, decal, impact sound). Surfaces only: body-part hits are filtered on both ends, because their damage already
+    // syncs through ApplyShot and HackShot would apply it twice. The collider is found by casting into the surface along
+    // -normal, because a slash moves almost along the wall and its swing direction would miss.
     internal static class MeleeHitApply
     {
-        // Cast from raycastBack metres outside the surface, along -normal, for (raycastBack+raycastRange).
+        // m. The ray starts raycastBack outside the surface and runs raycastBack + raycastRange along -normal.
         public static float raycastBack = 0.3f;
         public static float raycastRange = 0.3f;
         public static float overlapRadius = 0.2f;   // fallback: nearest surface collider within this sphere
         public static bool debug = false;           // log every apply attempt + outcome (throttled by the caller)
 
-        // The exact layers the knife collider hits (BaseKnifeController int_2):
-        // HitCollider, HighPolyCollider, TransparentCollider (glass), Water. Computed lazily — layer
-        // indices aren't valid until the scene's layers exist.
+        // The layers the knife collider hits (BaseKnifeController.int_2): HitCollider, HighPolyCollider,
+        // TransparentCollider (glass) and Water. Computed lazily, because the layer indices aren't valid
+        // until the scene's layers exist.
         private static int _surfaceMask = -1;
         private static int SurfaceMask
         {
@@ -61,22 +60,22 @@ namespace SptVrFikaSync
             di.HitCollider = col;
             di.HittedBallisticCollider = bc;
             di.IsForwardHit = true;
-            // ApplyHit/effects want a valid Player; for a surface effect the attribution is purely
-            // cosmetic, so use our own main player (also avoids a null deref in any subscriber).
+            // ApplyHit and the effects need a valid Player. For a surface hit the attribution is only
+            // cosmetic, so use our own main player (this also avoids a null reference in any subscriber).
             if (gw.MainPlayer != null)
                 di.Player = gw.GetEverExistedBridgeByProfileID(gw.MainPlayer.ProfileId);
 
-            // ClientGameWorld.HackShot = base.HackShot (ApplyHit -> glass break) + PlayKnifeHitEffect
-            // (sparks/decal/impact sound). One call reproduces the full local visual.
+            // ClientGameWorld.HackShot runs base.HackShot (ApplyHit, the glass break) and PlayKnifeHitEffect
+            // (sparks, decal, impact sound), so this one call reproduces the whole hit.
             gw.HackShot(di);
 
             if (debug)
                 FikaSyncPlugin.Log.LogWarning($"[FikaSync] melee apply OK: {col.name} mat={bc.TypeOfMaterial} at {p.Point}");
         }
 
-        // Find the same surface collider the swinger hit. Primary: raycast straight into the surface
-        // along -normal (independent of the swing direction). Fallback: the nearest non-body surface
-        // BallisticCollider overlapping a small sphere at the hit point.
+        // Finds the surface collider the swinger hit. First a raycast straight into the surface along -normal
+        // (independent of the swing direction), then, as a fallback, the nearest non-body BallisticCollider
+        // overlapping a small sphere at the hit point.
         private static BallisticCollider FindSurfaceCollider(VRMeleeHitPacket p, out Collider col)
         {
             col = null;
@@ -93,7 +92,7 @@ namespace SptVrFikaSync
                 }
             }
 
-            // Fallback — grazing/edge hit where the -normal ray slips past the collider.
+            // Fallback for a grazing or edge hit, where the -normal ray slips past the collider.
             Collider[] overlaps = Physics.OverlapSphere(p.Point, overlapRadius, SurfaceMask, QueryTriggerInteraction.Collide);
             BallisticCollider best = null;
             float bestSqr = float.MaxValue;

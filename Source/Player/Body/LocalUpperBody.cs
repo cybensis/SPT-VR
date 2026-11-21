@@ -4,18 +4,19 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Body
 {
-    // The local VR player's own upper body solved to the headset (UpperBodySolver), right before the shoulders are placed (UpperBodyPatches:
-    // PlayerBones.SetShoulders), only with poseLocalBody. Off while prone, in a run with the run animation and on a mounted gun (their
-    // animations pose the body). The other players' copy of you is bent from your headset either way (HeadSyncApply, from VRHeadPacket).
+    // Solves the local VR player's own upper body to the headset (UpperBodySolver), right before the shoulders are placed
+    // (UpperBodyPatches: PlayerBones.SetShoulders). Only runs with poseLocalBody. It is off while prone, while sprinting with the run
+    // animation, and on a mounted gun, because those animations pose the body. Other players always see your body bent to your headset
+    // (HeadSyncApply, from VRHeadPacket).
     internal static class LocalUpperBody
     {
         public static bool enabled = true;
-        // true = your own skeleton keeps the solved pose (shadow + hitboxes follow the head). In first person the body sits behind the
-        // camera, so it bends far forward, and Tarkov hangs its hands container (PlayerSpring) and the body gun spots off the ribcage:
-        // the held and slung gun move out in front.
+        // true = your own skeleton keeps the solved pose (shadow and hitboxes follow the head). In first person the body sits behind the
+        // camera, so it bends far forward. Tarkov hangs the hands container (PlayerSpring) and the body gun spots off the ribcage,
+        // so the held and slung guns move out in front.
         public static bool poseLocalBody = false;
-        public static float blendTime = 0.25f;      // s it eases in and out
-        public static bool logRig = true;           // one line per rig: the bones it turns, or why it can't
+        public static float blendTime = 0.25f;      // s to ease in and out
+        public static bool logRig = true;           // logs one line per rig: the bones it turns, or why it can't
 
         private static UpperBodySolver.Rig rig;
         private static float weight;

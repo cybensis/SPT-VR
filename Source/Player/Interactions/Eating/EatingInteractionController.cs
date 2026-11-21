@@ -10,16 +10,16 @@ using static EFT.Player.MedsController;
 namespace TarkovVR.Source.Player.Interactions
 {
     // Manual, two-handed, gesture-driven eating. Each handled food has a FoodDef; foods without one eat the vanilla way.
-    //  * The eat is pure bone animation (renderers never toggle), and the animator re-applies its bone pose every frame
-    //    even at speed 0: props are reparented out of the animated rig onto the VR hands (restored on teardown, the
-    //    object is pooled).
+    //  * The eat is pure bone animation (renderers never toggle), and the animator re-applies its bone pose every frame,
+    //    even at speed 0. So the props are reparented out of the animated rig onto the VR hands, and put back on teardown
+    //    because the object is pooled.
     //  * Meds raises LEFT_HAND_ANIMATOR_HASH and freezes the left hand; EatingPatches.ForceLeftHandTracking (a prefix on
     //    VRPlayerManager.UpdateLeftHand) keeps it tracking.
     //  * The finish needs the animation to reach END, or the hands stay stuck.
     //
     // Partial-class files:
     //   EatingInteractionController.cs           - lifecycle: spawn, gates, Tick, finish, teardown
-    //   EatingInteractionController.State.cs     - tunables (live A/B knobs) + per-eat runtime state
+    //   EatingInteractionController.State.cs     - tunables and per-eat runtime state
     //   EatingInteractionController.Foods.cs     - FoodDef, factories/presets/chain wrappers, the Defs registry, DumpFoodDef
     //   EatingInteractionController.HandPaths.cs - baked [HANDPATH]/ReachPath capture data
     //   EatingInteractionController.Props.cs     - prop find/reparent/holders, LateZeroProps, restore, prop actions
@@ -53,28 +53,28 @@ namespace TarkovVR.Source.Player.Interactions
                 active = true;
                 controller = instance;
                 def = foodDef;
-                openReadyTime = foodDef.openReadyTime; // load per-food timings (still tunable live)
+                openReadyTime = foodDef.openReadyTime; // per-food timings, copied into statics that stay tunable during the eat
                 putAwayStartTime = foodDef.putAwayStartTime;
                 pullStartTime = foodDef.pullStartTime;
                 pullEndTime = foodDef.pullEndTime;
                 deterministicGesturePose = foodDef.deterministicGesture;
                 takePoseTime = foodDef.takePoseTime;
                 bitePoseTime = foodDef.bitePoseTime;
-                reachStartTime = foodDef.reachStartTime; // ReachBag reach segment (harmless otherwise)
+                reachStartTime = foodDef.reachStartTime; // ReachBag reach segment (unused by other kinds)
                 reachDeepTime = foodDef.reachDeepTime;
                 eatLoopState = foodDef.eatLoopState;     // timed-eat/gulp loop state (0 = STATE_USE)
                 openPlayState = foodDef.openPlayState;   // one-shot open animation (0 = none; noodles' rip)
                 openPlayMaxTime = foodDef.openPlayMaxTime;
-                takePoseState = STATE_USE_HASH;  // segments are shared; reset in case A/B'd
+                takePoseState = STATE_USE_HASH;  // shared by all foods; reset in case they were changed live
                 bitePoseState = STATE_EAT_HASH;
-                // Interaction-zone reach points (radii + offsets), seeded into live-tunable statics like the timings above.
+                // Interaction zones (radii and offsets), copied into tunable statics like the timings above.
                 openDistance = foodDef.openZoneRadius; scoopDistance = foodDef.takeZoneRadius; eatDistance = foodDef.eatZoneRadius;
                 openZoneOffset = foodDef.openZoneOffset; takeZoneOffset = foodDef.takeZoneOffset; eatZoneOffset = foodDef.eatZoneOffset;
                 style = BuildStyle(foodDef); // per-archetype gesture descriptor
                 phase = foodDef.skipOpen ? Phase.Ready : Phase.Closed; // skipOpen = straight to "bring to mouth"
                 biteCount = 0;
                 spawnAnimSpeed = animationSpeed <= 0f ? 1f : animationSpeed;
-                ReadDrinkState(instance.Item); // resource left + full-item use-time (drinks/partials)
+                ReadDrinkState(instance.Item); // resource left and full-item use-time (drinks, partly eaten items)
 
                 LogStep($"[ManualEat] Armed manual sequence for {foodDef.templateId} "
                     + $"(openGrip={(string.IsNullOrEmpty(foodDef.openGripName) ? "none" : foodDef.openGripName)}, "
@@ -89,9 +89,9 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Snapshot the item's resource + timing. HpPercent is the current amount in resource units (not 0-100; starts at
-        // MaxResource), so remaining = HpPercent/MaxResource: a half-drunk bottle has half a use-time left. UseTime (for
-        // the whole item) comes off the item template ("foodUseTime") unless the FoodDef overrides it.
+        // Snapshots the item's resource and timing. HpPercent is the current amount in resource units (not 0-100; it starts
+        // at MaxResource), so remaining = HpPercent / MaxResource: a half-drunk bottle has half a use-time left. UseTime (for
+        // the whole item) comes from the item template ("foodUseTime") unless the FoodDef overrides it.
         private static void ReadDrinkState(EFT.InventoryLogic.Item item)
         {
             drinkUseTime = def.drinkSeconds;
@@ -110,7 +110,7 @@ namespace TarkovVR.Source.Player.Interactions
                     drinkUseTime = template.UseTime;
             }
             catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] ReadDrinkState: {exception.Message}"); }
-            if (drinkUseTime <= 0f) drinkUseTime = 5f; // template missing/odd — sane fallback
+            if (drinkUseTime <= 0f) drinkUseTime = 5f; // fallback when the template has no usable time
             if (def.kind == FoodKind.Drink)
                 LogStep(drinkFdc != null
                     ? $"[ManualEat] Drink: {drinkFdc.HpPercent:F0}/{drinkFdc.MaxResource:F0} left ({drinkRemainingFrac:P0}), {drinkUseTime * drinkRemainingFrac:F1}s at the mouth to finish."
@@ -131,8 +131,8 @@ namespace TarkovVR.Source.Player.Interactions
 
                 soundPlayer = instance._controllerObject.GetComponentInChildren<BaseSoundPlayer>(true);
 
-                // Parent to the IK'd hand bones (solver.bone3): they follow the controllers (the animation-rig palms don't)
-                // and share the palm orientation.
+                // Parent the props to the IK hand bones (solver.bone3). They follow the controllers, unlike the animation
+                // rig's palms, and share the palm orientation.
                 Transform leftHandBone = VRGlobals.ikManager?.leftArmIk?.solver?.bone3?.transform;
                 Transform rightHandBone = VRGlobals.ikManager?.rightArmIk?.solver?.bone3?.transform;
                 if (leftHandBone == null || rightHandBone == null)
@@ -150,9 +150,9 @@ namespace TarkovVR.Source.Player.Interactions
                         // the left hand (no wrapper).
                         : def.kind == FoodKind.Pack || def.kind == FoodKind.ReachBag ? SetupPackProps(root, rightHandBone)
                         : SetupCannedProps(root, leftHandBone, rightHandBone);
-                if (!ok) return; // failure already logged + Reset
+                if (!ok) return; // the failure is already logged and Reset
 
-                // Segmented snack: the held item's renderers (name-sorted); each audible bite hides one from the tip inward.
+                // Segmented snack: the held item's renderers, sorted by name. Each audible bite hides one, from the tip inward.
                 if (def.segmentedBites && baseT != null)
                 {
                     segR = baseT.GetComponentsInChildren<Renderer>(true);
@@ -160,8 +160,9 @@ namespace TarkovVR.Source.Player.Interactions
                     LogStep($"[ManualEat] segmented bites: {segR.Length} renderers under '{baseT.name}'.");
                 }
 
-                // Hide-on-open target: the torn cover/lid mesh, a sibling of the held bones (so resolved under the whole item
-                // root, not baseT). Hidden when the open completes so it doesn't float by the bag; re-shown on teardown.
+                // The hide-on-open target is the torn cover or lid mesh. It is a sibling of the held bones, so it is searched
+                // under the whole item root, not baseT. It is hidden when the open completes so it doesn't float next to the
+                // bag, and shown again on teardown.
                 if (!string.IsNullOrEmpty(def.hideOnOpenName))
                 {
                     Transform t = FindDeep(root, def.hideOnOpenName);
@@ -171,9 +172,9 @@ namespace TarkovVR.Source.Player.Interactions
                         : $"[ManualEat] hideOnOpen '{def.hideOnOpenName}' not found — nothing will hide.");
                 }
 
-                // The pull-open hand-ride bone (optional). Resolved after the props moved to the hands, in the held item
-                // (baseT) first: these rigs have duplicate node names, and a same-named node left on the body-space rig
-                // also animates with the scrub, far off the item.
+                // The optional bone the latched hand rides during the pull-open. It is resolved after the props moved to the
+                // hands, in the held item (baseT) first: these rigs have duplicate node names, and a same-named node left on
+                // the body-space rig also animates with the scrub, far from the item.
                 if (!string.IsNullOrEmpty(def.openGripName))
                 {
                     openGripT = FindDeep(baseT, def.openGripName);
@@ -199,9 +200,9 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // A def matched but its props aren't in this rig (wrong bone names): back to a real vanilla eat. By the Spawn
-        // postfix the gate has already swallowed the Spawn-body method_5 (the consume) and the animator is frozen, so
-        // re-fire the stashed op and unfreeze before Reset, or the food hangs with no effect running.
+        // A def matched but its props aren't in this rig (wrong bone names), so fall back to a real vanilla eat. By the Spawn
+        // postfix, the gate has already blocked Spawn's method_5 call (the consume) and the animator is frozen. Re-fire the
+        // stashed op and unfreeze before Reset, or the food hangs with no effect running.
         private static bool BailToVanilla(string why)
         {
             Plugin.MyLog.LogError($"[ManualEat] {why} — vanilla fallback.");
@@ -209,7 +210,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 if (pendingOp != null && !effectFired)
                 {
-                    effectFired = true;   // AllowEffect passes it through
+                    effectFired = true;   // so AllowEffect lets it through
                     pendingOp.GoNextBodyPart(); // run the real consume the gate swallowed
                 }
                 controller?.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
@@ -239,12 +240,12 @@ namespace TarkovVR.Source.Player.Interactions
             if (!active || manualDone || instance != controller) return;
             if (VRGlobals.vrPlayer == null || VRGlobals.ikManager == null) return;
 
-            // The animator stays frozen except during the lid-roll (StepGesture drives it), the one-shot open animation
-            // (playingOpenAnim) and the per-bite / gulp-loop play pulse (Time.time < playUntil).
+            // The animator stays frozen except during the open (StepGesture drives it), the one-shot open animation
+            // (playingOpenAnim) and the short play pulse for each bite or gulp loop (Time.time < playUntil).
             if (!playingOpen && !playingOpenAnim)
                 instance.FirearmsAnimator?.SetAnimationSpeed(Time.time < playUntil ? spawnAnimSpeed : 0f);
 
-            // Mid-eat nothing else pins the rig to the body: without this the IK hands jitter while walking.
+            // During the eat nothing else pins the rig to the body; without this the IK hands jitter while walking.
             if (VRGlobals.ikManager != null) VRGlobals.ikManager.MatchLegsToArms();
             PinRigToBody();
             DriveArms();
@@ -260,8 +261,8 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            // Both triggers together = cancel: put the food away unconsumed (a mid-drink cancel still applies what was drunk).
-            // Edge-gated so holding them doesn't refire.
+            // Both triggers together cancel: the food is put away unconsumed (a mid-drink cancel still applies what was drunk).
+            // Only the press counts, so holding them doesn't fire again.
             bool both = VRInput.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f
                      && VRInput.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f;
             bool bothEdge = both && !prevBothTriggers;
@@ -277,13 +278,13 @@ namespace TarkovVR.Source.Player.Interactions
             StepGesture();
         }
 
-        // Runs the finish, but never from STATE_OPEN: cancelling a use frozen in the draw/open state half-starts the op
-        // ("busy hands", the food flashes in the inventory and won't discard). If the arms are still in OPEN, push them
-        // into STATE_USE and let Tick complete the finish once it engages (deadline = give-up fallback).
+        // Runs the finish, but never from STATE_OPEN. Cancelling a use frozen in the draw/open state leaves the op half-started:
+        // the hands stay busy, and the food flashes in the inventory and won't discard. If the arms are still in STATE_OPEN,
+        // push them into STATE_USE and let Tick complete the finish once that state is active (finishDeadline = give-up fallback).
         private static void RequestFinish(bool cancel)
         {
-            EndPull(immediate: true);  // a cancel can land mid pull-open — unlatch so the put-away owns the arms
-            EndReach(immediate: true); // ...or mid reach-in (same latch plumbing, same reason)
+            EndPull(immediate: true);  // a cancel can come mid pull-open: unlatch so the put-away animation controls the arms
+            EndReach(immediate: true); // or mid reach-in (same latch, same reason)
             if (InOpenState())
             {
                 EnterUseState();
@@ -302,8 +303,8 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // Teardown entry point for the MedsController lifecycle patches (WeapOut / Destroy). They fire for every
-        // MedsController in the raid (bots and other players too): only tear down for the controller we armed, or a bot
-        // putting its meds away ends the local eat mid-sequence. controller is only set after the IsYourPlayer gate.
+        // MedsController in the raid, bots and other players too. Only tear down for the controller we armed, or a bot
+        // putting its meds away ends the local eat. controller is only set after the IsYourPlayer check.
         public static void OnControllerGone(MedsController instance)
         {
             if (instance == null || instance != controller) return;
@@ -315,7 +316,7 @@ namespace TarkovVR.Source.Player.Interactions
             try { controller?.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed); } catch { }
             UnsubscribePinAfterIk();
             DestroyZoneViz();
-            TarkovVR.Source.Misc.AudioHaptics.Stop(); // pump + tap off (the controller object is pooled)
+            TarkovVR.Source.Misc.AudioHaptics.Stop(); // stop the audio haptics pump and tap (the controller object is pooled)
             RestoreProps();
             ReleaseArms();
             LogStep("[ManualEat] End() — cleaned up.");
@@ -331,10 +332,10 @@ namespace TarkovVR.Source.Player.Interactions
             float timeout = Time.time + 6f;
             while (Time.time < timeout && StillHoldingMeds(meds))
                 yield return null;
-            // buffer so the switch transaction is fully settled before we discard
+            // Wait a little longer so the switch transaction is fully settled before the discard
             yield return new WaitForSeconds(0.5f);
-            // Co-op client: also wait for the host's answer. Its copy of you runs the put-away and the draw at full length,
-            // and a move sent before is refused ("Default Inventory is currently being modified")
+            // As a co-op client, also wait for the host's answer. The host's copy of the player runs the put-away and the draw
+            // at full length, and a move sent before that is refused ("Default Inventory is currently being modified").
             float hostWaitSince = Time.time;
             while (ModSupport.CoopHost.HoldsBack(hostWaitSince))
                 yield return null;
@@ -348,7 +349,7 @@ namespace TarkovVR.Source.Player.Interactions
             catch { return false; }
         }
 
-        // Remove the eaten food from the inventory.
+        // Helpers that remove the eaten food from the inventory.
         private static bool HasParent(EFT.InventoryLogic.Item item)
         {
             if (item == null) return false;
@@ -366,8 +367,8 @@ namespace TarkovVR.Source.Player.Interactions
                     Plugin.MyLog.LogWarning("[ManualEat] DiscardFood: item not settled — skipped.");
                     return;
                 }
-                // simulate:true builds the op; RunNetworkTransaction executes it once. false would execute it here and
-                // return it: double-executed on a parentless item, which throws.
+                // simulate:true only builds the op, and RunNetworkTransaction executes it once. false would execute it here
+                // and also return it, so it would run a second time on a parentless item, which throws.
                 var result = ItemManipulator.Discard(item, ic, simulate: true);
                 if (result.Succeeded)
                 {
@@ -379,25 +380,25 @@ namespace TarkovVR.Source.Player.Interactions
             catch (Exception exception) { Plugin.MyLog.LogError($"[ManualEat] DiscardFood error: {exception}"); }
         }
 
-        // Final bite / drink done / cancel: applies the consumed fraction's nutrition and tells the animator the use is done
-        // (SetActiveParam(false), what the game's own method_9 does), which drives it to the END/put-away state whatever
-        // the effect timer. The END animation then fires the weapon-out event. cancel = true consumes nothing extra, but
-        // a drink still applies what was drunk before the cancel.
+        // Runs after the final bite, a finished drink, or a cancel. Applies the consumed fraction's nutrition and tells the
+        // animator the use is done (SetActiveParam(false), as the game's own method_9 does), which drives it to the END
+        // (put-away) state regardless of the effect timer. The END animation then fires the weapon-out event.
+        // cancel = true consumes nothing extra, but a drink still applies what was drunk before the cancel.
         private static void FinishSequence(bool cancel = false)
         {
             phase = Phase.Done;
             manualDone = true; // stop the hand-pin/IK so the END animation moves the hands (put-away)
             drinkingHeld = false;
-            playingOpen = false; // a cancel can land mid lid-roll; don't leave the open flag stuck
-            playingOpenAnim = false; // ...or mid one-shot open animation (the rip)
+            playingOpen = false; // a cancel can come mid open; don't leave the open flag stuck
+            playingOpenAnim = false; // or during the one-shot open animation (the rip)
             ReleaseArms();
 
             if (effectFired) { Plugin.MyLog.LogWarning("[ManualEat] Finish: effect already fired."); return; }
             if (pendingOp == null) { Plugin.MyLog.LogError("[ManualEat] Finish: pendingOp NULL — may stick!"); return; }
 
-            // What this use consumed, as a 0..1 fraction of the whole item (what CutPiece wants). Timed eats (drinks +
-            // eatByTime snacks): at-mouth time / full-item use-time, capped at what was left. Bite foods: everything left
-            // on a normal finish, or only what the bites/mouth already applied on a cancel (the item keeps the rest).
+            // What this use consumed, as a 0..1 fraction of the whole item (what CutPiece takes). Timed eats (drinks and
+            // eatByTime snacks): time at the mouth / full-item use-time, capped at what was left. Bite foods: everything left
+            // on a normal finish, or on a cancel only what the bites and the mouth already applied (the item keeps the rest).
             float fraction;
             if (def != null && (def.kind == FoodKind.Drink || def.eatByTime))
                 fraction = Mathf.Min(drinkUseTime > 0f ? drinkHeldTime / drinkUseTime : drinkRemainingFrac, drinkRemainingFrac);
@@ -431,7 +432,7 @@ namespace TarkovVR.Source.Player.Interactions
                 LogStep(drinkFdc != null
                     ? $"[ManualEat] Consumed {fraction:P0} ({drinkFdc.HpPercent:F1}/{drinkFdc.MaxResource:F0} left{(emptied ? " — empty" : "")})."
                     : $"[ManualEat] Consumed {fraction:P0} (no resource component{(emptied ? " — treated as empty" : "")}).");
-                pendingOp.GoNextBodyPart();   // keep — leaves the controller in the state the cancel needs
+                pendingOp.GoNextBodyPart();   // leaves the controller in the state the cancel needs
                 // SetActiveParam(false) is required: it flips the controller out of mid-use into the cancellable/put-away
                 // state. Without it the controller stays frozen and the fire-cancel has nothing to act on.
                 firearmsAnimator?.SetActiveParam(false, false);

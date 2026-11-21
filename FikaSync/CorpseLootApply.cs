@@ -8,14 +8,14 @@ using UnityEngine;
 namespace SptVrFikaSync
 {
     // Receiver for CorpseLootPacket. Runs on every peer but acts only on the host/headless (FikaBackendUtils.IsServer), which runs
-    // the bots + looting AI. A VR client dragging a corpse can't update the AI itself (its OrbitManager / bot game are null).
+    // the bots and the looting AI. A VR client dragging a corpse can't update the AI itself (its OrbitManager and bot game are null).
     //
     // What the server does with a dragged body:
-    //   * ORBIT (if installed): pull the loot waypoint on grab, re-add it at the rest spot on settle
-    //     (OrbitSync). ORBIT loots by waypoint, not by the body's collider.
-    //   * LootingBots / base SPT (live collider scanners): relocate the server's ragdoll copy to the rest
-    //     spot on settle. The headless never applies the body-drag sync (it's keyed on ObservedPlayersCorpses,
-    //     empty on a headless), so the server's copy otherwise stays at the death spot.
+    //   * ORBIT (if installed) loots by waypoint, not by the body's collider. OrbitSync removes the loot waypoint on grab
+    //     and re-adds it at the rest spot on settle.
+    //   * LootingBots and base SPT scan the body's colliders, so the server's ragdoll copy is moved to the rest spot on settle.
+    //     A headless never applies the body-drag sync (it is keyed on ObservedPlayersCorpses, which is empty there),
+    //     so without this the server's copy stays where the body died.
     internal static class CorpseLootApply
     {
         public static void Apply(CorpseLootPacket p)
@@ -42,8 +42,8 @@ namespace SptVrFikaSync
             }
         }
 
-        // The dead entity's Corpse on this machine, by profile id. GetEverExistedPlayerByID keeps the player
-        // (incl. dead bots) so its .Corpse is reachable — the same identity ORBIT's waypoint Target carries.
+        // The dead player's Corpse on this machine, by profile id. GetEverExistedPlayerByID also returns dead bots, so their
+        // .Corpse is reachable. This is the same identity ORBIT's waypoint Target carries.
         private static Corpse ResolveCorpse(string profileId)
         {
             if (string.IsNullOrEmpty(profileId))
@@ -63,9 +63,9 @@ namespace SptVrFikaSync
             }
         }
 
-        // Teleport the server's settled ragdoll to the rest spot by offsetting every bone (and the root) by the pelvis delta:
-        // keeps the pose, moves the colliders. The bones are kinematic once the corpse has settled, so a transform write holds;
-        // if EFT has torn the rigidbodies down, the bone GameObjects and their colliders still exist.
+        // Teleports the server's settled ragdoll to the rest spot by moving every bone (and the root) by the pelvis offset.
+        // This keeps the pose and moves the colliders. The bones are kinematic once the corpse has settled, so a transform
+        // write holds. If EFT has already removed the rigidbodies, the bone GameObjects and their colliders still exist.
         private static void RelocateRagdoll(Corpse corpse, Vector3 restPos)
         {
             try
@@ -84,7 +84,7 @@ namespace SptVrFikaSync
                     if (t != null)
                         t.position += delta;
                 }
-                corpse.transform.position += delta; // keep the corpse root consistent with the bones
+                corpse.transform.position += delta; // keep the corpse root with the bones
             }
             catch (Exception e) { FikaSyncPlugin.Log.LogWarning($"[CorpseLoot] relocate failed: {e.Message}"); }
         }

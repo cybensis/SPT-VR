@@ -14,38 +14,39 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Keys by hand. The trigger while a hand grips a locked door you have the key for: the hand lets go of the door and the key comes out
-    // into it, held the way Tarkov's own unlock holds it (the key's "pivot" on the index's first bone). Its tip into the lock (the lock
-    // handle's pivot, else the door handle's) seats it, the hand on it; a wrist turn of keyUnlockTurn about the keyway, either way, unlocks
-    // the door through Tarkov's own unlock (the key's uses, FIKA's packet) without its walk-up and animation (DoorKeyPatches). The trigger
-    // again puts the key away; not the grip (a hand pinching a key reads as letting go: OpenXRInput's fast-open). Keycard doors stay vanilla.
+    // Keys by hand. Pulling the trigger while a hand grips a locked door you have the key for makes the hand let go of the door and take
+    // the key out, held the way Tarkov's own unlock holds it (the key's "pivot" on the index's first bone). Putting its tip into the lock
+    // (the lock handle's pivot, else the door handle's) seats it with the hand on it. Turning the wrist keyUnlockTurn about the keyway, either
+    // way, unlocks the door through Tarkov's own unlock (the key's uses, FIKA's packet) without the walk-up and animation (DoorKeyPatches).
+    // The trigger again puts the key away. Not the grip: OpenXRInput's fast-open takes a hand pinching a key as letting go. Keycard doors
+    // stay vanilla.
     internal static partial class PhysicalDoors
     {
         public static bool keysByHand = true;
-        public static float keyAppearDelay = 0.15f;     // s after the trigger: the hand off the door before the key is in it
-        public static float keyholeRadius = 0.035f;     // m the key's tip may be off the keyway's line...
+        public static float keyAppearDelay = 0.15f;     // s after the trigger before the key appears, so the hand is off the door first
+        public static float keyholeRadius = 0.035f;     // m, how far the key's tip may be from the keyway's line...
         public static float keyholeAxialReach = 0.07f;  // ...and along it from the lock (either face of the door)
-        public static float keyInsertAngle = 40f;       // deg the key may be off the keyway
-        public static float keyInsertDepth = 0.03f;     // m the tip goes in past the door's face
-        // The face is the door's own surface along the keyway within this of the lock's pivot (a door's handles and thick colliders stand
-        // further out); none there = the pivot less keyFaceFallback
+        public static float keyInsertAngle = 40f;       // deg, how far the key may point off the keyway
+        public static float keyInsertDepth = 0.03f;     // m, how far the tip goes in past the door's face
+        // The door's face is its first surface along the keyway within keyFaceBand of the lock's pivot (handles and thick colliders stand
+        // further out). With none there, the face is keyFaceFallback in front of the pivot.
         public static float keyFaceBand = 0.06f;        // m
         public static float keyFaceFallback = 0.02f;    // m
-        public static float keyInsertTime = 0.08f;      // s the hand takes onto the lock
+        public static float keyInsertTime = 0.08f;      // s for the hand to move onto the lock
         public static float keyUnlockTurn = 60f;        // deg of wrist turn about the keyway that unlocks
         public static float keyMaxTurn = 90f;
-        public static float keyTurnTickDegrees = 15f;   // a light pulse every this much of turn
-        // In the lock the key stays on the keyway: it comes out only pulled back out along it, or the hand gone far from it any other way
-        // (turning it swings the controller's grip on it round in an arc, and the arm sways)
-        public static float keyPullOutDistance = 0.1f;  // m the controller pulls back out along the keyway from where it seated the key
-        public static float keyLetGoDistance = 0.25f;   // m the controller may get from there any way
-        public static float keyReseatDelay = 0.3f;      // s after it comes out before it seats again
+        public static float keyTurnTickDegrees = 15f;   // deg of turn between light haptic pulses
+        // In the lock the key stays on the keyway. It only comes out when pulled back along the keyway, or when the hand moves far from it
+        // in any other direction (turning the key swings the controller's grip round in an arc, and the arm sways).
+        public static float keyPullOutDistance = 0.1f;  // m the controller must pull back along the keyway from where it seated the key
+        public static float keyLetGoDistance = 0.25f;   // m the controller may move from there in any direction
+        public static float keyReseatDelay = 0.3f;      // s after the key comes out before it can seat again
         public static float keyStowDelay = 0.5f;        // s the key stays turned in the unlocked lock before it goes away
         public static float keySoundVolume = 0.6f;
-        public static Vector3 keyHoldOffsetPosition = Vector3.zero;   // m, the index bone's frame: a nudge on Tarkov's hold
+        public static Vector3 keyHoldOffsetPosition = Vector3.zero;   // m, in the index bone's frame: a nudge on top of Tarkov's hold
         public static Vector3 keyHoldOffsetEuler = Vector3.zero;
-        public static bool keyTipFlip = false;          // the blade at the other end of the key (one whose grip point is on its blade)
-        // Tarkov holds keys in the left hand only: the right gets that hold mirrored. false = Tarkov's alignment on the right bone as is.
+        public static bool keyTipFlip = false;          // the blade is at the other end of the key (for a key whose grip point is on its blade)
+        // Tarkov holds keys in the left hand only, so the right hand gets that hold mirrored. false = Tarkov's alignment on the right bone as is.
         public static bool mirrorKeyInRightHand = true;
         public static float triggerPressLevel = 0.7f, triggerReleaseLevel = 0.3f;
         public static bool keyDebugViz = false;         // spheres: the keyhole (blue, its radius), the key's tip (yellow; green when it can seat)
@@ -62,11 +63,11 @@ namespace TarkovVR.Source.Player.Interactions
             public GameObject prop;
             public readonly List<Collider> disabledColliders = new List<Collider>();
             public readonly Dictionary<Transform, int> originalLayers = new Dictionary<Transform, int>();
-            public Vector3 tipLocal;                    // the prop's frame: the blade's end...
-            public Vector3 axisLocal;                   // ...the way to it from the grip...
-            public Vector3 widthLocal;                  // ...across the blade's flat...
-            public Vector3 gripLocal;                   // ...the grip point (Tarkov's pivot)...
-            public Vector3 centerLocal;                 // ...and the middle of its box
+            public Vector3 tipLocal;                    // in the prop's frame (this and the next four): the end of the blade
+            public Vector3 axisLocal;                   // direction from the grip to the tip
+            public Vector3 widthLocal;                  // across the blade's flat
+            public Vector3 gripLocal;                   // the grip point (Tarkov's pivot)
+            public Vector3 centerLocal;                 // the middle of the key's box
             public int flatAxis;                        // the prop's axis through the blade's flat (its thinnest)
             // In the lock
             public Transform rig;
@@ -79,7 +80,7 @@ namespace TarkovVR.Source.Player.Interactions
             public Quaternion latchFromRotation;
             public Vector3 inward;                      // along the keyway, into the door
             public Vector3 seatedTip;
-            public Quaternion seatedRotation;           // the key's, unturned
+            public Quaternion seatedRotation;           // the key's rotation before any turn
             public Quaternion rigRotationAtSeat;
             public Vector3 gripInRig;
             public Vector3 gripAtSeat;                  // world: the controller's grip on the key as it seated
@@ -102,9 +103,9 @@ namespace TarkovVR.Source.Player.Interactions
         private static EFT.Player playerOwnerOf;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // For the rest of the mod
+        // Used by the rest of the mod
 
-        // The key a hand holds out: the fingers close on it (HandsInteractionController.Grasp)
+        // The key a hand holds, for the fingers to close on (HandsInteractionController.Grasp)
         internal static bool KeyGraspTarget(bool dominant, out Component key)
         {
             KeyHold keyHold = keyHolds[dominant ? 1 : 0];
@@ -112,13 +113,13 @@ namespace TarkovVR.Source.Player.Interactions
             return key != null;
         }
 
-        // DoorKeyPatches: this unlock is the key a hand turned, not Tarkov's walk-up
+        // For DoorKeyPatches: true when this unlock comes from a key turned by hand, not from Tarkov's walk-up
         internal static bool UnlocksByHand(MovementContext movementContext, WorldInteractiveObject door)
         {
             return door != null && door == unlockingByHand && VRGlobals.player != null && movementContext == VRGlobals.player.MovementContext;
         }
 
-        // What MovementContext.StartInteraction's walk-up and the door state's execute would end in, at once
+        // Does at once what MovementContext.StartInteraction's walk-up and the door state's execute would end in
         internal static void UnlockNow(MovementContext movementContext, WorldInteractiveObject door, InteractionResult result, Action callback)
         {
             try
@@ -157,7 +158,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Per frame (Tick)
+        // Every frame (from Tick)
 
         private static void ReadTriggers()
         {
@@ -171,7 +172,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // The trigger on a held locked door: the key out of the inventory into that hand, which lets go of the door
+        // The trigger on a held locked door: the key comes out of the inventory into that hand, which lets go of the door
         private static void TryTakeKey(Hold hold)
         {
             Door door = hold.door;
@@ -205,8 +206,8 @@ namespace TarkovVR.Source.Player.Interactions
             return playerOwner;
         }
 
-        // A hand with a key out (UpdateHand leaves the hand to it). The trigger again, the hand taking something else (keepsKey) or the
-        // door gone puts it away.
+        // Runs a hand with a key out (UpdateHand leaves the hand to it). The key is put away on the trigger again, when the hand takes
+        // something else (keepsKey false), or when the door is gone.
         private static void UpdateKey(KeyHold keyHold, Hold hold, bool keepsKey)
         {
             Door door = keyHold.door;
@@ -276,7 +277,7 @@ namespace TarkovVR.Source.Player.Interactions
             prop.SetActive(true);
 
             // Tarkov's hold (Player.SpawnInHands): the key's pivot on the index's first bone, in that bone's frame. The palm's pose here is
-            // last frame's, the fingers open (the door's grasp let go).
+            // last frame's, with the fingers open (the door's grasp has let go).
             Transform propTransform = prop.transform;
             Transform pivot = FindDescendant(propTransform, "pivot", suffix: false);
             MeasureKey(keyHold, pivot);
@@ -299,10 +300,10 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // The left hand's hold in the right hand. The right hand's bones are the left's mirrored with their local z turned round (the
-        // fingers of both point down -x and curl about +z; the rest poses bear it out), so the mirror in a bone's frame is z -> -z. The
-        // key mirrored too would be a reflection: it's also turned over through the middle of its flat (the same key to the eye), which
-        // makes the two a rotation.
+        // Turns the left hand's hold into one for the right hand. The right hand's bones are the left's mirrored with their local z
+        // flipped (the fingers of both point down -x and curl about +z, as the rest poses show), so the mirror in a bone's frame is
+        // z -> -z. Mirroring the key alone would be a reflection, so it is also flipped over through the middle of its flat (it looks
+        // like the same key), which makes the whole change a rotation.
         private static void MirrorHold(KeyHold keyHold, Vector3 scale, ref Quaternion keyInBone, ref Vector3 keyInBonePosition)
         {
             Vector3 flatAxis = Vector3.zero;
@@ -316,7 +317,7 @@ namespace TarkovVR.Source.Player.Interactions
             keyInBone = Quaternion.LookRotation(rotation.GetColumn(2), rotation.GetColumn(1));
         }
 
-        // The key's blade from its meshes' local boxes, in the prop's frame: the long way, from the grip point to the far end
+        // Measures the key's blade from its meshes' local boxes, in the prop's frame: along its longest axis, from the grip point to the far end
         private static void MeasureKey(KeyHold keyHold, Transform pivot)
         {
             Transform propTransform = keyHold.prop.transform;
@@ -448,7 +449,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // The lock: its handle's pivot (the cylinder, a thumb-turn), else the door handle's. The keyway runs through the door along the
-        // lock's own turning axis when that's across the door, else the door's face normal there.
+        // lock's own turning axis when that's across the door, else along the door's face normal there.
         private static bool Keyhole(Door door, out Vector3 lockPoint, out Vector3 keyway)
         {
             lockPoint = keyway = Vector3.zero;
@@ -479,7 +480,8 @@ namespace TarkovVR.Source.Player.Interactions
             Transform propTransform = keyHold.prop.transform;
             Door door = keyHold.door;
 
-            // In at the door's face along the keyway, the blade on edge: its flat across the hinge's axis, the nearer way up
+            // The tip goes in at the door's face along the keyway, with the blade on edge: its flat across the hinge's axis,
+            // whichever way up is nearer
             bool logSeat = logGrabs && seatLogged.Add(door.Id ?? door.name);
             bool faceFound = DoorFaceAlong(door, lockPoint, inward, logSeat, out Vector3 face, out string surfaces);
             keyHold.seatedTip = face + inward * keyInsertDepth;
@@ -505,7 +507,7 @@ namespace TarkovVR.Source.Player.Interactions
             keyHold.turn = 0f;
             keyHold.lastTickTurn = 0f;
 
-            // The arm's target from where the hand is now (its last bone) onto the lock
+            // The arm's target eases from where the hand is now (its last bone) onto the lock
             if (keyHold.latch == null)
                 keyHold.latch = new GameObject("VRDoorKeyLatch").transform;
             Transform bone = armIk.solver.bone3.transform;
@@ -523,9 +525,9 @@ namespace TarkovVR.Source.Player.Interactions
             PlayKeySound(keyHold, keySoundVolume * 0.5f);
         }
 
-        // The door's face the key goes in at: its first surface along the keyway, coming in from outside, within keyFaceBand of the lock's
-        // pivot: the first surface of any of its colliders can be 9-12 cm out from it on a door ~4 cm thick (a handle, a collider
-        // thicker than the door).
+        // The door's face where the key goes in: its first surface along the keyway, coming in from outside, within keyFaceBand of the
+        // lock's pivot. The first surface of any of the door's colliders can be 9-12 cm out from the pivot on a ~4 cm door (a handle,
+        // a collider thicker than the door).
         private static bool DoorFaceAlong(Door door, Vector3 lockPoint, Vector3 inward, bool describe, out Vector3 face, out string surfaces)
         {
             face = lockPoint - inward * keyFaceFallback;
@@ -550,7 +552,7 @@ namespace TarkovVR.Source.Player.Interactions
             return best < float.MaxValue;
         }
 
-        // The key's grip as the controller has it (HandCollision's clamp left out)
+        // Where the controller holds the key's grip, without HandCollision's clamp
         private static Vector3 ControllerGrip(KeyHold keyHold)
         {
             Transform rig = keyHold.rig;
@@ -559,7 +561,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static bool PulledOut(KeyHold keyHold) => PulledOut(keyHold, out _, out _);
 
-        // back: m out along the keyway, off: m from the seat any way
+        // back: m pulled out along the keyway; off: m from the seat in any direction
         private static bool PulledOut(KeyHold keyHold, out float back, out float off)
         {
             back = off = 0f;
@@ -571,7 +573,7 @@ namespace TarkovVR.Source.Player.Interactions
             return back > keyPullOutDistance || off > keyLetGoDistance;
         }
 
-        // The wrist's turn about the keyway since it seated turns the key; far enough, the lock gives
+        // The wrist's turn about the keyway since seating turns the key; turned far enough, the lock opens
         private static void UpdateSeated(KeyHold keyHold)
         {
             bool lost = keyHold.armIk == null || keyHold.prop == null;
@@ -609,8 +611,8 @@ namespace TarkovVR.Source.Player.Interactions
             keyHold.unseatTime = Time.time;
         }
 
-        // Tarkov's unlock (InteractionContextHelper's Unlock action): the key's use, its inventory events, the Start packet FIKA sends with the
-        // key; DoorKeyPatches skips the walk-up and the animation
+        // Tarkov's unlock (InteractionContextHelper's Unlock action): the key's use, its inventory events, and the Start packet FIKA sends
+        // with the key. DoorKeyPatches skips the walk-up and the animation.
         private static bool Unlock(KeyHold keyHold)
         {
             EFT.Player player = VRGlobals.player;
@@ -655,7 +657,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 if (keyHold.armIk == null || keyHold.latch == null || keyHold.prop == null || keyHold.rig == null)
                     return;
-                // (the two-handing edges and the equip paths set the arm's target: ours while the key is in)
+                // The two-handing edges and the equip paths also set the arm's target; it stays ours while the key is in.
                 if (keyHold.armIk.solver.target != keyHold.latch)
                     keyHold.armIk.solver.target = keyHold.latch;
                 if (!SeatedLatchPose(keyHold, out Vector3 position, out Quaternion rotation))
@@ -670,7 +672,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!keyHold.easingBack)
                 return;
             float progress = (Time.time - keyHold.latchTime) / Mathf.Max(handReleaseTime, 0.001f);
-            // Something else took the arm while it eased back: it's theirs
+            // Something else took the arm while it eased back: leave it to them
             if (progress >= 1f || keyHold.rig == null || keyHold.latch == null || keyHold.armIk == null || keyHold.armIk.solver.target != keyHold.latch)
             {
                 EndKeyLatch(keyHold);
@@ -749,7 +751,7 @@ namespace TarkovVR.Source.Player.Interactions
             playerOwner = null;
         }
 
-        // The debug spheres off when the key isn't looking for the lock
+        // Hides the debug spheres while the key isn't looking for the lock
         private static void HideKeyViz(KeyHold keyHold)
         {
             if (keyHold.keyholeSphere != null && keyHold.keyholeSphere.activeSelf)

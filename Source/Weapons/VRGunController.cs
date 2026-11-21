@@ -11,9 +11,9 @@ namespace TarkovVR.Source.Weapons
     //    left hand always follows the controller.
     public static class VRGunController
     {
-        // The gun arm the same way: a weapon switch plays the body animator's draw, whose RIGHT_HAND_WEIGHT curve drops the right
-        // arm's IK weight (1 - curve) and hands the arm, and with it the gun (PlayerBones.Kinematics below 1), to that take-out.
-        // Only a switch plays it: a slung gun taken back never goes through Tarkov. false = Tarkov's weight, to compare.
+        // The gun arm is kept off the animation the same way. A weapon switch plays the body animator's draw, whose RIGHT_HAND_WEIGHT
+        // curve drops the right arm's IK weight (1 - curve) and hands the arm, and with it the gun (PlayerBones.Kinematics below 1), to
+        // that take-out. Only a switch plays it: a slung gun taken back never goes through Tarkov.
 
         public static bool KeepGunArmOffAnimation(EFT.Player player)
         {
@@ -24,7 +24,7 @@ namespace TarkovVR.Source.Weapons
         private static Transform heldForWeaponHolder;
         private static FirearmController heldForFirearm;
 
-        // Tarkov's own "really idle" test: idling, but not examining or checking
+        // True while Tarkov animates the gun: the opposite of its own "really idle" test (idling, but not examining or checking)
         public static bool IsTarkovAnimatingTheGun()
         {
             FirearmController firearmController = VRGlobals.firearmController;

@@ -4,12 +4,12 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.VRManager
 {
-    // The gun sways while you sprint. Only with "Disable Run Animation" on (the case where firing while sprinting is allowed,
-    // SprintFirePatches); with the run animation on, Tarkov animates the arms and firing stays blocked.
-    // A rotation about the grip, laid on the gun's pose at its last stage (HandsPositioner), so the aim filters, the gunstock and the
-    // weight spring never see it. The shot follows it (the fireport rides WeaponRoot) and co-op sees it; the view never moves.
-    // Gait: the nose dips with each footfall (the step rate), swings side to side and rolls with each stride (half of it), plus an
-    // irregular drift so it can't be timed; all scaled by how fast you run.
+    // The gun sways while you sprint. Only with "Disable Run Animation" on, which is when firing while sprinting is allowed
+    // (SprintFirePatches); with the run animation on, Tarkov animates the arms and firing stays blocked.
+    // The sway is a rotation about the grip, applied as the last step of the gun's pose (HandsPositioner), so the aim filters, the
+    // gunstock and the weight spring never see it. Shots follow it (the fireport is under WeaponRoot) and co-op players see it; the
+    // view never moves. The nose dips with each step, swings side to side and rolls once per stride (two steps), plus an irregular
+    // drift so it can't be timed. All of it scales with running speed.
     internal static class RunSway
     {
         public static bool enabled = true;
@@ -22,7 +22,7 @@ namespace TarkovVR.Source.Player.VRManager
         public static float slowStepFrequency = 2.2f;   // Hz: steps per second at a slow run...
         public static float fastStepFrequency = 2.9f;   // ...and at fullSwaySpeed
         public static float fullSwaySpeed = 5.5f;       // m/s across the ground for the full sway and the fast step rate
-        public static float twoHandedScale = 0.8f;      // the support hand on the gun steadies it
+        public static float twoHandedScale = 0.8f;      // x the sway while the support hand is on the gun
         public static float fadeInTime = 0.3f;          // s to the full sway once you sprint
         public static float fadeOutTime = 0.25f;        // s back to none when you stop
 

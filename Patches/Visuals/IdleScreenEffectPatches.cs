@@ -4,12 +4,13 @@ using UnityEngine;
 
 namespace TarkovVR.Patches.Visuals
 {
-    // BSG's screen effects copy the whole image every frame even while they show nothing (death fade off, no blood, no infection,
-    // grayscale 0, vintage filter None): a full-screen copy per effect per eye, ~0.25 ms a frame in VR. These prefixes skip the call
-    // only in the state where the game's code would just copy; the components stay enabled (DeathFade/BloodOnScreen animate in
-    // their own Update). Safe with BSG's SSAAPropagator: every effect reads/writes its ping-pong pair and the "current" index only
-    // moves on ReleaseSourceDestination, so a skipped effect leaves the image where the next one reads it (NightVision.Switch
-    // disables chain effects the same way). Without the propagator the effects draw into Unity's source/destination, which must be written.
+    // BSG's screen effects copy the whole image every frame even when they show nothing (death fade off, no blood, no infection,
+    // grayscale 0, vintage filter None). That is a full-screen copy per effect per eye, about 0.25 ms a frame in VR. These prefixes skip
+    // the call only in the state where the game's code would just copy. The components stay enabled (DeathFade and BloodOnScreen
+    // animate in their own Update). This is safe with BSG's SSAAPropagator: every effect reads and writes its ping-pong pair, and the
+    // "current" index only moves on ReleaseSourceDestination, so a skipped effect leaves the image where the next one reads it
+    // (NightVision.Switch disables chain effects the same way). Without the propagator the effects draw into Unity's source/destination,
+    // which must be written, so nothing is skipped then.
     [HarmonyPatch]
     internal class IdleScreenEffectPatches
     {
@@ -45,8 +46,8 @@ namespace TarkovVR.Patches.Visuals
             return !(__instance._ssaaPropagator != null && Math.Abs(__instance.EffectAmount) < Mathf.Epsilon);
         }
 
-        // Idle = no filter AND nothing pending for the filter bookkeeping AND no lookup texture (a serialized LUT with
-        // filter None would still be applied by CC_LookupFilter).
+        // Idle = no filter, no filter change pending (m_CurrentFilter), and no lookup texture (CC_LookupFilter would still apply a
+        // serialized LUT with filter None).
         [HarmonyPrefix]
         [HarmonyPatch(typeof(CC_Vintage), "OnRenderImage")]
         private static bool SkipIdleVintage(CC_Vintage __instance)

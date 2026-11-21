@@ -99,8 +99,6 @@ namespace TarkovVR.Patches.Misc
             VRGlobals.menuOpen = true;
             hideoutOverlayActive = true;
             VRGlobals.inGame = false;
-            //__instance.method_5();
-            //VRGlobals.menuVRManager.enabled = false;
         }
 
         [HarmonyPostfix]
@@ -140,7 +138,6 @@ namespace TarkovVR.Patches.Misc
                     UIPatches.quickSlotUi = quickSlotHolder.AddComponent<CircularSegmentUI>();
                     UIPatches.quickSlotUi.Init();
                     UIPatches.quickSlotUi.CreateQuickSlotUi();
-                    //circularSegmentUI.CreateQuickSlotUi(mainImagesList.ToArray());
                 }
                 UIPatches.quickSlotUi.gameObject.active = false;
             }
@@ -148,8 +145,6 @@ namespace TarkovVR.Patches.Misc
             VRGlobals.menuVRManager.enabled = false;
             VRGlobals.menuOpen = false;
             hideoutOverlayActive = false;
-            //VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
-            //VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
             VRGlobals.inGame = true;
             if (VRGlobals.player)
             {
@@ -159,7 +154,7 @@ namespace TarkovVR.Patches.Misc
         }
 
         public static Vector3 camRootRot;
-        // Occasionally opening the inventory will set camRoot rot to 0,0,0 so get it here and set later
+        // Opening the inventory sometimes resets the camRoot rotation to 0,0,0, so save it here and restore it later
         [HarmonyPrefix]
         [HarmonyPatch(typeof(InventoryScreen), "Show", new Type[] { typeof(InventoryScreenController) })]
         private static bool SetOriginalCamRotOnInvOpen(InventoryScreen __instance)
@@ -221,7 +216,7 @@ namespace TarkovVR.Patches.Misc
             VRGlobals.commonUi.parent = null;
             VRGlobals.preloaderUi.parent = null;
             VRGlobals.inGame = false;
-            // Player can enter hideout UI and not physically enter it and init the vrPlayer
+            // The player can open the hideout UI without entering the hideout, so vrPlayer may not exist yet
             if (VRGlobals.vrPlayer) { 
                 VRGlobals.vrPlayer.enabled = false;
                 if (VRGlobals.vrPlayer.interactionUi)
@@ -230,8 +225,6 @@ namespace TarkovVR.Patches.Misc
             VRGlobals.menuVRManager.enabled = true;
             MenuPatches.PositionMainMenuUi();
             MenuPatches.FixMainMenuCamera();
-            //VRGlobals.ikManager.leftArmIk.solver.target = null;
-            //VRGlobals.ikManager.rightArmIk.solver.target = null;
             VRGlobals.menuOpen = false;
             VRGlobals.camRoot.transform.eulerAngles = Vector3.zero;
             Camera.main.farClipPlane = 500f;
@@ -252,16 +245,13 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(MainMenuShowOperation), "method_23")]
         private static void SetInGameOnReturnToHideout_Preloader(MainMenuShowOperation __instance)
         {
-            // Only when the player is set: on the first hideout visit inGame must wait until everything has loaded;
-            // a set player means the hideout was already opened once
+            // Only when the player is set. On the first hideout visit inGame must wait until everything has loaded;
+            // a set player means the hideout was already opened once.
             if (VRGlobals.player)
             {
                 if (VRGlobals.vrPlayer)
                 {
-                    //VRGlobals.inGame = true;
                     VRGlobals.vrPlayer.enabled = true;
-                    //VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
-                    //VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
 
                 }
                 VRGlobals.menuVRManager.enabled = false;
@@ -275,12 +265,9 @@ namespace TarkovVR.Patches.Misc
         {
             if (menuType == EMenuType.Hideout && VRGlobals.player)
             {
-                //VRGlobals.inGame = true;
                 if (VRGlobals.vrPlayer)
                 {
                     VRGlobals.vrPlayer.enabled = true;
-                    //VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
-                    //VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
 
                 }
                 VRGlobals.menuVRManager.enabled = false;

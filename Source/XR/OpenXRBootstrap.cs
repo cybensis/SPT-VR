@@ -15,19 +15,19 @@ namespace TarkovVR.Source.XR
     // Unity still renders MultiPass, so all the per-eye code keeps working. SteamVR is never started in this mode.
     public static class OpenXRBootstrap
     {
-        // No static field may name an OpenXR type: Active is read every frame (VRInput), and without Unity.XR.OpenXR.dll the class
-        // initializer would throw on every read - OpenVR mode included
+        // No static field may use an OpenXR type: Active is read every frame (VRInput), and without Unity.XR.OpenXR.dll the class
+        // initializer would throw on every read, in OpenVR mode too
         public static bool Active { get; private set; }
 
-        // The runtime enabled eye gaze (the headset tracks the eyes and the runtime offers XR_EXT_eye_gaze_interaction). Only call
-        // while Active: it's an OpenXR plugin type.
+        // Whether the runtime enabled eye gaze (the headset tracks the eyes and the runtime offers XR_EXT_eye_gaze_interaction). Only
+        // call while Active: it uses an OpenXR plugin type.
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         internal static bool EyeGazeEnabled()
         {
             return OpenXRRuntime.IsExtensionEnabled(EyeGazeInteraction.extensionString);
         }
-        // false = Plugin falls back to OpenVR. Called through Plugin.TryStartOpenXR, which also catches the call itself failing
-        // (Unity.XR.OpenXR.dll missing: this method can't be compiled).
+        // Returns false when Plugin should fall back to OpenVR. Called through Plugin.TryStartOpenXR, which also catches the call itself
+        // failing (if Unity.XR.OpenXR.dll is missing, this method can't be compiled).
         public static bool Initialize()
         {
             XRManagerSettings managerSettings = null;
@@ -124,8 +124,8 @@ namespace TarkovVR.Source.XR
             features.Add(handTracking);
 
             // Eye gaze (XR_EXT_eye_gaze_interaction) for the foveated masking's centre. The editor normally fills the extension list
-            // from the feature's attribute; created here it's empty, so it's set. Where the runtime lacks the extension the feature
-            // turns itself off (EyeGazeInteraction.OnInstanceCreate).
+            // from the feature's attribute; created here, it is empty, so it is set by hand. Where the runtime lacks the extension, the
+            // feature turns itself off (EyeGazeInteraction.OnInstanceCreate).
             EyeGazeInteraction eyeGaze = ScriptableObject.CreateInstance<EyeGazeInteraction>();
             extensionsField?.SetValue(eyeGaze, EyeGazeInteraction.extensionString);
             nameField?.SetValue(eyeGaze, "SPT-VR Eye Gaze");
@@ -137,7 +137,7 @@ namespace TarkovVR.Source.XR
             hapticFrequency.enabled = true;
             features.Add(hapticFrequency);
 
-            // A space Unity lets go of is destroyed a second later: a frame-generation layer can still have a frame naming it
+            // A space Unity releases is destroyed a second later, because a frame-generation layer can still have a frame that uses it
             OpenXRLateSpaceDestroy lateSpaceDestroy = ScriptableObject.CreateInstance<OpenXRLateSpaceDestroy>();
             nameField?.SetValue(lateSpaceDestroy, "SPT-VR Late Space Destroy");
             lateSpaceDestroy.enabled = true;

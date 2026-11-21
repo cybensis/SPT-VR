@@ -46,7 +46,7 @@ namespace TarkovVR.Source.UI
         {
             if (boxCollider != null && rectTransform != null)
             {
-                // get rect coords after render to properly adhere to any transformations
+                // Read the rect's corners after layout so the collider matches any transformation
                 rectTransform.GetLocalCorners(fourCornersArray);
 
                 float width = fourCornersArray[2].x - fourCornersArray[0].x;
@@ -190,7 +190,7 @@ namespace TarkovVR.Source.UI
                 keyboardRoot.transform.position = head.position + (flatForward * 0.5f) + (Vector3.down * 0.4f);
                 keyboardRoot.transform.rotation = Quaternion.LookRotation(flatForward) * Quaternion.Euler(30, 0, 0);
             }
-            //fix hitbox after first render
+            // Rebuild the layout now so the key hitboxes are right after the first render
             LayoutRebuilder.ForceRebuildLayoutImmediate(kbRect);
         }
 
@@ -250,7 +250,6 @@ namespace TarkovVR.Source.UI
 
                 case VRKeyboardKey.KeyType.Enter:
                     activeInputField.ProcessEvent(Event.KeyboardEvent("return"));
-                    //activeInputField.onSubmit?.Invoke(activeInputField.text);
                     CloseKeyboard();
                     return;
 

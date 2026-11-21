@@ -8,9 +8,9 @@ namespace TarkovVR.Source.XR
     // Everything VR needs ships in BepInEx/plugins/sptvr/VR - nothing in the game's folders is replaced:
     //   Managed/ SteamVR, XR Management, the OpenVR / OpenXR plugins, Input System: BepInEx resolves them from the plugins folder
     //   Native/  openvr_api, XRSDKOpenVR, openxr_loader, UnityOpenXR: loaded from here before VR starts, so anything asking for
-    //            them by name gets these (a copy in the game's Plugins/x86_64 wins: it isn't loaded twice)
-    //   Data/    the files only read from the game's data folder (VRDataFiles; SPT-VR-Preloader.dll writes them before Unity
-    //            reads the manifests, this is the backup for an install without it)
+    //            them by name gets these (if the game's Plugins/x86_64 has a copy, that one is used and ours isn't loaded)
+    //   Data/    the files only read from the game's data folder (VRDataFiles). SPT-VR-Preloader.dll writes them before Unity
+    //            reads the manifests; this plugin writes them again as a backup for an install without the preloader.
     internal static class VRRuntimeFiles
     {
         // Dependencies first

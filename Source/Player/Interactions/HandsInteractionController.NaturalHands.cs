@@ -3,22 +3,24 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // The free hands' fingers from Tarkov's own empty-hands poses (empty hands' empty_hands_look, the character looking at his hands:
-    // relaxed t 0.75, fully open t 1.8, a fist t 0.25 left / 1.2 right; every joint's local rotation, each hand its own). A finger
-    // blends between them by its curl: resting = relaxed closed a little toward the fist (naturalRestClose), squeezed = the fist,
-    // lifted = open. Index controllers give each finger's curl;
-    // other controllers rest relaxed (the off hand curls a little toward the fist while the loot pointer has something).
-    // Holding a loot item or a door keeps the old base (the grasp solves from it). false = the baked open pose + its curl.
+    // Poses the free hands' fingers from Tarkov's own empty-hands poses (empty hands' empty_hands_look, the character looking at his
+    // hands: relaxed at t 0.75, fully open at t 1.8, a fist at t 0.25 left / 1.2 right; every joint's local rotation, per hand). Each
+    // finger blends between them by its curl: resting = relaxed, closed a little toward the fist (naturalRestClose); squeezed = the
+    // fist; lifted = open. Index controllers give each finger's curl. Other controllers rest relaxed (the off hand curls a little
+    // toward the fist while the loot pointer has something).
+    // A hand holding a loot item or a door keeps the baked rest pose (the grasp solves from it). naturalHands = false uses the baked
+    // open pose and its curl.
     internal partial class HandsInteractionController
     {
         public static bool naturalHands = true;
         public static float naturalReadyCurl = 0.25f;       // share of the way to the fist the off hand closes while pointing at loot (no finger tracking)
-        // The rest pose: this share of the way from Tarkov's relaxed hand to its fist (a hand ready to take something); the thumb its own
+        // The rest pose sits this share of the way from Tarkov's relaxed hand to its fist (a hand ready to take something).
+        // The thumb has its own value.
         public static float naturalRestClose = 0.35f;
         public static float naturalThumbRestClose = 0.2f;
-        // deg the fingers fan apart at rest, between neighbours (index toward the thumb, ring and pinky away from the middle, the pinky
-        // twice): about the knuckle's spread axis (its parent's y, which Tarkov's own poses fan about - pinky side - on the left, + on
-        // the right). Gone by the fist.
+        // deg the fingers fan apart at rest, between neighbours: the index toward the thumb, the ring and pinky away from the middle
+        // (the pinky twice as far). The turn is about the knuckle's spread axis, its parent's y, which Tarkov's own poses fan about
+        // (negative toward the pinky on the left, positive on the right). It fades out toward the fist.
         public static float naturalRestSpread = 5f;
 
         // Thumb, index, middle, ring, pinky (Base HumanXDigit11..53), three joints each, local eulers
@@ -98,8 +100,8 @@ namespace TarkovVR.Source.Player.Interactions
             return rotations;
         }
 
-        // A finger joint's slot in the poses from its name (Base HumanLDigit23 = the index's third: 1 * 3 + 2), by name so the palm's
-        // child order doesn't matter; -1 = not one of ours
+        // A finger joint's index into the pose arrays, from its name (Base HumanLDigit23 = the index finger's third joint: 1 * 3 + 2).
+        // Read by name so the palm's child order doesn't matter. -1 = not a finger joint.
         private static readonly Dictionary<Transform, int> naturalSlots = new Dictionary<Transform, int>();
 
         private static int NaturalSlot(Transform joint)
@@ -120,8 +122,9 @@ namespace TarkovVR.Source.Player.Interactions
             return slot;
         }
 
-        // The free hand's fingers between the poses by their curls (Index), else relaxed (+ ready toward the fist), slerped from the
-        // animated pose by weight. dominant: whose controller's curls; rightBones: whose poses (the arm the bones are on).
+        // Blends the free hand's fingers between the poses by their curls (Index), else uses the relaxed pose moved toward the fist by
+        // ready. The result is slerped from the animated pose by weight. dominant picks whose controller curls are read; rightBones
+        // picks whose poses are used (the arm the bones are on).
         private bool ApplyNaturalPose(bool dominant, Transform[][] fingerJoints, bool[] isThumb, float weight, bool rightBones, float ready)
         {
             if (fingerJoints == null)
@@ -146,7 +149,7 @@ namespace TarkovVR.Source.Player.Interactions
                     Quaternion target = curl <= rest
                         ? Quaternion.Slerp(pose.open[slot], resting, curl / rest)
                         : Quaternion.Slerp(resting, pose.fist[slot], (curl - rest) / (1f - rest));
-                    // The knuckle fanned apart (index +1, middle 0, ring -1, pinky -2 steps to the pinky side), fading out into the fist
+                    // Fan the knuckles apart (in steps: index +1, middle 0, ring -1, pinky -2; negative = toward the pinky), fading out toward the fist
                     int digit = slot / 3;
                     if (slot % 3 == 0 && digit >= 1)
                     {

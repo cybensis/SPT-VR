@@ -4,26 +4,26 @@ using FirearmController = EFT.Player.FirearmController;
 namespace TarkovVR.Source.Weapons
 {
     // A part hitting its stop jolts the gun: a magazine seated, a bolt or slide slammed home, a bolt-action's bolt pushed home, a pump
-    // closed. The part's momentum goes into the gun as an impulse where it hits (Hit), and the gun - a rigid body your hand holds at the
-    // grip - takes it as a push and a turn about the grip, on a damped spring: the hand's hold. Played on top of the hand anchor
-    // (GunInteractionController.UpdateWeaponPosition, before WeaponCollision so the gun's physics has it) as a rigid move of the holder:
-    // the gun and the hands on it move, your controller doesn't.
+    // closed. Hit takes the part's momentum as an impulse at the point it hits. The gun is a rigid body held at the grip by a damped
+    // spring (the hand's hold), so the impulse pushes it and turns it about the grip. The result is applied after the hand anchor
+    // (GunInteractionController.UpdateWeaponPosition, before WeaponCollision so the collision sees it) as a rigid move of the holder:
+    // the gun and the hands on it move, the controller doesn't.
     internal static class GunJolt
     {
         public static bool enabled = true;
-        public static float joltGain = 1f;              // of the physical response: 1 = the masses and speeds as they are
-        // The hand's hold: how stiffly it keeps the gun where the controller has it, moving and turning about the grip. A stiffness, so a
-        // light gun comes back quicker and moves less for the same knock (a 3.5 kg rifle: 3.5 Hz, and 3 Hz turning)
+        public static float joltGain = 1f;              // scale on the physical response; 1 = the real masses and speeds
+        // The hand's hold: how stiffly the gun is kept at the controller pose, in position and in turn about the grip. It is a stiffness,
+        // so a light gun comes back quicker and moves less for the same knock (a 3.5 kg rifle: 3.5 Hz, and 3 Hz turning)
         public static float holdStiffness = 1700f;      // N/m
         public static float holdDamping = 0.45f;        // damping ratio (1 = it comes straight back, lower = it rocks)
         public static float turnStiffness = 90f;        // N m/rad, about the grip across the bore
         public static float turnDamping = 0.45f;
-        public static float maxHoldFrequency = 25f;     // Hz: the stiffest either gets (a pistol's turn)
-        // The gun as a rod along its bore: how far its stock runs behind the grip, and how hard it is to roll about the bore
+        public static float maxHoldFrequency = 25f;     // Hz, cap on either spring's frequency (reached by a pistol's turn)
+        // The gun is modelled as a rod along its bore: how far the stock runs behind the grip, and how hard it is to roll about the bore
         public static float stockBehindGrip = 0.25f;    // m (pistols: none)
         public static float boreRadius = 0.05f;         // m, the radius of gyration about the bore
-        public static float maxDistance = 0.04f;        // m the jolt may move the grip
-        public static float maxTurn = 6f;               // deg it may turn the gun
+        public static float maxDistance = 0.04f;        // m, the most the jolt may move the grip
+        public static float maxTurn = 6f;               // deg, the most it may turn the gun
         public static bool debugLog = false;            // one line per jolt: the impulse, where, and the gun's push and turn from it
 
         // The jolt's state, in the gun bone's frame: the grip's move and the gun's turn about it (a rotation vector)
@@ -31,13 +31,14 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 offset, velocity;            // m, m/s
         private static Vector3 turn, turnVelocity;          // rad, rad/s
         private static bool moving;
-        private static float holdOmega = 22f;               // rad/s, from the held gun's mass and inertia (Hit)
+        private static float holdOmega = 22f;               // rad/s, set in Hit from the held gun's mass and inertia
         private static float turnOmega = 19f;
 
         private static Transform gunBoneOf;
         private static Transform gunBone;
 
-        // The holder as it was before this frame's jolt, and after: stripped before the next anchor (it only rewrites the position)
+        // The holder's local pose before and after this frame's jolt. The jolt is removed before the next anchor, because the anchor
+        // only rewrites the position.
         private static bool applied;
         private static Vector3 preLocalPosition, postLocalPosition;
         private static Quaternion preLocalRotation, postLocalRotation;
@@ -76,7 +77,7 @@ namespace TarkovVR.Source.Weapons
                     + $" = about {deltaVelocity.magnitude / holdOmega * 100f:0.0} cm and {deltaSpin.magnitude / turnOmega * Mathf.Rad2Deg:0.0} deg");
         }
 
-        // After the hand anchor, before WeaponCollision.Apply
+        // Called after the hand anchor, before WeaponCollision.Apply
         internal static void Apply(Transform holder)
         {
             if (!moving)
@@ -105,8 +106,8 @@ namespace TarkovVR.Source.Weapons
             applied = true;
         }
 
-        // Top of UpdateWeaponPosition, after WeaponCollision.PreAnchor (its offset went on after ours): the holder back to before the jolt.
-        // Change detection lets a re-stamp of the holder win.
+        // Called at the top of UpdateWeaponPosition, after WeaponCollision.PreAnchor (its offset was applied after ours). Puts the holder
+        // back to its pose before the jolt. If something else has written the holder since, that write is kept.
         internal static void PreAnchor()
         {
             if (!applied)
@@ -121,7 +122,8 @@ namespace TarkovVR.Source.Weapons
                 holder.localPosition = preLocalPosition;
         }
 
-        // The gun let go of (the sling, the support hand alone): stripped before ChestHang saves the holder's pose, and at rest
+        // Called when the gun hand lets go (the sling, or the support hand alone): the jolt is removed before ChestHang saves the
+        // holder's pose, and its state is reset
         internal static void Reset()
         {
             PreAnchor();
@@ -140,7 +142,7 @@ namespace TarkovVR.Source.Weapons
                 turnVelocity += (-turnOmega * turnOmega * turn - 2f * turnDamping * turnOmega * turnVelocity) * stepTime;
                 turn += turnVelocity * stepTime;
             }
-            // Past the most it may go, it stops there (the hand doesn't give further)
+            // Capped at maxDistance / maxTurn: the hand doesn't give further
             if (offset.magnitude > maxDistance)
             {
                 offset = offset.normalized * maxDistance;
@@ -163,8 +165,8 @@ namespace TarkovVR.Source.Weapons
             moving = false;
         }
 
-        // The gun bone (Weapon_root_anim/weapon), the grip your hand holds (weapon_R_IK_marker), the way the bore points and how far ahead
-        // of the grip the muzzle is
+        // Gets the gun bone (Weapon_root_anim/weapon), the grip the hand holds (weapon_R_IK_marker), the bore direction, and how far
+        // ahead of the grip the muzzle is
         private static bool Frame(FirearmController firearmController, out Transform gun, out Vector3 grip, out Vector3 bore, out float muzzleReach)
         {
             gun = GunBone(firearmController);
@@ -183,7 +185,7 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // On the bore line level with the grip, this far ahead: where a bolt or slide hits home
+        // The point on the bore line level with the grip, aheadOfGrip further forward: where a bolt or slide hits home
         internal static bool ChamberPoint(FirearmController firearmController, float aheadOfGrip, out Vector3 chamber, out Vector3 bore)
         {
             chamber = Vector3.zero;

@@ -13,12 +13,12 @@ using HarmonyLib;
 
 namespace SptVrFikaSync
 {
-    // Host only. FIKA's host checks a client's hands change against its copy of that player's inventory (FikaServer
-    // OnProceedRequestPacketReceived -> Item.CheckAction -> ObservedInventoryController.CheckItemAction): any open event on the item
-    // = "Cannot apply X because Default Inventory is currently being modified". Tarkov opens a hands event with whatever is in the
-    // hands then and closes it by what's in the hands when it ends (Player.TrySetInHands / FIKA's HandleInProcess, ItemController
-    // ProcessActivity matches by item), so hands that changed in between leave it open for the rest of the raid. Before the check:
-    // hands events naming an item that copy isn't holding are closed; one still refused logs what's open.
+    // Host only. FIKA's host checks a client's hands change against its copy of that player's inventory
+    // (FikaServer.OnProceedRequestPacketReceived -> Item.CheckAction -> ObservedInventoryController.CheckItemAction). Any open event on the
+    // item refuses it with "Cannot apply X because Default Inventory is currently being modified".
+    // Tarkov opens a hands event for the item in the hands at the start (Player.TrySetInHands, FIKA's HandleInProcess) and closes it by the
+    // item in the hands at the end (ItemController.ProcessActivity matches by item). If the hands changed in between, it stays open all raid.
+    // So before the check, open hands events for an item the host's copy isn't holding are closed. A change still refused logs the open events.
     [HarmonyPatch]
     internal static class HostHandsUnstick
     {

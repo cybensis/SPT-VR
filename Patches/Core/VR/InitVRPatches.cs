@@ -25,19 +25,19 @@ namespace TarkovVR.Patches.Core.VR
     [HarmonyPatch]
     internal class InitVRPatches
     {
-        // The UI-layer camera draws only unlit canvases, usually nothing at all. Unity's default camera is deferred + HDR: a G-buffer
-        // pass, a lighting pass and an HDR copy of the eye image, per eye, every frame (1.3 ms GPU + 0.84 ms render thread in the hideout).
-        // Forward without HDR/MSAA draws straight into the eye image. false = Unity's default camera (applies to the next uiCam made).
+        // The UI-layer camera draws only unlit canvases, usually nothing at all. Unity's default camera is deferred + HDR, which costs a
+        // G-buffer pass, a lighting pass and an HDR copy of the eye image per eye every frame (1.3 ms GPU + 0.84 ms render thread in the
+        // hideout). Forward without HDR/MSAA draws straight into the eye image.
         internal static void MakeUiCameraLight(Camera uiCam)
         {
             if (uiCam == null) return;
             uiCam.renderingPath = RenderingPath.Forward;
             uiCam.allowHDR = false;
             uiCam.allowMSAA = false;
-            uiCam.useOcclusionCulling = false;   // the UI is drawn over the world: baked occluders must not hide it (and the query costs)
+            uiCam.useOcclusionCulling = false;   // the UI is drawn over the world, so baked occluders must not hide it (and the query costs time)
         }
 
-        // just experimental stuff used for flipping camera when using forward rendering with MSAA
+        // Experimental: flips the camera for forward rendering with MSAA
         public class FlipCameraRender : MonoBehaviour
         {
             private Camera cam;
@@ -84,18 +84,12 @@ namespace TarkovVR.Patches.Core.VR
             {
                 if (!VRGlobals.vrPlayer)
                 {
-                    //VRGlobals.camHolder = new GameObject("camHolder");
-                    //VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
-                    //VRGlobals.camRoot = new GameObject("camRoot");
                     if (UIPatches.gameUi)
                         UIPatches.PositionGameUi(UIPatches.gameUi);
 
                     VRGlobals.camHolder.transform.parent = VRGlobals.vrOffsetter.transform;
-                    //Camera.main.transform.parent = vrOffsetter.transform;
-                    //Camera.main.gameObject.AddComponent<SteamVR_TrackedObject>();
                     VRGlobals.vrOffsetter.transform.parent = VRGlobals.camRoot.transform;
                     VRGlobals.camHolder.AddComponent<SteamVR_TrackedObject>();
-                    //VRGlobals.menuVRManager = VRGlobals.camHolder.AddComponent<MenuVRManager>();
                     VRGlobals.vrPlayer = VRGlobals.camHolder.AddComponent<RaidVRPlayerManager>();
                     VRGlobals.weaponHolder = new GameObject("weaponHolder");
                     VRGlobals.weaponHolder.transform.parent = VRGlobals.vrPlayer.RightHand.transform;
@@ -116,16 +110,11 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.camHolder.layer = 7;                  
                     if (!ModSupport.InstalledMods.FIKAInstalled)
                     {
-                        //VRGlobals.menuVRManager.enabled = false;
-                        //VRGlobals.menuOpen = false;
                     }
                     else {
                         VRGlobals.vrPlayer.enabled = false;
-                        //VRGlobals.camRoot.transform.position = new Vector3(0, -999.8f, -0.5f);
-                        //VRGlobals.vrOffsetter.transform.localPosition = Camera.main.transform.localPosition * -1;
                         VRGlobals.vrOffsetter.transform.localPosition = VRGlobals.VRCam.transform.localPosition * -1;
                         VRGlobals.menuOpen = true;
-                        //VRGlobals.menuVRManager.OnEnable();
                     }
                     
                     if (UIPatches.quickSlotUi == null)
@@ -135,11 +124,9 @@ namespace TarkovVR.Patches.Core.VR
                         quickSlotHolder.transform.parent = VRGlobals.vrPlayer.LeftHand.transform;
                         UIPatches.quickSlotUi = quickSlotHolder.AddComponent<CircularSegmentUI>();
                         UIPatches.quickSlotUi.Init();
-                        //circularSegmentUI.CreateQuickSlotUi(mainImagesList.ToArray());
                     }
                     UIPatches.quickSlotUi.gameObject.active = false;
-                    //VRGlobals.vrPlayer.radialMenu.active = false;
-                    // The camera on interchange doesn't stay turned off like other maps so try and disable it again here.
+                    // On Interchange the camera's occlusion culling doesn't stay off like on other maps, so turn it off again here.
                     Camera.main.useOcclusionCulling = false;
                 }
             }
@@ -172,25 +159,9 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.sidearmHolster.gameObject.layer = 3;
             }
 
-            //if (VRGlobals.leftArmBendGoal == null) {
-            //    VRGlobals.leftArmBendGoal = new GameObject("leftArmBendGoal").transform;
-            //    VRGlobals.leftArmBendGoal.parent = VRGlobals.vrOffsetter.transform;
-            //    VRGlobals.leftArmBendGoal.localEulerAngles = Vector3.zero;
-            //    VRGlobals.leftArmBendGoal.localPosition = new Vector3(-1,-0.5f,-0.8f);
-            //}
-            //if (VRGlobals.rightArmBendGoal == null)
-            //{
-            //    VRGlobals.rightArmBendGoal = new GameObject("rightArmBendGoal").transform;
-            //    VRGlobals.rightArmBendGoal.parent = VRGlobals.vrOffsetter.transform;
-            //    VRGlobals.rightArmBendGoal.localEulerAngles = Vector3.zero;
-            //    VRGlobals.rightArmBendGoal.localPosition = new Vector3(1, -0.5f, 0.8f);
-            //}
-
-
-            //VRGlobals.inGame = true;
         }
 
-        // Disables the laser right after timer finishes to avoid losing the laser any time during loading screen
+        // Disables the laser right after the raid-start timer finishes, so the laser isn't lost partway through the loading screen
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PreloaderUI), "ShowRaidStartInfo")]
         private static void DisableLaser(PreloaderUI __instance)
@@ -216,7 +187,7 @@ namespace TarkovVR.Patches.Core.VR
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // BloodOnScreen.Start is only the hook to reach the main camera ("FPS Camera")
+        // BloodOnScreen.Start is used only as a hook to reach the main camera ("FPS Camera")
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BloodOnScreen), "Start")]
@@ -259,118 +230,10 @@ namespace TarkovVR.Patches.Core.VR
                 {
                     if (VRGlobals.vrPlayer.radialMenu)
                         VRGlobals.vrPlayer.radialMenu.active = false;
-                    /*
-                    if (VRGlobals.vrPlayer is RaidVRPlayerManager)
-                    {
-                        VRGlobals.menuVRManager.OnDisable();
-                    }
-                    */
                 }
                 mainCam.depthTextureMode |= DepthTextureMode.MotionVectors | DepthTextureMode.Depth;
-                //mainCam.gameObject.GetComponent<PostProcessLayer>().enabled = false;
-                //cameraManager.initPos = VRCam.transform.localPosition;
             }
         }
-
-        // Forward rendering experiment
-        /*
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(BloodOnScreen), "Start")]
-        private static void SetMainCamParent(BloodOnScreen __instance)
-        {
-            Camera mainCam = __instance.GetComponent<Camera>();
-            if (mainCam.name != "FPS Camera")
-                return;
-
-            VRGlobals.VRCam = mainCam;
-
-            // === Setup main camera for deferred rendering (no MSAA) ===
-            mainCam.renderingPath = RenderingPath.DeferredShading;
-            mainCam.allowMSAA = false;
-            mainCam.useOcclusionCulling = false;
-            mainCam.layerCullSpherical = true;
-            mainCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
-            mainCam.farClipPlane = 5000f;
-            mainCam.stereoTargetEye = StereoTargetEyeMask.None; // Deferred cam doesn't render to VR
-            mainCam.transform.parent = VRGlobals.vrOffsetter.transform;
-            mainCam.gameObject.AddComponent<SteamVR_TrackedObject>(); // VR tracking
-
-            // Cull only UI and effects on main camera
-            int uiLayer = 5;
-            int rainLayer = 24;
-            mainCam.cullingMask = (1 << uiLayer) | (1 << rainLayer);
-
-            // === Create MSAA world camera (forward rendering) ===
-            GameObject msaaCamObj = new GameObject("VR_MSAA_WorldCam");
-            msaaCamObj.transform.SetParent(mainCam.transform, false); // Parent to mainCam = auto-tracking
-            msaaCamObj.transform.localPosition = Vector3.zero;
-            msaaCamObj.transform.localRotation = Quaternion.identity;
-
-            Camera msaaCam = msaaCamObj.AddComponent<Camera>();
-            msaaCam.CopyFrom(mainCam);
-            msaaCam.renderingPath = RenderingPath.Forward;
-            msaaCam.allowMSAA = true;
-            msaaCam.clearFlags = CameraClearFlags.Skybox;
-            msaaCam.ResetProjectionMatrix();
-            Matrix4x4 mat = msaaCam.projectionMatrix;
-            mat *= Matrix4x4.Scale(new Vector3(1, -1, 1)); // Flip Y axis
-            msaaCam.projectionMatrix = mat;
-            msaaCam.depth = mainCam.depth - 1; // Render before main cam
-            msaaCam.useOcclusionCulling = false;
-            msaaCam.layerCullSpherical = true;
-            msaaCam.stereoTargetEye = StereoTargetEyeMask.Both; // This renders to VR
-            msaaCamObj.AddComponent<FlipCameraRender>();
-
-
-            // Set layer cull distances
-            float[] distances = new float[32];
-            for (int i = 0; i < distances.Length; i++)
-                distances[i] = 1000f;
-            msaaCam.layerCullDistances = distances;
-
-            // Render world geometry only
-            msaaCam.cullingMask =
-                (1 << 0) |  // Default
-                (1 << 4) |  // Water
-                (1 << 8) |  // Player
-                (1 << 11) | // Terrain
-                (1 << 12) | // HighPolyCollider
-                (1 << 14) | // DisablerCullingObject
-                (1 << 15) | // Loot
-                (1 << 16) | // HitCollider
-                (1 << 17) | // PlayerRenderers
-                (1 << 18) | // LowPolyCollider
-                (1 << 22) | // Interactive
-                (1 << 23) | // Deadbody
-                (1 << 26) | // Foliage
-                (1 << 28) | // Sky
-                (1 << 29) | // LevelBorder
-                (1 << 31);  // Grass
-
-            QualitySettings.antiAliasing = 4;
-
-            // === UI Camera ===
-            GameObject uiCamHolder = new GameObject("uiCam");
-            uiCamHolder.transform.SetParent(__instance.transform, false);
-            uiCamHolder.transform.localPosition = Vector3.zero;
-            uiCamHolder.transform.localRotation = Quaternion.identity;
-
-            Camera uiCam = uiCamHolder.AddComponent<Camera>();
-            uiCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
-            uiCam.depth = mainCam.depth + 1; // Render after main cam
-            uiCam.cullingMask = 1 << uiLayer; // UI only
-            uiCam.clearFlags = CameraClearFlags.Depth;
-            uiCam.stereoTargetEye = StereoTargetEyeMask.Both;
-
-            // Disable VR menu stuff
-            if (VRGlobals.vrPlayer)
-            {
-                if (VRGlobals.vrPlayer.radialMenu)
-                    VRGlobals.vrPlayer.radialMenu.active = false;
-                if (VRGlobals.vrPlayer is RaidVRPlayerManager)
-                    VRGlobals.menuVRManager.OnDisable();
-            }
-        }*/
 
         public class ArmStretcher : MonoBehaviour
         {
@@ -497,55 +360,6 @@ namespace TarkovVR.Patches.Core.VR
                 armIk.solver.Update();
             }
 
-            /*
-            void StretchArm(LimbIK armIk, Vector3 targetPosition,
-                float totalNaturalLength, float upperArmNaturalLength, float forearmNaturalLength,
-                Vector3 upperArmOriginalScale, Vector3 forearmOriginalScale, bool isLeft)
-            {
-                Transform shoulder = armIk.solver.bone1.transform;
-                Transform upperArm = armIk.solver.bone1.transform;
-                Transform forearm = armIk.solver.bone2.transform;
-
-                float targetDistance = Vector3.Distance(shoulder.position, targetPosition);
-                float maxAllowedDistance = totalNaturalLength * maxStretchMultiplier;
-                float clampedTargetDistance = Mathf.Min(targetDistance, maxAllowedDistance);
-
-                // Store IK state
-                bool ikWasEnabled = armIk.enabled;
-
-                // Temporarily disable IK to prevent feedback loop during scaling
-                armIk.enabled = false;
-
-                if (clampedTargetDistance > totalNaturalLength)
-                {
-                    float requiredUpperArmStretch = (clampedTargetDistance - forearmNaturalLength) / upperArmNaturalLength;
-
-                    upperArm.localScale = new Vector3(
-                        upperArmOriginalScale.x * requiredUpperArmStretch,
-                        upperArmOriginalScale.y,
-                        upperArmOriginalScale.z
-                    );
-
-                    // ALWAYS reset the forearm scale (since you don't want it stretched)
-                    forearm.localScale = forearmOriginalScale;
-                }
-                else
-                {
-                    upperArm.localScale = upperArmOriginalScale;
-                    forearm.localScale = forearmOriginalScale;
-                }
-
-                // Re-enable IK and set target
-                armIk.enabled = ikWasEnabled;
-                armIk.solver.IKPosition = targetPosition;
-
-                // Force IK to update with new bone scales
-                if (armIk.enabled)
-                {
-                    armIk.solver.Update();
-                }
-            }
-            */
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -556,8 +370,6 @@ namespace TarkovVR.Patches.Core.VR
         [HarmonyPatch(typeof(SolverManager), "OnDisable")]
         private static void SetupIK(LimbIK __instance)
         {
-            //if (__instance.transform.root.name != "PlayerSuperior(Clone)")
-            //    return;
             if (__instance.transform.root.name != "PlayerSuperior(Clone)" && __instance.transform.root.name != "Main_PlayerSuperior(Clone)")
                 return;
 
@@ -567,10 +379,9 @@ namespace TarkovVR.Patches.Core.VR
             if (__instance.transform.root.GetComponent<EFT.Player>() && !__instance.transform.root.GetComponent<EFT.Player>().IsYourPlayer)
                 return;
 
-            // The check above passes when the root has no EFT.Player component yet (bot rigs: their Player attaches later in
-            // activation), and the stack check below names a stale obfuscated class. A bot getting through would rewire
-            // ikManager/leftArmIk/rightArmIk onto its skeleton. Two identity guards (destroyed refs are fake-null and skip
-            // these, so a new raid's rebuild still passes):
+            // The check above passes when the root has no EFT.Player yet (a bot's Player is attached later in its activation), and the
+            // stack check below names a stale obfuscated class. A bot that got through would rewire ikManager/leftArmIk/rightArmIk onto
+            // its skeleton, so two identity guards follow. Destroyed references compare as null and skip them, so a new raid still wires up.
             if (VRGlobals.player != null && __instance.transform.root != VRGlobals.player.gameObject.transform.root)
             {
                 Plugin.MyLog.LogWarning($"[SetupIK] Ignoring non-local rig '{__instance.transform.root.name}' ({__instance.name}).");
@@ -599,7 +410,7 @@ namespace TarkovVR.Patches.Core.VR
             if (isBotPlayer)
                 return;
 
-            // Disable the weapon holsters so they dont wack the player in the face
+            // Disable the weapon holsters so they don't hit the player in the face
             if (__instance.transform.parent.parent.FindChild("weapon_holster"))
                 __instance.transform.parent.parent.FindChild("weapon_holster").gameObject.active = false;
             if (__instance.transform.parent.parent.FindChild("weapon_holster1"))
@@ -611,9 +422,9 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.ikManager.enabled = false;
                     VRGlobals.camRoot.transform.position = new Vector3(0, -999.8f, -0.5f);
                 }
-                // Fresh rig: clear the wrist-twist binds so the collarbone blocks below recapture them from this rig's spawn rest
-                // pose. Once per rig only: this method runs again on every weapon equip (rightArmIk gets disabled), and must not
-                // re-zero on a live pose.
+                // New rig: clear the wrist-twist binds so the collarbone blocks below capture them again from this rig's spawn rest pose.
+                // Only once per rig: this method runs again on every weapon equip (rightArmIk gets disabled) and must not reset them
+                // from a live pose.
                 TarkovVR.Patches.Core.Player.IKPatches.ClearWristBind();
             }
 
@@ -639,7 +450,6 @@ namespace TarkovVR.Patches.Core.VR
                 if (baseHandler != null)
                 {
                     ResetHeightHandler resetHeightHandler = baseHandler as ResetHeightHandler;
-                    //resetHeightHandler.SetLeftArmTransform(__instance.transform.FindChildRecursive("Base HumanLForearm1"));
                 }
                 leftPalm = __instance.transform.FindChildRecursive("Base HumanLPalm");
             }
@@ -668,7 +478,6 @@ namespace TarkovVR.Patches.Core.VR
                 if (baseHandler != null)
                 {
                     ResetHeightHandler resetHeightHandler = baseHandler as ResetHeightHandler;
-                    //resetHeightHandler.SetRightArmTransform(__instance.transform.FindChildRecursive("Base HumanRForearm1"));
                 }
                 Transform rightFingerTransform = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0).GetChild(0).GetChild(1);
                 rightPointerFinger = rightFingerTransform.gameObject.AddComponent<GrenadeFingerPositioner>();
@@ -678,18 +487,8 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.handsInteractionController.grenadeLaser.transform.localEulerAngles = new Vector3(351f, 273.6908f, 0);
                     VRGlobals.handsInteractionController.grenadeLaser.transform.localPosition = new Vector3(-0.3037f, 0.0415f, 0.0112f);
                 }
-                    
+
             }
-            // parent is HumanLForearm3
-
-            // Timer panel localpos: 0.047 0.08 0.025
-            // local rot = 88.5784 83.1275 174.7802
-            // child(0).localeuler = 0 342.1273 0
-
-            // leftwristui localpos = -0.1 0.04 0.035
-            // localrot = 304.3265 181 180
-
-            //GameObject.Destroy(__instance);
 
             if (VRGlobals.leftArmBendGoal == null)
             {
@@ -697,7 +496,6 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.leftArmBendGoal.parent = __instance.transform.root.transform;
                 VRGlobals.leftArmBendGoal.localEulerAngles = Vector3.zero;
                 VRGlobals.leftArmBendGoal.localPosition = VRSettings.GetLeftHandedMode() ? new Vector3(1, -2f, -0.8f) : new Vector3(-1, -2f, -0.8f);
-                //VRGlobals.leftArmBendGoal.localPosition = new Vector3(-0.5f, -0.3f, -0.4f);
             }
             if (VRGlobals.rightArmBendGoal == null)
             {
@@ -705,7 +503,6 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.rightArmBendGoal.parent = __instance.transform.root.transform;
                 VRGlobals.rightArmBendGoal.localEulerAngles = Vector3.zero;
                 VRGlobals.rightArmBendGoal.localPosition = VRSettings.GetLeftHandedMode() ? new Vector3(-2.5f, -2f, -0.8f) : new Vector3(2.5f, -2f, -0.8f);
-                //VRGlobals.rightArmBendGoal.localPosition = new Vector3(2, -0.9f, -0.8f);
             }
             if (VRGlobals.rightArmBendGoal != null && VRGlobals.leftArmBendGoal != null)
             {
@@ -720,38 +517,6 @@ namespace TarkovVR.Patches.Core.VR
                         elbowPositioner.leftBendGoal = VRGlobals.leftArmBendGoal;
                         elbowPositioner.rightBendGoal = VRGlobals.rightArmBendGoal;
                     }
-                    /*
-                    if (__instance.transform.root.GetComponent<ArmStretcher>() == null)
-                    {
-                        if (VRGlobals.vrPlayer != null &&
-                                VRGlobals.vrPlayer.LeftHand != null &&
-                                VRGlobals.vrPlayer.RightHand != null)
-                        {
-                            // Only create if IK managers exist
-                            if (VRGlobals.ikManager != null &&
-                            VRGlobals.ikManager.leftArmIk != null &&
-                            VRGlobals.ikManager.rightArmIk != null)
-                            {
-
-                                ArmStretcher armStretcher = __instance.transform.root.gameObject.AddComponent<ArmStretcher>();
-                                armStretcher.leftArmIk = VRGlobals.ikManager.leftArmIk;
-                                armStretcher.rightArmIk = VRGlobals.ikManager.rightArmIk;
-
-                                // Only set hand targets if VRPlayer is ready
-
-                                armStretcher.leftHandTarget = VRGlobals.vrPlayer.LeftHand.transform;
-                                armStretcher.rightHandTarget = VRGlobals.vrPlayer.rawRightHand.transform;
-                                Plugin.MyLog.LogError("ArmStretcher created with hand targets!");
-
-                                armStretcher.maxStretchMultiplier = 1.2f;
-                            }
-                        }
-                        else
-                        {
-                            Plugin.MyLog.LogError("Cannot create ArmStretcher - IK managers not ready");
-                        }
-                    }
-                    */
                 }
             }
 
@@ -761,7 +526,7 @@ namespace TarkovVR.Patches.Core.VR
         [HarmonyPatch(typeof(PlayerSpring), "Start")]
         private static void SetRigAndSidearmHolsters(PlayerSpring __instance)
         {
-            if ((__instance.transform.root.name != "PlayerSuperior(Clone)" && __instance.transform.root.name != "Main_PlayerSuperior(Clone)") || __instance.name != "Base HumanRibcage") //|| quickSlot != null)
+            if ((__instance.transform.root.name != "PlayerSuperior(Clone)" && __instance.transform.root.name != "Main_PlayerSuperior(Clone)") || __instance.name != "Base HumanRibcage")
                 return;
             
             rigCollider = new GameObject("rigCollider").transform;
@@ -775,20 +540,9 @@ namespace TarkovVR.Patches.Core.VR
             collider.isTrigger = true;
             collider.size = new Vector3(0.04f, 0.1f, 0.2f);
 
-            //debug for collider
-            /*
-            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            cube.transform.SetParent(rigCollider);
-            cube.transform.localPosition = Vector3.zero;
-            cube.transform.localRotation = Quaternion.identity;
-            cube.transform.localScale = collider.size;
-            cube.GetComponent<Collider>().enabled = false;
-            */
             if (VRGlobals.sidearmHolster)
                 VRGlobals.sidearmHolster.gameObject.layer = 3;
         }
-        // local pos -0.1 -0.15 -0.1
-        // size 0.001 0.005 0.005
 
 
     }

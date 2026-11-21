@@ -19,13 +19,13 @@ namespace TarkovVR.Source.Controls
 
         // The grip "button" comes from the analog squeeze value (on Index: how far your fingers wrap the handle)
         public static float gripPressThreshold = 0.65f;     // kept above the release so the grip can't flicker on and off at one value
-        // Index: a grab is a squeeze, as in the mod's SteamVR bindings (force 0.4); the wrap alone reads every touch of the handle as a grab.
-        // Still let go by the wrap (gripReleaseThreshold), so a gun stays held without squeezing the whole time.
+        // On Index a grab needs a squeeze (force), as in the mod's SteamVR bindings (force 0.4): the wrap alone reads every touch of the
+        // handle as a grab. Letting go still uses the wrap (gripReleaseThreshold), so a gun stays held without squeezing the whole time.
         public static float gripForcePressThreshold = 0.4f;
         public static float gripForceLetUpThreshold = 0.25f; // a squeeze ends under this force
         public static float gripReleaseThreshold = 0.5f;    // wrap under which a held grip lets go (too low waits for a nearly open hand)
-        // Index: a hand opening lets go at once, before the wrap gets under gripReleaseThreshold: the wrap falling gripFastOpenDrop
-        // within gripFastOpenWindow, not squeezing, under gripFastOpenCeiling. A hand relaxing on the handle falls slowly and keeps holding.
+        // On Index an opening hand lets go at once, before the wrap gets under gripReleaseThreshold: the wrap falls by gripFastOpenDrop
+        // within gripFastOpenWindow, without a squeeze and below gripFastOpenCeiling. A hand relaxing on the handle falls slowly and keeps holding.
         public static float gripFastOpenDrop = 0.3f;
         public static float gripFastOpenWindow = 0.1f;      // s
         public static float gripFastOpenCeiling = 0.75f;    // wrap: a squeeze shifting at the top of its range isn't an opening
@@ -84,7 +84,7 @@ namespace TarkovVR.Source.Controls
             public bool squeezing;          // squeezing it, not just holding it
             public Vector2 stickAxis;
 
-            // The wrap's recent values while the grip's held (the fast open)
+            // Recent wrap values while the grip is held, for the fast-open check
             public readonly float[] recentWrap = new float[16];
             public readonly float[] recentWrapTime = new float[16];
             public int recentWrapNext;
@@ -93,8 +93,8 @@ namespace TarkovVR.Source.Controls
             public Quaternion rawRotation = Quaternion.identity;
             public Vector3 rawVelocity;
             public Vector3 angularVelocity;
-            public Vector3 gripVelocity;    // the grip's own, before the spin term moves it to the raw point
-            public Vector3 gripToRawWorld;  // that lever, raw point minus grip, tracking space
+            public Vector3 gripVelocity;    // the grip point's own velocity, before the spin term moves it to the raw point
+            public Vector3 gripToRawWorld;  // the spin term's lever: raw point minus grip, in tracking space
         }
 
         private static readonly ControllerState[] controllers =
@@ -190,8 +190,8 @@ namespace TarkovVR.Source.Controls
             return controllers[hand].squeezeValue;
         }
 
-        // Counts the grip as held from now (no press edge), as if squeezed: from here it lets go like a held grip does, under
-        // gripReleaseThreshold. For a hand back on the gun by touch alone (VRReloadController's press check).
+        // Marks the grip as held from now, without a press edge, as if squeezed. It then lets go like any held grip, under
+        // gripReleaseThreshold. Used for a hand back on the gun by touch alone (VRReloadController's press check).
         public static void HoldGrip(int hand)
         {
             SampleButtonsOncePerFrame();
@@ -280,7 +280,7 @@ namespace TarkovVR.Source.Controls
             }
         }
 
-        // The wrap of a held grip, this frame: into the recent values
+        // Stores this frame's wrap of a held grip in the recent values
         private static void RememberWrap(ControllerState controller, float wrap)
         {
             controller.recentWrap[controller.recentWrapNext] = wrap;

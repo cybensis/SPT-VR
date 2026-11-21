@@ -7,8 +7,8 @@ namespace TarkovVR.Patches.Core.Player
     [HarmonyPatch]
     internal class MalfunctionTestPatches
     {
-        // VRReloadController.testMalfunctionNextShot: Tarkov's per-shot roll (semi and auto fire both ask it) answers with the asked-for type.
-        // Weapon.ValidateMalfunction and the rest of the shot run on it as on a rolled one. Our player only.
+        // When VRReloadController.testMalfunctionNextShot is set, Tarkov's per-shot malfunction roll (asked by both semi and auto fire)
+        // returns that type. Weapon.ValidateMalfunction and the rest of the shot treat it like a rolled one. Our player only.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), nameof(EFT.Player.FirearmController.GetMalfunctionState))]
         private static void ForceTestMalfunction(EFT.Player.FirearmController __instance, bool hasAmmoInMag, bool doesWeaponHaveBoltCatch, bool isMagazineInserted,

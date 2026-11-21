@@ -9,18 +9,18 @@ using UnityEngine.XR;
 
 namespace TarkovVR.Source.Graphics
 {
-    // Foveated rendering in software, for D3D11 (no variable-rate shading there; AMD has no extension for it): outside an inner circle
-    // of each eye, every other 2x2 pixel block (a checkerboard - the GPU shades in 2x2 quads) is filled from its neighbours instead of
-    // being shaded. Shader Hidden/SPTVR/FoveatedMask, bundle sptvr/Assets/foveated (built in the Unity project).
-    //  - BeforeGBuffer: near-plane depth in those blocks, so the G-buffer draws fail the depth test there before shading.
+    // Foveated rendering in software for D3D11, which has no variable-rate shading (AMD has no extension for it). Outside an inner
+    // circle of each eye, every other 2x2 pixel block (a checkerboard, because the GPU shades in 2x2 quads) is filled from its
+    // neighbours instead of being shaded. Shader Hidden/SPTVR/FoveatedMask, bundle sptvr/Assets/foveated (built in the Unity project).
+    //  - BeforeGBuffer: near-plane depth is written in those blocks, so the G-buffer draws fail the depth test there before shading.
     //  - Nothing draws there, so the stencil's _StencilNonBackground bit stays clear and Tarkov's light pass
     //    (Hidden/Internal-DeferredShadingEFT, stencil Equal on that bit) skips them as well.
     //  - BeforeLighting: Unity copies the depth texture only after the AfterGBuffer event, and its built-in Depth targets can't be read
-    //    there, so the fill runs here: depth into SPT-VR's own copy, then GBuffer0-2 + depth for the masked blocks. The depth texture
-    //    global points at the filled copy for the rest of the eye's render (fog, AO, SSR, FSR read it).
-    //  - AfterLighting: the lit image filled from the neighbours (before the skybox, forward and transparent passes).
+    //    there, so the fill runs here: depth into SPT-VR's own copy, then GBuffer0-2 and depth for the masked blocks. The depth texture
+    //    global then points at the filled copy for the rest of the eye's render (fog, AO, SSR and FSR read it).
+    //  - AfterLighting: the lit image is filled from the neighbours (before the skybox, forward and transparent passes).
     //  - The circle's centre is the middle of each lens, or where you look on a headset with eye tracking (OpenXR eye gaze).
-    // Config section "Foveated Masking" (BepInEx: F12, and SixBench can A/B "Enabled").
+    // Config section "Foveated Masking" (BepInEx: F12; SixBench can A/B "Enabled").
     public static class FoveatedMask
     {
         private static ConfigEntry<bool> enabledSetting;
@@ -32,13 +32,13 @@ namespace TarkovVR.Source.Graphics
         private static ConfigEntry<bool> alternateSetting;
         // Fog / AO / SSR / FSR read the depth texture: point it at the filled copy. false = they read the masked blocks' near depth.
         public static bool redirectDepthTexture = true;
-        // With a temporal upscaler on (FSR's jitter running) the masked blocks swap every frame: its history then gets a real sample at
-        // every pixel and the checkerboard averages out. Without one, swapping would flicker (Alternate Pattern forces it).
+        // With a temporal upscaler on (FSR's jitter running), the masked blocks swap every frame, so the upscaler's history gets a real
+        // sample at every pixel and the checkerboard averages out. Without an upscaler swapping would flicker (Alternate Pattern forces it).
         public static bool alternateWithUpscaler = true;
-        // NDC beyond the inner radius over which the masked blocks join in gradually (a dither), instead of a hard ring. 0 = hard.
+        // NDC width past the inner radius over which the masked blocks fade in gradually (a dither) instead of at a hard ring. 0 = hard.
         public static float bandWidth = 0.15f;
-        // A masked pixel from the nearest rendered pixels along both axes (weighted by distance, the axis across a depth edge
-        // counting less). false = the average of the two pixels 2 px away along one axis.
+        // true = a masked pixel is filled from the nearest rendered pixels along both axes, weighted by distance, with the axis across
+        // a depth edge counting less. false = the average of the two pixels 2 px away along one axis.
         public static bool interpolatedFill = true;
 
         private const string ShaderName = "Hidden/SPTVR/FoveatedMask";
@@ -62,7 +62,7 @@ namespace TarkovVR.Source.Graphics
         private static bool builtShowHoles, builtRedirect;
         private static bool loggedAttach, loggedRedirectCheck, loggedAlternate;
         private static int lastJitterFrame = -1000;
-        // Off for this session after an error (never written to the config: the setting stays the user's)
+        // Set after an error: masking stays off for this session. Never written to the config, so the user's setting is kept.
         private static bool faulted;
 
         // The VR menu's toggle and slider (Graphics)
@@ -80,7 +80,8 @@ namespace TarkovVR.Source.Graphics
 
         public static void Init(ConfigFile config)
         {
-            // Shown in the VR menu (VRSettings, Graphics), not F12. Still BepInEx entries: SixBench A/Bs "Enabled" through them.
+            // Shown in the VR menu (VRSettings, Graphics), not in F12. They are still BepInEx entries because SixBench A/Bs "Enabled"
+            // through them.
             enabledSetting = config.Bind("Foveated Masking", "Enabled", true,
                 new ConfigDescription("Shade every other 2x2 pixel block outside the middle of each eye from its neighbours instead (saves GPU time, softer edges).",
                     null, new TarkovVR.Source.Settings.ConfigurationManagerAttributes { Browsable = false }));
@@ -104,7 +105,7 @@ namespace TarkovVR.Source.Graphics
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // SPT-VR's upscaler jitter ran recently (FSR2/3, the FSR4 Bridge): a temporal upscaler is integrating the frames
+        // True when SPT-VR's upscaler jitter ran recently (FSR2/3, the FSR4 Bridge), which means a temporal upscaler is accumulating frames.
         private static bool UpscalerJittering()
         {
             if (TarkovVR.Patches.Upscalers.VRJitterComponent.CurrentJitter != Vector2.zero)
@@ -112,7 +113,8 @@ namespace TarkovVR.Source.Graphics
             return Time.frameCount - lastJitterFrame < 30;
         }
 
-        // Every camera, before it renders (once per eye in multi-pass): keep the buffers on the headset camera, then this eye's centre
+        // Runs before every camera renders (once per eye in multi-pass). Keeps the buffers on the headset camera, then sets this eye's
+        // circle centre.
         private static void OnPreRender(Camera camera)
         {
             try
@@ -133,8 +135,8 @@ namespace TarkovVR.Source.Graphics
                     Attach(camera);
 
                 Camera.StereoscopicEye eye = camera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? Camera.StereoscopicEye.Right : Camera.StereoscopicEye.Left;
-                // The GPU projection (flipped for a render texture on D3D) maps the view's forward axis to (-m02, -m12) in its NDC,
-                // the same NDC the shader rebuilds from each pixel's position: the lens centre
+                // The GPU projection (flipped for a render texture on D3D) maps the view's forward axis to (-m02, -m12) in its NDC.
+                // That is the lens centre, in the same NDC the shader rebuilds from each pixel's position.
                 Matrix4x4 gpuProjection = GL.GetGPUProjectionMatrix(camera.GetStereoProjectionMatrix(eye), true);
                 UpdateGaze();
                 Vector2 centre = new Vector2(-gpuProjection.m02, -gpuProjection.m12);
@@ -170,7 +172,7 @@ namespace TarkovVR.Source.Graphics
             }
         }
 
-        // Once: whether the depth texture still points at the filled copy when the eye has rendered (Unity could rebind it later)
+        // Logs once whether the depth texture still points at the filled copy after the eye has rendered (Unity could rebind it later).
         private static void OnPostRender(Camera camera)
         {
             if (loggedRedirectCheck || camera == null || camera != attachedCamera || !redirectDepthTexture)
@@ -184,8 +186,8 @@ namespace TarkovVR.Source.Graphics
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // Eye tracking. Read through Unity's XR devices by usage name, so there's no OpenXR plugin type here (the OpenVR fallback runs
-        // without that DLL). The device is EyeGazeInteraction's "Eye Tracking OpenXR", registered by OpenXRBootstrap.
+        // Eye tracking. The gaze is read through Unity's XR devices by usage name, so no OpenXR plugin type is used here (the OpenVR
+        // fallback runs without that DLL). The device is EyeGazeInteraction's "Eye Tracking OpenXR", registered by OpenXRBootstrap.
         public static float gazeHoldTime = 0.3f;      // s a lost gaze (a blink) keeps its last direction before the lens centre takes over
         public static float gazeBlendTime = 0.25f;    // s to move between the lens centre / Inner Radius and the gaze / Gaze Inner Radius
         private static readonly InputFeatureUsage<Quaternion> GazeRotationUsage = new InputFeatureUsage<Quaternion>("gazeRotation");
@@ -200,7 +202,7 @@ namespace TarkovVR.Source.Graphics
         private static bool gazeFollowing, loggedGazeDevice;
         private static int gazeLogs;
 
-        // Once a frame (both eyes use the same gaze)
+        // Runs once a frame (both eyes use the same gaze)
         private static void UpdateGaze()
         {
             if (gazeFrame == Time.frameCount)
@@ -263,8 +265,8 @@ namespace TarkovVR.Source.Graphics
             return $"{right:0} deg right, {up:0} deg up";
         }
 
-        // A direction in the headset's frame, taken at infinity, in this eye's GPU NDC. Camera space is +z forward, Unity's view matrices
-        // -z; the eye's own view turns it if its display is canted.
+        // Projects a direction in the headset's frame, taken at infinity, into this eye's GPU NDC. The headset frame is +z forward,
+        // Unity's view matrices are -z forward. The eye's own view matrix turns it if that eye's display is canted.
         private static bool DirectionToNdc(Camera camera, Camera.StereoscopicEye eye, Matrix4x4 gpuProjection, Vector3 inHead, out Vector2 ndc)
         {
             Vector3 centreView = new Vector3(inHead.x, inHead.y, -inHead.z);
@@ -338,7 +340,8 @@ namespace TarkovVR.Source.Graphics
             attachedCamera = null;
         }
 
-        // The filled depth, one for both eyes (multi-pass renders them one after the other). true = (re)made: the buffers hold the old one
+        // The filled depth copy, one for both eyes (multi-pass renders them one after the other). Returns true when it was (re)made,
+        // because the command buffers still hold the old one.
         private static bool EnsureDepthCopy(int width, int height)
         {
             if (depthCopy != null && depthCopy.width == width && depthCopy.height == height && depthCopy.IsCreated())

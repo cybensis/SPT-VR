@@ -5,17 +5,17 @@ using UnityEngine;
 
 namespace TarkovVR.ModSupport.FuckThisCullingSupport
 {
-    // FuckThisCulling 0.4.1 in VR (Plugin applies this to that version only). Its GPU visibility test runs once a frame, in the pass
-    // it is recorded in - in MultiPass the left eye's only - so what only the right eye saw was hidden. Here the eyes take turns, and
-    // each result is merged with the other eye's latest as it comes back (the mod consumes only the newest result, so turns alone
-    // lose one eye's). Hides / restores happen only before the left eye, so both eyes draw the same objects. During an eye's
-    // pre-render the camera's plain matrices are that eye's, so the test itself needs no matrix changes.
+    // Makes FuckThisCulling 0.4.1 work in VR (Plugin applies this to that version only). Its GPU visibility test runs once a frame,
+    // in the pass it is recorded in. In MultiPass that is the left eye's pass only, so objects only the right eye saw were hidden.
+    // Here the eyes take turns running the test, and each result is merged with the other eye's latest one, because the mod uses
+    // only the newest result. Objects are hidden and restored only before the left eye, so both eyes draw the same objects.
+    // During an eye's pre-render the camera's plain matrices are that eye's, so the test itself needs no matrix changes.
     [HarmonyPatch]
     internal static class StereoCullingPatches
     {
-        public static int maxOtherEyeAgeFrames = 12;     // an older result from the other eye is not merged
-        public static int minimumOccludedChecks = 2;     // successive occluded results before a hide
-        public static float behindConeMargin = 1.05f;    // "slowly hide objects behind you": kept this much wider than both eyes' views
+        public static int maxOtherEyeAgeFrames = 12;     // frames; an older result from the other eye is not merged
+        public static int minimumOccludedChecks = 2;     // occluded results in a row before an object is hidden
+        public static float behindConeMargin = 1.05f;    // the "slowly hide objects behind you" cone is this much wider than both eyes' views
 
         private static Camera testingCamera;
         private static readonly int[] lastTestFrame = { -1, -1 };
@@ -44,8 +44,8 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
         private static int EyeIndex(Camera camera) => camera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0;
         private static Matrix4x4 ReferenceProjection(Camera camera) => camera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
 
-        // The drawn eye whose last test is older (a turn with no free slot is lost, so it stays with that eye; an eye that isn't drawn
-        // never gets it). Fixed for the frame.
+        // The eye whose turn it is: the drawn eye whose last test is older. A turn that finds no free slot is lost, so the turn stays
+        // with that eye. An eye that isn't being drawn never gets the turn. Fixed for the frame.
         private static int TurnEye
         {
             get
@@ -64,7 +64,7 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
             }
         }
 
-        // Hides / restores run in the gameplay camera's pre-cull, which comes once an eye: only before the left eye
+        // Hides and restores run in the gameplay camera's pre-cull, which runs once per eye. Let it run only before the left eye.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(VisibilityEngine), "PreCull")]
         private static bool ConsumeBeforeFirstEyeOnly(VisibilityEngine __instance, Camera c)
@@ -72,7 +72,7 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
             return !(c != null && c == __instance._camera && Stereo(c) && c.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right);
         }
 
-        // The test is recorded in an eye's pre-render and runs in that eye's pass: only in the eye whose turn it is
+        // The test is recorded in an eye's pre-render and runs in that eye's pass. Record it only in the eye whose turn it is.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(VisibilityEngine), "PreRender")]
         private static bool TestInTurnEyeOnly(VisibilityEngine __instance, Camera c)
@@ -87,7 +87,8 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
             return true;
         }
 
-        // Which eye a test came from (for the merge), and a fixed eye's projection as the stale check's reference (StaleStereo)
+        // Records which eye a test came from (for the merge), and stores the left eye's projection as the stale check's reference
+        // (StaleStereo).
         [HarmonyPostfix]
         [HarmonyPatch(typeof(QueryPipeline), "CaptureSource")]
         private static void TagEyeTest(QueryPipeline __instance, QuerySlot slot)
@@ -110,10 +111,11 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
             }
         }
 
-        // A result came back (QueryPipeline.Read: copied into slot.data, ready): kept as this eye's latest, then every box the other
-        // eye's latest result saw is marked seen here too. Packet: 4 header words, one byte per box up to compactWords, then the
-        // previous test's token, then the GPU's changed-word bits. A box's byte: low 2 bits = its state (LaneClassifier: 1 =
-        // occluded -> hide, 3 = still occluded while hidden, 0 / 2 = seen), upper bits = behind-hide flags.
+        // A result came back (QueryPipeline.Read copied it into slot.data and set ready). It is kept as this eye's latest, then every
+        // box the other eye's latest result saw is marked as seen in this one too.
+        // Result layout: 4 header words, one byte per box up to compactWords, then the previous test's token, then the GPU's
+        // changed-word bits. In a box's byte, the low 2 bits are its state (LaneClassifier: 1 = occluded, so hide it; 3 = still
+        // occluded while hidden; 0 or 2 = seen) and the upper bits are behind-hide flags.
         private const uint StateMask = 0x3u;
         private static bool Seen(uint state) => state == 0u || state == 2u;
 
@@ -160,14 +162,14 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
                 }
                 data[word] = merged;
             }
-            // The GPU's changed-word bits compare this test with the one before it (the other eye's, unmerged), and the decoder reads
-            // only those words while the token chain holds: break the chain so it decodes the whole merged result
+            // The GPU's changed-word bits compare this test with the one before it (the other eye's, unmerged), and while the token
+            // chain holds, the decoder reads only those words. Breaking the chain makes it decode the whole merged result.
             if (compactWords > 0 && compactWords < data.Length)
                 data[compactWords] = uint.MaxValue;
         }
 
-        // RestoreTriggers.Stale (0.4.1) comparing against the reference projection the slots store (TagEyeTest). The original reads
-        // the camera's plain projection at consume time, which a right-eye test never matches.
+        // RestoreTriggers.Stale (0.4.1), but compared against the reference projection stored in the slots (TagEyeTest). The original
+        // reads the camera's plain projection at consume time, which a right-eye test never matches.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(RestoreTriggers), "Stale")]
         private static bool StaleStereo(RestoreTriggers __instance, in RetainedSample sample, Camera current, int generation, int width, int height, int mask, ref string __result)
@@ -204,8 +206,8 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
             __result = Math.Max(__result, minimumOccludedChecks);
         }
 
-        // "Slowly hide objects behind you" keeps its cone off the projection it is given (with the camera's rotation): give it one
-        // covering both eyes
+        // "Slowly hide objects behind you" builds its cone from the projection it is given and the camera's rotation. Give it a
+        // projection that covers both eyes.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(BehindHides), "Bind")]
         private static void ConeOffBothEyes(ref Matrix4x4 projection)

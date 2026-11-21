@@ -18,13 +18,12 @@ namespace TarkovVR.Patches.Core.VR
         private const float KNIFE_SWING_THRESHOLD = 4.0f;
         private const float KNIFE_SWING_RESET = 1.0f;
 
-        // Set true to log every surface hit we broadcast (pair with MeleeHitApply.debug on the observer
-        // to see send vs. apply in the BepInEx log).
+        // Logs every surface hit that is sent. Turn on MeleeHitApply.debug on the observer too, to compare send and apply.
         public static bool debugMeleeSend = false;
 
-        // When our VR melee swing hits a surface (wall sparks / glass break), broadcast it so observers replay the effect:
-        // the custom collider swing runs only locally, so FIKA never replicates it. Player/AI hits are not sent (their damage
-        // syncs through ApplyShot). This is the knife collider's OnHit handler, firing only on the swinger's collision.
+        // When the VR melee swing hits a surface (wall sparks, glass break), send it so observers replay the effect.
+        // The collider swing runs only locally, so FIKA never replicates it. Hits on players and AI are not sent (their damage
+        // syncs through ApplyShot). ProcessOverlap is the knife collider's OnHit handler and fires only on the swinging player's machine.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BaseKnifeController), "ProcessOverlap")]
         private static void SyncMeleeSurfaceHit(BaseKnifeController __instance, KnifeRaycastHit other)
@@ -35,9 +34,9 @@ namespace TarkovVR.Patches.Core.VR
                 return;
             BallisticCollider ballisticCollider = other.collider.GetComponent<BallisticCollider>();
             if (ballisticCollider == null || ballisticCollider is BodyPartCollider)
-                return; // surface only -- players/AI sync via the normal damage path
+                return; // surfaces only: players and AI sync through the normal damage path
 
-            // Mirror method_6's own point fix-up (uses the collider position if the hit point is ~0).
+            // Same point fix-up as method_6: use the collider's position if the hit point is near zero.
             Vector3 point = (other.point.sqrMagnitude < 0.1f) ? other.collider.transform.position : other.point;
             float dmg = (__instance.LastKickType == EKickType.Slash)
                 ? __instance.Knife.Template.KnifeHitSlashDam
@@ -47,9 +46,9 @@ namespace TarkovVR.Patches.Core.VR
             FikaSendMeleeHit(point, other.normal, __instance.GlobalSwingDirection, dmg);
         }
 
-        // The FikaVrSync (SPT-VR-FikaSync.dll) call lives in its own NoInlining method so it's only JITted when called, after
-        // the FIKAInstalled check. Inlined, SyncMeleeSurfaceHit's JIT would bind the reference and throw FileNotFoundException
-        // without the companion DLL.
+        // The FikaVrSync (SPT-VR-FikaSync.dll) call is in its own NoInlining method, so it is only JIT-compiled when called, after
+        // the FIKAInstalled check. If it were inlined, compiling SyncMeleeSurfaceHit would load the reference and throw
+        // FileNotFoundException without the companion DLL.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void FikaSendMeleeHit(Vector3 point, Vector3 normal, Vector3 direction, float damage)
             => FikaVrSync.SendMeleeHit(point, normal, direction, damage);

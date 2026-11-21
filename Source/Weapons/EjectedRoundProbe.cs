@@ -4,8 +4,8 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Weapons
 {
-    // A round the local player's rechamber throws out (Firearms.ThrowPatronAsLoot -> GameWorld.ThrowItem): where it spawned against the
-    // shell port, and where it is half a second later, shown or not. Debug only (VRMagazinePatches.ProbeEjectedRound).
+    // Logs a round the local player's rechamber throws out (Firearms.ThrowPatronAsLoot -> GameWorld.ThrowItem): where it spawned relative
+    // to the shell port, and where it is half a second later and whether it's shown. Debug only (VRMagazinePatches.ProbeEjectedRound).
     internal sealed class EjectedRoundProbe : MonoBehaviour
     {
         public static bool enabled = false;

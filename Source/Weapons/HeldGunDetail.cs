@@ -5,13 +5,13 @@ using UnityEngine;
 namespace TarkovVR.Source.Weapons
 {
     // Keeps the item in your hands (gun, knife, grenade) on its most detailed model. Every weapon part has its own LODGroup
-    // sized to the part, and Unity picks the model by how big the part looks against the camera's vertical FOV. The headset's
-    // ~110 deg (flatscreen 50-75) drops small parts to their coarse LOD1 well within arm's length: the Glock front sight at
-    // ~13 cm, most pistol rear sights at 20-45 cm = an iron sight you can't line up. Vanilla never forces LOD0.
+    // sized to the part, and Unity picks the model by how big the part looks against the camera's vertical FOV. With the headset's
+    // ~110 deg (flatscreen is 50-75), small parts drop to their coarse LOD1 well within arm's length: the Glock front sight at
+    // ~13 cm, most pistol rear sights at 20-45 cm, so the iron sights can't be lined up. Vanilla never forces LOD0.
     // Guns are pooled (bots and dropped loot reuse the objects), so a part is released (ForceLOD(-1)) as soon as it leaves the hands.
     internal static class HeldGunDetail
     {
-        // Kill-switch (live): off releases everything
+        // false = every part is released back to Unity's LOD choice
         public static bool enabled = true;
         // Re-scan for attachments added / taken off while held; the hands change itself is caught every frame
         public static float rescanInterval = 0.5f;
@@ -48,7 +48,7 @@ namespace TarkovVR.Source.Weapons
             int added = 0;
             foreach (LODGroup group in scan)
             {
-                // (a hidden part is forced once it shows, on a later scan)
+                // A hidden part is forced on a later scan, once it shows
                 if (Showing(group) && forced.Add(group))
                 {
                     group.ForceLOD(0);

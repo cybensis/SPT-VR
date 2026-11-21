@@ -5,12 +5,12 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Player.VRManager
 {
-    // The headset in TRACKING space - the frame the hand poses report in. Head-to-hand measures (the gunstock, the step sprint,
-    // arm length) pair these two pure-tracking sources and never a camera: the hideout rewrites the camera's local transform.
+    // The headset pose in tracking space, the frame the hand poses are reported in. Head-to-hand measurements (the gunstock, step sprint,
+    // arm length) pair these two tracking-space sources and never use a camera, because the hideout rewrites the camera's local transform.
     public static class HeadTracking
     {
-        // The headset pivots ~10 cm around the NECK when you look around, so body measures use the neck point: headset-local,
-        // it rides the head and stays nearly still under head turns.
+        // Headset-local offset to the neck point. When you look around, the headset swings ~10 cm around the neck, so body
+        // measurements use the neck point, which stays nearly still under head turns.
         public static Vector3 neckLocalOffset = new Vector3(0f, -0.075f, -0.08f);
 
         private static readonly TrackedDevicePose_t[] hmdPoses = new TrackedDevicePose_t[1];

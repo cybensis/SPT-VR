@@ -24,12 +24,9 @@ namespace TarkovVR.Source.UI
 
         public void OnDrag(PointerEventData eventData)
         {
-            //Vector3 currentScreenPoint = new Vector3(eventData.position.x, eventData.position.y, mainCamera.WorldToScreenPoint(transform.position).z);
-            //Vector3 currentPosition = mainCamera.ScreenToWorldPoint(currentScreenPoint) + offset;
             Vector3 newPos = eventData.worldPosition;
             newPos.y = transform.position.y;
             raycastReceiver.position = newPos;
-            //menuCollider.center = commonUI.transform.position;
             transform.position = newPos;
             if (commonUI)
             {

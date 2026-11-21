@@ -14,27 +14,28 @@ using FirearmController = EFT.Player.FirearmController;
 namespace TarkovVR.Source.Weapons
 {
     // Break-actions by hand (Manual Reload): MP-43-1C, its sawed-off, MP-18.
-    //  - B (Y left-handed) is the top lever / locking lever (a support grip lets go): the barrels unlatch and swing on Tarkov's hinge (gen_breakactions.py: every bone
-    //    the open clip moves, keyed by the barrel's turn, the lever's own swing). Free, they swing as a rod on the hinge under gravity and the
-    //    gun's own motion (a flick shuts them); fully home with the lever let go they latch.
-    //  - The off hand's grip on the fore-end holds them: their turn follows the hand about the hinge, pushed home they latch and the hand
-    //    stays on as the two-handed grip. Open, the off hand is never the support grip (the gun hand aims alone).
-    //  - Open, the off hand's trigger at a chamber draws its shell out along the bore (held while the trigger is). A fired case let go flies off with the hand (Tarkov's own
-    //    shell physics); a live round goes to the rig at the chest pouch, into an empty chamber at its mouth, else to the ground.
-    //  - The chest pouch's grip with a chamber empty takes a shell (the bolt-action rounds' hold machinery); lined up on an empty chamber it
-    //    slides in along the bore, past breakShellCommit the inventory move into that chamber runs and Tarkov's round model is put in.
-    //  - Two barrels, as Tarkov's own reload does them: both fired = one draw takes both cases; both empty = the pouch gives two shells,
-    //    side by side as the chambers are, in together (one move per chamber).
-    //  - Moves into / out of a chamber skip Tarkov's own chamber operations (LetsSingleRoundIn), like the bolt-action rounds.
-    // Revolvers the same way (Rhino, RSh-12, MTs-255; gen_revolvers.py): the "barrel" is the crane the cylinder swings out on, the
-    // chambers the cylinder's camoras, the lever its release (B pops the cylinder out), the fore-end hold the off hand on the cylinder.
-    // One round per pouch grab, one case per draw; with no live round left the off hand's trigger at the ejector takes it, and pushed
-    // in it carries the fired cases out until they come free (Tarkov's own rule: an empty cylinder ejects all, else one by one).
-    // The SP-81 flare pistol is a break-action whose clip cocks its hammer once the barrel's shut: latched by hand, it's cocked the same way.
-    // The M32A1 is a revolver whose crane carries the barrel, the foregrip and the optic: B with the off hand on the foregrip swings it with
-    // that hand, a detent holds it at its open stop, an empty cylinder tipped back drops its fired cases (it has no ejector), and Tarkov's
-    // spring-driven cylinder (it fires upward from where it's wound, an empty chamber stops it) takes rounds next to the ones in it and is
-    // wound on the latch.
+    //  - B (Y in left-handed mode) works the top lever / locking lever, and a support grip lets go. The barrels unlatch and swing on Tarkov's
+    //    hinge (gen_breakactions.py bakes every bone the open clip moves, keyed by the barrel's turn, plus the lever's own swing). Free barrels
+    //    swing as a rod on the hinge under gravity and the gun's motion, so a flick shuts them. Fully home with the lever released, they latch.
+    //  - The off hand's grip on the fore-end holds the barrels: they follow the hand about the hinge, and pushed home they latch while the
+    //    hand stays on as the two-handed grip. While open, the off hand is never the support grip (the gun hand aims alone).
+    //  - While open, the off hand's trigger at a chamber draws its shell out along the bore, as long as the trigger is held. A fired case
+    //    that is let go flies off with the hand (Tarkov's own shell physics). A live round goes to the rig at the chest pouch, into an
+    //    empty chamber at its mouth, or else to the ground.
+    //  - Gripping at the chest pouch with a chamber empty takes a shell (the bolt-action rounds' hold code). Lined up on an empty chamber
+    //    it slides in along the bore; past breakShellCommit the inventory move into that chamber runs and Tarkov's round model is put in.
+    //  - Two barrels work like Tarkov's own reload: with both fired, one draw takes both cases; with both empty, the pouch gives two shells
+    //    side by side, which go in together (one move per chamber).
+    //  - Moves into or out of a chamber skip Tarkov's own chamber operations (LetsSingleRoundIn), like the bolt-action rounds.
+    // Revolvers work the same way (Rhino, RSh-12, MTs-255; gen_revolvers.py): the "barrel" is the crane the cylinder swings out on, the
+    // chambers are the cylinder's camoras, the lever is its release (B pops the cylinder out), and the fore-end hold is the off hand on the
+    // cylinder. One round per pouch grab, one case per draw. With no live round left, the off hand's trigger at the ejector takes it, and
+    // pushing it in carries the fired cases out until they come free (Tarkov's rule: an empty cylinder ejects all, else one at a time).
+    // The SP-81 flare pistol is a break-action whose clip cocks the hammer once the barrel is shut; latching it by hand cocks it the same way.
+    // The M32A1 is a revolver whose crane carries the barrel, foregrip and optic. B with the off hand on the foregrip swings the crane with
+    // that hand, and a detent holds it at its open stop. Tipping an empty cylinder back drops its fired cases (it has no ejector). Tarkov's
+    // spring-driven cylinder fires upward from where it is wound and stops at an empty chamber, so it takes rounds next to the ones
+    // already in it and is wound on the latch.
     public static partial class VRReloadController
     {
         public static bool breakActions = true;             // false = Tarkov's own break-action reloads only
@@ -45,57 +46,61 @@ namespace TarkovVR.Source.Weapons
         public static float caseFreeShare = 0.85f;          // share of its length a shell comes out before it's free in the hand
         public static float breakShellCaptureRadius = 0.035f;   // m off a chamber's bore line a held shell goes onto it
         public static float breakShellCaptureAngle = 40f;   // deg off the bore
-        public static float breakShellReach = 0.03f;        // m past its own length behind the chamber the bore line catches it
-        public static float breakShellCommit = 0.5f;        // share of its length in past which it's loaded and slides home itself
-        public static float breakShellFinishSpeed = 0.5f;   // m/s the rest of the way
+        public static float breakShellReach = 0.03f;        // m behind the chamber, past the shell's own length, where the bore line still catches it
+        public static float breakShellCommit = 0.5f;        // share of its length inserted, past which it is loaded and slides home by itself
+        public static float breakShellFinishSpeed = 0.5f;   // m/s for the rest of the way
         public static float caseIntoHandTime = 0.12f;       // s a drawn shell eases into the hand's hold
         public static float leverTime = 0.06f;              // s the lever takes to swing
-        // The gun hand presses the lever as Tarkov's open clip has it: the hand onto the clip's IK marker at the press (the MP-43's rides
-        // 4.4 cm up and rolls 36 deg to bring the thumb onto the top lever; the MP-18's stays), that finger's joints. false = no hand move.
+        // The gun hand presses the lever as in Tarkov's open clip: the hand moves onto the clip's IK marker at the press, with the clip's
+        // finger joints. The MP-43's marker moves 4.4 cm up and rolls 36 deg to bring the thumb onto the top lever; the MP-18's stays put.
+        // false = the hand doesn't move.
         public static bool leverHandPress = true;
         public static float leverPressTime = 0.1f;          // s the hand takes onto the lever and back
-        // The barrels on the hinge: a rod about its end (inertia 4/3 m r^2 at its centre of mass r), gravity and the hinge's own acceleration
-        // (the gun's motion) as pseudo-forces, the gun's turn about the hinge axis left behind; hinge friction, a bounce off the stop
+        // The barrels on the hinge are a rod turning about its end (inertia 4/3 m r^2, r = distance to its centre of mass). Gravity and the
+        // hinge's own acceleration (the gun's motion) act as pseudo-forces, and the gun's turn about the hinge axis leaves the barrels behind.
+        // Hinge friction slows them, and they bounce off the stop.
         public static float barrelGravity = 1f;
         public static float barrelInertia = 1f;             // share of the gun's own motion felt (0 = gravity only)
         public static float barrelMotionSmoothing = 0.06f;  // s the gun motion's derivatives are smoothed over (tracking noise)
         public static float barrelFriction = 3f;            // 1/s
         public static float barrelBounce = 0.15f;
-        public static float barrelStopSound = 60f;          // deg/s into the open stop that sounds it
+        public static float barrelStopSound = 60f;          // deg/s into the open stop needed to play its sound
         public static float openSoundRearm = 0.6f;          // share of the way open it has to come back down to before the stop sounds again
-        // A revolver's round: the hand turns from the carry toward the push behind it as the round nears an empty chamber's mouth (m from
-        // it, the round's middle), this share of the way by the time it's caught on the bore; pushing it in does the rest
+        // A revolver round: as it nears an empty chamber's mouth, the hand turns from the carry hold toward the push hold behind it.
+        // carryBlendFar / carryBlendNear = the round's middle's distance from the mouth (m); carryBlendApproach = the share of the turn
+        // done by the time the round is caught on the bore. Pushing it in does the rest.
         public static float carryBlendFar = 0.15f;
         public static float carryBlendNear = 0.03f;
         public static float carryBlendApproach = 0.7f;
-        // The back of a revolver's cylinder (its chamber bones sit on the rear face, a ring round the axis): a sphere this far behind the
-        // face reaching this far past the ring. The trigger anywhere in it draws the fired case nearest the hand; a round brought into it
-        // goes onto the nearest empty chamber (pointing no more than cylinderBackAngle off it)
+        // The zone at the back of a revolver's cylinder. The chamber bones sit on the rear face, in a ring around the axis. The zone is a
+        // sphere cylinderBackBehind (m) behind the face that reaches cylinderBackReach (m) past the ring. The trigger anywhere in it draws
+        // the fired case nearest the hand; a round brought into it goes onto the nearest empty chamber it points within cylinderBackAngle of.
         public static float cylinderBackBehind = 0.02f;
         public static float cylinderBackReach = 0.045f;
         public static float cylinderBackAngle = 75f;
-        // A revolver's crane + cylinder about the hinge: inertia (r^2 + R^2 / 2, the cylinder's own turn) as this x its centre of mass's
-        // distance squared
+        // Inertia of a revolver's crane and cylinder about the hinge (r^2 + R^2 / 2, including the cylinder's own turn), taken as
+        // this x the squared distance of its centre of mass
         public static float cylinderInertia = 1.2f;
         public static float cylinderKickSpeed = 360f;       // deg/s the release pops the cylinder out with
-        // Shut, the chamber that fires next turned to a live round, as Tarkov's own reload leaves it (it loads from there). false = it
-        // stays where it was: an empty chamber clicks. (A spring-driven cylinder is always wound: it can't turn past an empty one.)
+        // On closing, turn the cylinder so the chamber that fires next holds a live round, as Tarkov's own reload leaves it (it loads
+        // from there). false = it stays where it was, and an empty chamber clicks. A spring-driven cylinder is always wound, because it
+        // can't turn past an empty chamber.
         public static bool revolverIndexToLiveRound = true;
         public static float ejectorGrabRadius = 0.06f;      // m from the palm to where the clip's fingers press the ejector
-        public static float ejectorMinPush = 0.015f;        // m the hand pushes for the ejector's whole travel, at least
+        public static float ejectorMinPush = 0.015f;        // m, the minimum hand push for the ejector's whole travel
         public static float ejectorEjectAt = 0.9f;          // share of its travel at which the fired cases come free
-        public static float ejectorCaseSpeed = 1.5f;        // m/s at least, out of the back of the cylinder
+        public static float ejectorCaseSpeed = 1.5f;        // m/s, minimum case speed out of the back of the cylinder
         public static float ejectorReturnTime = 0.08f;      // s it springs home once let go
-        // The SP-81's hammer: cocked this long after the barrel latches, over this long
+        // The SP-81's hammer is cocked hammerCockDelay s after the barrel latches and takes hammerCockTime s
         public static float hammerCockDelay = 0.1f;
         public static float hammerCockTime = 0.12f;
-        // The M32A1's crane within craneDetentDegrees of its open stop: a detent pulls it in, as hard as craneDetent times its own weight
-        // can turn it at most (an easy turn of the gun doesn't shut it, a flick does)
+        // Within craneDetentDegrees of its open stop, a detent pulls the M32A1's crane in, with at most craneDetent times the torque its
+        // own weight can apply. A gentle turn of the gun doesn't shut it; a flick does.
         public static float craneDetent = 1.5f;
         public static float craneDetentDegrees = 6f;
         public static float craneOpenSoundAt = 0.15f;       // share of the way open the hand has swung it when its swing sound plays
-        // No ejector (the M32A1): an empty cylinder drops its fired cases with the bore out of its back within this many degrees of straight
-        // down (Tarkov's clip tips it to ~73), this fast out of it on top of the gun's own motion (m/s)
+        // Without an ejector (the M32A1), an empty cylinder drops its fired cases when the bore out of its back is within caseDumpAngle (deg)
+        // of straight down (Tarkov's clip tips it to ~73). They leave at caseDumpSpeed (m/s) on top of the gun's own motion.
         public static float caseDumpAngle = 60f;
         public static float caseDumpSpeed = 0.4f;
 
@@ -103,11 +108,11 @@ namespace TarkovVR.Source.Weapons
         public static bool HoldingBreakCase { get; private set; }
         public static bool HoldingEjector { get; private set; }
 
-        // The off hand is ours on an unlatched break-action (never two-handing open barrels) and while it works one
+        // The break-action code owns the off hand while the gun is unlatched (open barrels are never two-handed) and while the hand works it
         private static bool BreakActionOwnsOffHand => HoldingBarrels || HoldingBreakCase || HoldingEjector || breakShellHeld || breakGunOpen;
-        private static bool breakGunOpen;                   // this frame: our break-action, unlatched or open
+        private static bool breakGunOpen;                   // this frame: a break-action we handle is unlatched or open
 
-        // No firing: unlatched, open, or a shell on its way
+        // No firing while unlatched, open, or with a shell on its way in
         public static bool BreakActionBlocksFiring => breakGunOpen || HoldingBarrels || HoldingBreakCase || HoldingEjector || (breakShellHeld && breakShellOnBore);
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -116,7 +121,7 @@ namespace TarkovVR.Source.Weapons
         public sealed class SavedBreakAction
         {
             public string barrel;               // the hinge's bone, under the weapon bone
-            public float[] hingeAxis;           // in its closed local frame, + opening
+            public float[] hingeAxis;           // in its closed local frame, positive = opening
             public float openDegrees;
             public List<string> chambers;
             public SavedBreakBones open;        // every bone the open moves, keyed by the barrel's turn
@@ -124,7 +129,7 @@ namespace TarkovVR.Source.Weapons
             public SavedBreakHold foreEnd;      // the left palm on the fore-end, in the barrel bone's frame; grabPoint where the fingers close
             public SavedBreakHold loadHold;     // a new shell's bone in the left palm's frame
             public SavedBreakHold carryHold;    // a revolver's round as the hand brings it over (the load hold is the push behind it)
-            public SavedBreakHold pluckHold;    // a drawn one's
+            public SavedBreakHold pluckHold;    // a drawn shell's
             public SavedBreakHold loadPair;     // two at once (the both-barrels clips): the left chamber's, position2 / rotation2 the right's
             public SavedBreakHold pluckPair;
             public bool revolver;               // (ReloadHolds "revolvers"): barrel = the crane, chambers = the camoras' round bones
@@ -158,7 +163,7 @@ namespace TarkovVR.Source.Weapons
         {
             public float degrees;
             public List<SavedPumpBone> bones;
-            public SavedLeverPress press;       // the lever's: the gun hand on it
+            public SavedLeverPress press;       // the gun hand's press on the lever
         }
 
         public sealed class SavedLeverPress
@@ -185,7 +190,7 @@ namespace TarkovVR.Source.Weapons
             public float[] grabPoint;
             public float[] position2;
             public float[] rotation2;
-            public bool right;                  // off the clip's right hand (the M32A1's gun hand loads in its clips): mirrored onto the left
+            public bool right;                  // taken from the clip's right hand (the M32A1's clips load with the gun hand): mirrored onto the left
         }
 
         private sealed class BreakHold
@@ -326,8 +331,8 @@ namespace TarkovVR.Source.Weapons
             };
         }
 
-        // The family: the longest name before "_reload_start" among the animator's clips we have data for (the sawed-off's clips start
-        // with the MP-43's name too)
+        // The gun's family is the longest clip-name prefix before "_reload_start" among the animator's clips that we have data for
+        // (the sawed-off's clips also start with the MP-43's name)
         private static bool TryGetBreakAction(FirearmController firearmController, out BreakData data)
         {
             data = null;
@@ -369,7 +374,7 @@ namespace TarkovVR.Source.Weapons
 
         private static bool IsRevolver(Weapon weapon) => weapon is Revolver && weapon.GetCurrentMagazine() is CylinderMagazine;
 
-        // The chambers: a break-action's barrels', a revolver's cylinder's camoras (Tarkov's shell and round models are indexed the same)
+        // The chambers: a break-action's barrel chambers, or a revolver cylinder's camoras (Tarkov indexes its shell and round models the same way)
         private static Slot[] BreakSlots(Weapon weapon) => weapon is Revolver && weapon.GetCurrentMagazine() is CylinderMagazine cylinder ? cylinder.Camoras : weapon.Chambers;
 
         private static bool ManualBreakOn(FirearmController firearmController, out BreakData data)
@@ -379,13 +384,13 @@ namespace TarkovVR.Source.Weapons
                 && firearmController._player.IsYourPlayer && TryGetBreakAction(firearmController, out data);
         }
 
-        // The hands load this gun (GunInteractionController's ManualReloadReplacesMenu)
+        // True when the hands load this gun (used by GunInteractionController's ManualReloadReplacesMenu)
         public static bool HandsLoadBreakAction(FirearmController firearmController)
         {
             return ManualBreakOn(firearmController, out _);
         }
 
-        // B (Y left-handed) is this gun's lever: never Tarkov's reload (InputHandlers). Not on a malfunction: Tarkov's own fix.
+        // B (Y in left-handed mode) is this gun's lever, never Tarkov's reload (InputHandlers). Not during a malfunction: Tarkov's own fix runs.
         public static bool GunHandButtonIsBarrelLever(FirearmController firearmController)
         {
             return VRGlobals.inGame && ManualBreakOn(firearmController, out _) && firearmController.Item.MalfState.State == Weapon.EMalfunctionState.None;
@@ -402,7 +407,7 @@ namespace TarkovVR.Source.Weapons
             public float lever;             // 0 at rest .. 1 swung over
             public float ejector;           // a revolver's: 0 home .. 1 pushed out
             public bool openSounded;        // the open stop's sound played this opening (bounces off it don't play it again)
-            public int restFrames;          // frames the rest pose is still written after it got there (the animator may not write it)
+            public int restFrames;          // frames the rest pose is still written after reaching it (the animator may not write it)
         }
         private static readonly Dictionary<Weapon, BreakState> breakStates = new Dictionary<Weapon, BreakState>();
 
@@ -474,7 +479,7 @@ namespace TarkovVR.Source.Weapons
             return found;
         }
 
-        // The barrels' middle in their bone's frame: their meshes' boxes (mesh-local corners), weighted by volume
+        // The barrels' centre in their bone's frame: their meshes' mesh-local bounds, weighted by volume
         private static Vector3 MeshCenterIn(Transform bone)
         {
             Vector3 sum = Vector3.zero;
@@ -489,7 +494,7 @@ namespace TarkovVR.Source.Weapons
                 sum += bone.InverseTransformPoint(meshFilter.transform.TransformPoint(bounds.center)) * volume;
                 weight += volume;
             }
-            // No meshes read: a barrel's length ahead of the hinge
+            // No meshes found: assume a barrel's length ahead of the hinge
             return weight > 0f ? sum / weight : new Vector3(0f, -0.25f, 0f);
         }
 
@@ -505,7 +510,7 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // The barrels and the lever as our state has them: off their rest pose only (at rest the animator's pose is the same)
+        // Poses the barrels and the lever from our state, only while off their rest pose (at rest the animator's pose is the same)
         private static void PoseBreakAction(BreakData data, BreakState state)
         {
             if (state.open > 0f || state.lever > 0f || state.ejector > 0f || HoldingBarrels || HoldingEjector)
@@ -542,14 +547,14 @@ namespace TarkovVR.Source.Weapons
             }
         }
 
-        // The hinge axis in world space (+ opening), through the barrel bone's origin
+        // The hinge axis in world space (positive = opening), through the barrel bone's origin
         private static Vector3 HingeAxisWorld(BreakData data)
         {
             Transform parent = barrelBone.parent;
             return (parent != null ? parent.rotation : Quaternion.identity) * (barrelClosedLocal * data.hingeAxis);
         }
 
-        // Player.LateUpdate prefix (ShotgunPatches): after the animator, before Tarkov's IK
+        // Called from the Player.LateUpdate prefix (ShotgunPatches): after the animator, before Tarkov's IK
         public static void ApplyBreakActionBeforeIk()
         {
             FirearmController firearmController = VRGlobals.firearmController;
@@ -567,7 +572,7 @@ namespace TarkovVR.Source.Weapons
             ApplyBreakLeverHand(firearmController, data);
         }
 
-        // Co-op (TryBuildSync): the barrels and the lever off their rest pose, as PoseBreakAction writes them this frame
+        // Co-op (TryBuildSync): adds the bones that are off their rest pose, as PoseBreakAction writes them this frame
         private static void AddBreakActionParts(FirearmController firearmController, Transform weaponRoot)
         {
             if (breakBonesFor != firearmController || barrelBone == null || !ManualBreakOn(firearmController, out BreakData data)
@@ -612,8 +617,8 @@ namespace TarkovVR.Source.Weapons
         private static Quaternion gunPreviousRotation;
         private static Vector3 gunPreviousTurnRate, gunTurnAcceleration;
 
-        // The off hand's grip pressed this frame: true when it was the break-action's (the fore-end); its trigger, tookTrigger (a shell in
-        // a chamber)
+        // Returns true when the break-action took the off hand's grip press this frame (the fore-end). tookTrigger = it took the
+        // trigger press (a shell in a chamber).
         private static bool TickBreakAction(bool gripPressed, bool gripReleased, bool triggerPressed, bool triggerReleased, bool handBusy, out bool tookTrigger)
         {
             tookTrigger = false;
@@ -625,7 +630,7 @@ namespace TarkovVR.Source.Weapons
             }
             finally
             {
-                // The gun hand onto the lever while B is held (ApplyBreakLeverHand, the finger: DriveBreakLeverFinger)
+                // Eases the gun hand onto the lever while B is held (the hand: ApplyBreakLeverHand, the finger: DriveBreakLeverFinger)
                 breakLeverPress = Mathf.MoveTowards(breakLeverPress, pressing ? 1f : 0f, Time.deltaTime / Mathf.Max(leverPressTime, 0.001f));
                 if (!pressing && breakLeverPress <= 0f)
                     breakLeverPressFor = null;
@@ -666,7 +671,7 @@ namespace TarkovVR.Source.Weapons
             float deltaTime = Mathf.Max(Time.deltaTime, 1e-4f);
             TrackGunMotion(firearmController, deltaTime);
 
-            // The lever: the gun hand's B (not just out of a menu: B backed out of it), not on a malfunction
+            // The lever is the gun hand's B. Not right after a menu closes (B backed out of it), and not during a malfunction.
             bool leverButton = Handedness.GunHandUpperButton.GetState(SteamVR_Input_Sources.Any) && !MenuExitButtonWait.Blocks
                 && !VRGlobals.menuOpen && !ChestHang.Detached && weapon.MalfState.State == Weapon.EMalfunctionState.None;
             bool leverPressed = leverButton && !previousLeverButton;
@@ -676,7 +681,7 @@ namespace TarkovVR.Source.Weapons
                 breakLeverPressFor = firearmController;
             if (leverPressed)
             {
-                // (the SP-81 has no lever of its own: its barrels just come free)
+                // The SP-81 has no lever of its own: its barrel just comes free
                 if (data.lever != null)
                     PlayFirstGunSound(firearmController, SoundHand.GunHand, "BarrelLock", "CylinderBtn", "Hammer");
                 PulseGunHand(0.25f, 0.03f);
@@ -690,8 +695,8 @@ namespace TarkovVR.Source.Weapons
                         revolverOpenSoundFor = firearmController;
                         revolverOpenSoundAt = Time.time + cylinderOpenSoundDelay;
                     }
-                    // The M32A1's foregrip is on the crane: the support hand on it takes the crane from here and swings it (onto the clip's
-                    // hold on the foregrip)
+                    // The M32A1's foregrip is on the crane, so the support hand on it takes the crane from here and swings it (the hand
+                    // moves onto the clip's hold on the foregrip)
                     bool craneInHand = data.supportOnCrane && !handBusy && !HoldingBarrels && VRGlobals.vrPlayer.isSupporting;
                     if (craneInHand)
                         BeginBarrelHold(firearmController, data, state);
@@ -709,7 +714,7 @@ namespace TarkovVR.Source.Weapons
             else if (!state.latched)
                 SwingBarrels(firearmController, data, state, leverButton, deltaTime);
 
-            // The off hand's grabs: its trigger a shell in a chamber (or a revolver's ejector), its grip the fore-end
+            // The off hand's grabs: its trigger takes a shell in a chamber (or a revolver's ejector), its grip takes the fore-end
             bool taken = false;
             bool handFree = !handBusy && !HoldingBarrels && !HoldingBreakCase && !HoldingEjector && !ChestHang.Detached;
             if (triggerPressed && handFree && TryTakeEjector(firearmController, data, state))
@@ -737,8 +742,8 @@ namespace TarkovVR.Source.Weapons
             return taken;
         }
 
-        // The hinge's acceleration and the gun's turn acceleration, smoothed (the barrels feel the gun's motion). In the rig's frame: a snap
-        // turn or a height reset moves the rig in one frame, which isn't motion of the hand.
+        // The hinge's acceleration and the gun's turn acceleration, smoothed, so the barrels feel the gun's motion. Measured in the rig's
+        // frame: a snap turn or a height reset moves the rig in one frame, which isn't motion of the hand.
         private static Transform BreakMotionFrame => VRGlobals.vrOffsetter != null ? VRGlobals.vrOffsetter.transform : null;
 
         private static void TrackGunMotion(FirearmController firearmController, float deltaTime)
@@ -775,7 +780,7 @@ namespace TarkovVR.Source.Weapons
             gunPreviousRotation = rotation;
         }
 
-        // Free on the hinge: a rod about its end, gravity and the gun's motion on it
+        // Barrels free on the hinge: a rod turning about its end, driven by gravity and the gun's motion
         private static void SwingBarrels(FirearmController firearmController, BreakData data, BreakState state, bool leverHeld, float deltaTime)
         {
             Vector3 axis = HingeAxisWorld(data);
@@ -795,7 +800,7 @@ namespace TarkovVR.Source.Weapons
             MoveBarrels(firearmController, data, state, state.open + state.speed * deltaTime, leverHeld, SoundHand.GunBody);
         }
 
-        // To that much open, at the stops: open = a bounce (and its knock), shut with the lever let go = latched
+        // Sets the barrels to that angle. At the open stop they bounce (with its knock); shut with the lever released, they latch.
         private static void MoveBarrels(FirearmController firearmController, BreakData data, BreakState state, float open, bool leverHeld, SoundHand hand)
         {
             float before = state.open;
@@ -826,8 +831,8 @@ namespace TarkovVR.Source.Weapons
             state.open = open;
         }
 
-        // Into the open stop: its knock once an opening (a bounce off it and back is the same stop), the hand feels every hit. A revolver's
-        // swing-out sound isn't the stop's: it plays as the cylinder starts out (RevolverOpenSound)
+        // Hitting the open stop: the knock plays once per opening (bouncing off it and back is the same stop), and the hand feels every hit.
+        // A revolver's swing-out sound is not the stop's; it plays as the cylinder starts out (RevolverOpenSound).
         private static void OpenStopHit(FirearmController firearmController, BreakData data, BreakState state, SoundHand hand, float speed)
         {
             Pulse(hand.Seating, Mathf.Clamp01(speed / 600f) * 0.6f + 0.2f, 0.04f);
@@ -837,8 +842,8 @@ namespace TarkovVR.Source.Weapons
             PlayFirstGunSound(firearmController, hand, "BarrelOpen");
         }
 
-        // A revolver's swing-out, after the release (Tarkov's open clips: the Rhino's and MTs-255's CylinderOpen 0.1 s after CylinderBtn,
-        // as the cylinder starts out; the RSh-12 has none, its PurgeDrumOpen is switched off in every clip)
+        // A revolver's swing-out sound after the release. In Tarkov's open clips the Rhino's and MTs-255's CylinderOpen plays 0.1 s after
+        // CylinderBtn, as the cylinder starts out. The RSh-12 has none: its PurgeDrumOpen is switched off in every clip.
         public static float cylinderOpenSoundDelay = 0.1f;  // s after the release
         private static FirearmController revolverOpenSoundFor;
         private static float revolverOpenSoundAt;
@@ -847,7 +852,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (revolverOpenSoundFor == null)
                 return;
-            // (the M32A1's crane: as the hand swings it out, not on the release; none if it went back in)
+            // The M32A1's crane plays it as the hand swings it out, not on the release, and not at all if it went back in
             if (revolverOpenSoundFor == firearmController && data.holdsOpen)
             {
                 if (state.latched)
@@ -877,7 +882,7 @@ namespace TarkovVR.Source.Weapons
                     TurnCylinderToLiveRound(firearmController);
                 SetBreakAnimatorCounts(firearmController);
             }
-            // The SP-81's hammer, cocked as its clip cocks it once the barrel's shut
+            // The SP-81's hammer is cocked once the barrel is shut, as its clip does
             if (breakHammerBone != null && breakBonesFor == firearmController && !firearmController.Item.Armed)
             {
                 hammerCockFor = firearmController;
@@ -892,8 +897,9 @@ namespace TarkovVR.Source.Weapons
         private static float hammerCockStart;
         private static bool hammerCockSounded;
 
-        // From down to cocked after the latch (after the animator), then Tarkov's own: FirearmController.SetArm, the animator's armed pose
-        // and Weapon.Armed, as the clip's Arm event sets them. A shot or anything else of Tarkov's first: not cocked (it fires as it is).
+        // Moves the hammer from down to cocked after the latch (after the animator), then sets Tarkov's own state with
+        // FirearmController.SetArm: the animator's armed pose and Weapon.Armed, as the clip's Arm event sets them.
+        // If a shot or any other Tarkov operation comes first, it isn't cocked (the gun fires as it is).
         private static void CockHammer(FirearmController firearmController, BreakData data, BreakState state)
         {
             if (hammerCockFor == null)
@@ -922,8 +928,9 @@ namespace TarkovVR.Source.Weapons
             breakHammerBone.SetLocalPositionAndRotation(position, rotation);
         }
 
-        // Shut: the chamber that fires next (the current camora single action, the one after it double action, Tarkov's
-        // GetCamoraFireOrLoadStartIndex) to the first live round from there on, the animator's cylinder with it
+        // On closing, turns the cylinder (and the animator's cylinder) so the chamber that fires next is the first live round from there on.
+        // The chamber that fires next is the current camora in single action, the one after it in double action
+        // (Tarkov's GetCamoraFireOrLoadStartIndex).
         private static void TurnCylinderToLiveRound(FirearmController firearmController)
         {
             Weapon weapon = firearmController.Item;
@@ -931,7 +938,7 @@ namespace TarkovVR.Source.Weapons
                 return;
             bool singleAction = !weapon.CylinderHammerClosed;
             int count = cylinder.MaxCount;
-            // (a spring-driven one fires the current chamber either way and only counts up: wound back to its first live round)
+            // A spring-driven cylinder fires the current chamber either way and only counts up, so it is wound back to its first live round
             bool spring = cylinder is SpringDrivenCylinder;
             int fires = spring ? 0 : cylinder.GetCamoraFireOrLoadStartIndex(singleAction);
             for (int step = 0; step < count; step++)
@@ -954,12 +961,12 @@ namespace TarkovVR.Source.Weapons
         // The off hand on the fore-end
 
         private static FirearmController barrelsHeldFor;
-        private static Transform barrelRider;               // ours, on the barrel bone: the hand latches on it
+        private static Transform barrelRider;               // our transform on the barrel bone, which the hand latches onto
         private static Vector3 barrelAcrossAtGrab;          // the controller about the hinge at the grab, in the barrel's parent frame
         private static float barrelOpenAtGrab;
         private static bool barrelHandOnRightArm;
 
-        // The palm at the fore-end: where the close clip's fingers close on it, with the barrels as they are
+        // True when the palm is at the fore-end: where the close clip's fingers close on it, with the barrels at their current angle
         private static bool OffHandAtForeEnd(BreakData data, BreakState state)
         {
             Vector3 grab = ForeEndGrabWorld(data, OffHandOnRightArm);
@@ -976,8 +983,8 @@ namespace TarkovVR.Source.Weapons
 
         private static Vector3 MirroredForArm(Vector3 pointInBarrel, bool rightArm) => rightArm ? new Vector3(-pointInBarrel.x, pointInBarrel.y, pointInBarrel.z) : pointInBarrel;
 
-        // A revolver's hold for the right arm: through the plane along the gun through the cylinder's axis (it swings out to the side:
-        // the gun's own centre plane is off it). The weapon bone's x is the gun's right.
+        // A revolver's hold for the right arm is mirrored through the plane along the gun that contains the cylinder's axis: the cylinder
+        // swings out to the side, away from the gun's own centre plane. The weapon bone's x is the gun's right.
         private static Vector3 MirroredThroughCylinder(Vector3 world)
         {
             Vector3 normal = breakFrame.right;
@@ -1005,7 +1012,7 @@ namespace TarkovVR.Source.Weapons
                 barrelRider = new GameObject("VRBarrelHand").transform;
             barrelRider.SetParent(barrelBone, worldPositionStays: false);
             barrelRider.SetPositionAndRotation(controller.position, controller.rotation);
-            // The hand onto the clip's hold on the fore-end, riding the barrels from there
+            // Move the hand onto the clip's hold on the fore-end; from there it rides the barrels
             LatchHand(barrelRider, gunHand: false);
             ForeEndHoldWorld(data, barrelHandOnRightArm, out Vector3 palmPosition, out Quaternion palmRotation);
             SnapHandTo(barrelRider, palmPosition, palmRotation);
@@ -1014,7 +1021,7 @@ namespace TarkovVR.Source.Weapons
                 Plugin.MyLog.LogInfo($"[VRBreak] fore-end taken, {state.open:0.#} deg open");
         }
 
-        // The clip's palm on the fore-end, world space; the right arm's its mirror image through the gun's centre plane
+        // The clip's palm on the fore-end in world space. For the right arm it is mirrored through the gun's centre plane.
         private static void ForeEndHoldWorld(BreakData data, bool rightArm, out Vector3 position, out Quaternion rotation)
         {
             Vector3 local = data.foreEnd.position;
@@ -1040,7 +1047,7 @@ namespace TarkovVR.Source.Weapons
             rotation = barrelBone.rotation * localRotation;
         }
 
-        // A point about the hinge, in the barrel's parent frame (turning the gun doesn't count), off the axis
+        // A world point relative to the hinge, in the barrel's parent frame (so turning the gun doesn't count), projected off the hinge axis
         private static Vector3 AcrossBarrelHinge(BreakData data, Vector3 world)
         {
             Transform parent = barrelBone.parent;
@@ -1052,7 +1059,7 @@ namespace TarkovVR.Source.Weapons
         private static void UpdateBarrelHold(FirearmController firearmController, BreakData data, BreakState state, bool gripPressed, bool gripReleased, bool leverHeld,
             float deltaTime)
         {
-            // "Toggle Gun Grip": a press lets go, as it does the foregrip
+            // With "Toggle Gun Grip", a press lets go, as on the foregrip
             bool toggle = VRSettings.GetGunGripToggle();
             bool letGo = toggle ? gripPressed : gripReleased;
             if (firearmController != barrelsHeldFor || barrelHandOnRightArm != OffHandOnRightArm || ChestHang.Detached || VRGlobals.menuOpen)
@@ -1066,11 +1073,11 @@ namespace TarkovVR.Source.Weapons
                 open = barrelOpenAtGrab + Vector3.SignedAngle(barrelAcrossAtGrab, across, barrelClosedLocal * data.hingeAxis);
             float before = state.open;
             float target = Mathf.Clamp(open, 0f, data.openDegrees);
-            // Carried on into the let-go (a push up and away shuts them)
+            // The speed carries on after the let-go (a push up and away shuts them)
             state.speed = Mathf.Lerp(state.speed, (target - before) / deltaTime, 1f - Mathf.Exp(-deltaTime / 0.03f));
             if (open <= 0f && !leverHeld && !letGo)
             {
-                // Home with the lever let go: latched, the hand stays on as the support grip
+                // Home with the lever released: latch, and the hand stays on as the support grip
                 state.open = 0f;
                 Latch(firearmController, state, SoundHand.OffHand);
                 LetGoOfBarrels(keepSupport: toggle || Handedness.OffHandGrip.state);
@@ -1092,8 +1099,8 @@ namespace TarkovVR.Source.Weapons
             HoldingBarrels = false;
             barrelsHeldFor = null;
             ReleaseHandLatch();
-            // Two-handing from here (VRPlayerManager's own entry, handLock: opening the grip lets go); the releasing latch hands the
-            // arm to Tarkov's IK once it sees it (UpdateHandLatch)
+            // Two-handed from here (VRPlayerManager's own entry, handLock: opening the grip lets go). The releasing latch hands the
+            // arm to Tarkov's IK once it sees it (UpdateHandLatch).
             if (keepSupport && VRGlobals.vrPlayer != null && !Handedness.GunInLeftHand)
                 VRGlobals.vrPlayer.TakeSupportGrip();
         }
@@ -1104,15 +1111,15 @@ namespace TarkovVR.Source.Weapons
         private static FirearmController caseFor;
         private static int caseChamber;
         private static bool caseSpent;                      // a fired case (Tarkov's shell model), else the live round's model
-        private static AmmoTemplate caseTemplate;           // the fired case's, for Weapon.ShellsInChambers if it goes back
-        private static Ammo caseRound;                      // the live round: still in its chamber for the inventory
+        private static AmmoTemplate caseTemplate;           // the fired case's template, for Weapon.ShellsInChambers if it goes back
+        private static Ammo caseRound;                      // the live round, which stays in its chamber in the inventory
         private static GameObject caseProp;
         private static Transform caseRestParent;
         private static Vector3 caseRestLocalPosition;
         private static Quaternion caseRestLocalRotation;
         private static Vector3 caseRestInBarrelPosition;    // where it sits in its chamber, in the barrel bone's frame
         private static Quaternion caseRestInBarrelRotation;
-        private static Vector3 caseBoreInBarrel;            // out of the chamber
+        private static Vector3 caseBoreInBarrel;            // the direction out of the chamber
         private static float caseLength;
         private static float caseOut;
         private static bool caseFree;
@@ -1122,7 +1129,8 @@ namespace TarkovVR.Source.Weapons
         private static Quaternion caseInPalmRotation;
         private static Transform caseRider;
         private static bool caseOnRightArm;
-        // The other barrel's fired case, drawn with it (both fired): on its own bore, then where it sat beside the first in the hand
+        // The other barrel's fired case, drawn together with the first when both fired. It moves along its own bore, then keeps its
+        // place beside the first in the hand.
         private static GameObject case2Prop;
         private static int case2Chamber = -1;
         private static AmmoTemplate case2Template;
@@ -1144,7 +1152,7 @@ namespace TarkovVR.Source.Weapons
                 return false;
             Vector3 palm = OffHandPalm();
             int best = -1;
-            // A revolver: anywhere round the back of its cylinder, the fired case nearest the hand
+            // On a revolver, anywhere around the back of the cylinder takes the fired case nearest the hand
             bool atBack = data.revolver && AtCylinderBack(firearms, weapon, palm, 0f);
             float bestDistance = atBack ? float.MaxValue : caseGrabRadius * caseGrabRadius;
             bool bestSpent = false;
@@ -1152,7 +1160,7 @@ namespace TarkovVR.Source.Weapons
             for (int chamber = 0; chamber < BreakSlots(weapon).Length; chamber++)
             {
                 GameObject model = ChamberModel(firearms, weapon, chamber, out bool spent);
-                // (a revolver's fired cases only: the chambers sit a finger apart, the live rounds stay put)
+                // On a revolver only fired cases: the chambers sit a finger apart, and the live rounds stay put
                 if (model == null || (data.revolver && !spent))
                     continue;
                 float distance = (model.transform.position - palm).sqrMagnitude;
@@ -1166,7 +1174,7 @@ namespace TarkovVR.Source.Weapons
             }
             if (best < 0)
                 return false;
-            // Off Tarkov's books for the model: ours until it goes back or out
+            // Take the model out of Tarkov's arrays: it is ours until it goes back in or out
             if (bestSpent)
             {
                 caseTemplate = weapon.ShellsInChambers != null && best < weapon.ShellsInChambers.Length ? weapon.ShellsInChambers[best] : null;
@@ -1200,7 +1208,7 @@ namespace TarkovVR.Source.Weapons
             bestModel.transform.SetParent(barrelBone, worldPositionStays: true);
             case2Prop = null;
             case2Chamber = -1;
-            // (a revolver's one at a time: an empty cylinder is the ejector's)
+            // A revolver's cases come out one at a time; an empty cylinder is the ejector's job
             if (bestSpent && !data.revolver)
             {
                 for (int chamber = 0; chamber < BreakSlots(weapon).Length; chamber++)
@@ -1266,8 +1274,8 @@ namespace TarkovVR.Source.Weapons
             return bones != null && chamber < bones.Length ? bones[chamber] : null;
         }
 
-        // Empty for a new shell: no round in it for the inventory, no fired case to draw out (one Tarkov counts with no model left for it,
-        // a re-equip's, can't be drawn: it doesn't block the chamber, and loading it clears it)
+        // Empty for a new shell: no round in it in the inventory and no fired case to draw out. A fired case Tarkov counts without a model
+        // (after a re-equip) can't be drawn, so it doesn't block the chamber; loading the chamber clears it.
         private static bool ChamberEmpty(Firearms firearms, Weapon weapon, int chamber)
         {
             if (BreakSlots(weapon)[chamber].ContainedItem != null)
@@ -1275,8 +1283,8 @@ namespace TarkovVR.Source.Weapons
             return firearms._shellsInShellPort == null || chamber >= firearms._shellsInShellPort.Length || firearms._shellsInShellPort[chamber] == null;
         }
 
-        // Empty, and in a spring-driven cylinder (the M32A1: it fires from where it's wound upward, an empty chamber stops it) next to the
-        // rounds in it, or with none in it the lowest empty one
+        // Empty, and in a spring-driven cylinder also next to the rounds in it, or the lowest empty one if it has none
+        // (the M32A1 fires upward from where it is wound, and an empty chamber stops it)
         private static bool ChamberTakesRound(Firearms firearms, Weapon weapon, int chamber)
         {
             if (!ChamberEmpty(firearms, weapon, chamber))
@@ -1328,7 +1336,7 @@ namespace TarkovVR.Source.Weapons
                 }
                 if (caseOut >= caseLength * caseFreeShare)
                 {
-                    // Out of the chamber: in the hand now, easing into the clip's hold
+                    // Out of the chamber: now in the hand, easing into the clip's hold
                     caseFree = true;
                     caseFreeTime = Time.time;
                     ReleaseHandLatch();
@@ -1368,7 +1376,7 @@ namespace TarkovVR.Source.Weapons
             LetGoOfLiveRound(firearmController, state);
         }
 
-        // A live round let go out of its chamber: into an empty chamber at its mouth, the rig at the chest pouch, else the ground
+        // A live round let go outside its chamber goes into an empty chamber at its mouth, into the rig at the chest pouch, or else to the ground
         private static void LetGoOfLiveRound(FirearmController firearmController, BreakState state)
         {
             Weapon weapon = firearmController.Item;
@@ -1401,7 +1409,7 @@ namespace TarkovVR.Source.Weapons
             }
             if (into == from)
             {
-                // Back where it was: nothing moved for the inventory
+                // Back where it was: no inventory move needed
                 ReturnLiveModel(firearms, from, prop);
                 return;
             }
@@ -1491,7 +1499,7 @@ namespace TarkovVR.Source.Weapons
             firearms._ammoObjectInWeapon[chamber] = prop.GetComponent<AmmoPoolObject>();
         }
 
-        // Let go before it was out, or the gun / hand changed: back in its chamber as Tarkov had it
+        // Let go before it was out, or the gun or hand changed: put it back in its chamber as Tarkov had it
         private static void EndCasePluck(bool putBack)
         {
             if (!HoldingBreakCase)
@@ -1552,7 +1560,7 @@ namespace TarkovVR.Source.Weapons
                 Plugin.MyLog.LogInfo($"[VRBreak] {(spent ? "fired case" : "live round")} left in chamber {chamber}");
         }
 
-        // Done holding it: off the hand, and a fired case off the chamber's books for good
+        // Done holding it: release the hand, and remove a fired case from the chamber's records for good
         private static void ClearCase()
         {
             if (HoldingBreakCase && !caseFree)
@@ -1581,7 +1589,7 @@ namespace TarkovVR.Source.Weapons
             caseFree = false;
         }
 
-        // The drawn shell: on the bore while it comes out, then in the hand (eased onto the clip's hold, its mirror image on the right arm)
+        // Places the drawn shell: on the bore while it comes out, then in the hand, eased onto the clip's hold (mirrored on the right arm)
         private static void PlaceCase(BreakData data)
         {
             if (!HoldingBreakCase || caseProp == null || barrelBone == null)
@@ -1610,7 +1618,7 @@ namespace TarkovVR.Source.Weapons
             SetPoseIn(palm, caseProp.transform, position, rotation);
             if (case2Prop == null)
                 return;
-            // The other case: from beside the first as it came out onto the pair hold's second (the both-barrels clip's)
+            // The other case eases from its place beside the first onto the pair hold's second shell (from the both-barrels clip)
             Transform first = caseProp.transform;
             Vector3 besidePosition = first.position + first.rotation * case2InFirstPosition;
             Quaternion besideRotation = first.rotation * case2InFirstRotation;
@@ -1624,8 +1632,8 @@ namespace TarkovVR.Source.Weapons
                 case2Prop.transform.SetPositionAndRotation(besidePosition, besideRotation);
         }
 
-        // A shell held as a clip holds it: its model sits on the shell's bone turned 90 deg about x (Firearms.ParentShellToTransform); the
-        // other palm's is the mirror image through a plane along the shell (the M32A1's holds are its clips' right hand's)
+        // A shell held as a clip holds it. Its model sits on the shell's bone turned 90 deg about x (Firearms.ParentShellToTransform).
+        // The other palm's hold is mirrored through a plane along the shell (the M32A1's holds come from its clips' right hand).
         private static bool BreakShellHoldInPalm(BreakHold hold, Transform prop, bool rightArm, out Vector3 position, out Quaternion rotation)
         {
             position = hold.position;
@@ -1638,7 +1646,7 @@ namespace TarkovVR.Source.Weapons
             return MirrorHold(normal, Vector3.Scale(centerInProp, prop.lossyScale), leftToRight: !hold.rightHanded, ref position, ref rotation);
         }
 
-        // Each pass after the bones are posed: the drawn case, a new shell on the bore, the cases on a revolver's ejector
+        // Runs in each pass after the bones are posed: places the drawn case, a new shell on the bore, and the cases on a revolver's ejector
         private static void PlaceBreakProps(BreakData data)
         {
             if (HoldingBreakCase && !caseFree)
@@ -1649,17 +1657,17 @@ namespace TarkovVR.Source.Weapons
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // A revolver's ejector: the off hand's trigger at it (no live round left) takes it; pushed in, it carries the fired cases out of
-        // their chambers along the bore and near the end of its travel they come free (Tarkov's shell physics). Let go, it springs home.
+        // A revolver's ejector: the off hand's trigger at it takes it, only with no live round left. Pushed in, it carries the fired cases
+        // out of their chambers along the bore, and near the end of its travel they come free (Tarkov's shell physics). Let go, it springs home.
 
         private static FirearmController ejectorFor;
-        private static Transform ejectorRider;              // ours, on the part the hand pushes: the hand latches on it
+        private static Transform ejectorRider;              // our transform on the part the hand pushes, which the hand latches onto
         private static Vector3 ejectorHandAtGrab;           // the controller at the grab, in the crane's frame
         private static float ejectorShareAtGrab;
         private static bool ejectorOnRightArm;
         private static bool ejectorEjected;                 // this push's cases are out
         private static float ejectorSpeed;                  // m/s along the push, smoothed
-        // The fired cases riding out on it: their chambers and their models' local positions as they sat
+        // The fired cases riding out on it: their chambers, and their models' local positions at rest
         private static FirearmController ejectorCasesFor;
         private static readonly List<int> ejectorCaseChambers = new List<int>();
         private static readonly List<Vector3> ejectorCaseRest = new List<Vector3>();
@@ -1682,7 +1690,7 @@ namespace TarkovVR.Source.Weapons
             }
         }
 
-        // The off hand's trigger: true when it was the ejector's (taken, or refused with live rounds in the cylinder: a double buzz)
+        // Returns true when the off hand's trigger went to the ejector: taken, or refused with live rounds in the cylinder (a double buzz)
         private static bool TryTakeEjector(FirearmController firearmController, BreakData data, BreakState state)
         {
             if (data.ejector == null || ejectorPressBone == null || state.open < data.openDegrees * barrelOpenEnough)
@@ -1695,7 +1703,7 @@ namespace TarkovVR.Source.Weapons
             Firearms firearms = firearmController.Firearms;
             if (firearms == null)
                 return false;
-            // A chamber's shell nearer the palm is the draw's
+            // A fired case nearer the palm is drawn instead
             Slot[] slots = BreakSlots(weapon);
             for (int chamber = 0; chamber < slots.Length; chamber++)
             {
@@ -1703,8 +1711,8 @@ namespace TarkovVR.Source.Weapons
                 if (model != null && spent && (model.transform.position - palm).magnitude < Mathf.Min(distance, caseGrabRadius))
                     return false;
             }
-            // Live rounds in it come out one by one (Tarkov's rule: the ejector is an empty cylinder's): a fired case the trigger can draw
-            // from here is the draw's, else it's refused
+            // With live rounds in it, cases come out one at a time (Tarkov's rule: the ejector only works on an empty cylinder).
+            // A fired case the trigger can draw from here is drawn; otherwise the ejector is refused.
             if (weapon.GetCurrentMagazine() is CylinderMagazine cylinder && cylinder.Count > 0)
             {
                 if (FiredCaseInReach(firearms, weapon, palm))
@@ -1755,7 +1763,7 @@ namespace TarkovVR.Source.Weapons
                 LetGoOfEjector();
                 return;
             }
-            // How far the controller has gone along the finger's way over the push, from where it took it
+            // How far the controller has moved along the fingertip's push path since the grab
             Vector3 push = data.ejector.push;
             float length = Mathf.Max(push.magnitude, ejectorMinPush);
             Vector3 moved = barrelBone.InverseTransformPoint(HandRig(gunHand: false).position) - ejectorHandAtGrab;
@@ -1781,8 +1789,8 @@ namespace TarkovVR.Source.Weapons
             Pulse(SoundHand.OffHand, 0.12f, 0.02f);
         }
 
-        // Out of the back of the cylinder along each chamber's bore, at the push's speed (Tarkov's shell physics from there), off the
-        // chambers' books (a fired case Tarkov counts with no model for it too: a re-equip's)
+        // Throws the cases out of the back of the cylinder along each chamber's bore at the push speed (Tarkov's shell physics from there)
+        // and clears them from the chambers' records, including fired cases Tarkov counts without a model (after a re-equip)
         private static void EjectCases(FirearmController firearmController)
         {
             ejectorEjected = true;
@@ -1825,7 +1833,7 @@ namespace TarkovVR.Source.Weapons
                 Plugin.MyLog.LogInfo($"[VRBreak] ejected {thrown} fired case(s) at {ejectorSpeed:0.##} m/s, chambers {ChambersText(firearmController, weapon)}");
         }
 
-        // The fired cases out along their bores with the ejector, until they come free
+        // Moves the fired cases out along their bores with the ejector, until they come free
         private static void PlaceEjectorCases(BreakData data)
         {
             if (ejectorCasesFor == null || data.ejector == null || ejectorBones == null || ejectorBones.Length == 0 || ejectorBones[0] == null)
@@ -1868,8 +1876,8 @@ namespace TarkovVR.Source.Weapons
             ejectorCasesFor = null;
         }
 
-        // No ejector (the M32A1): an empty cylinder tipped back drops its fired cases (Tarkov's own rule: all of them out of an empty one,
-        // else one at a time by hand)
+        // No ejector (the M32A1): tipping an empty cylinder back drops its fired cases. Tarkov's rule: all of them from an empty cylinder,
+        // otherwise one at a time by hand.
         private static void TryDumpCases(FirearmController firearmController, BreakData data, BreakState state)
         {
             Weapon weapon = firearmController.Item;
@@ -1917,20 +1925,20 @@ namespace TarkovVR.Source.Weapons
         private static int breakShellChamber;
         private static float breakShellOut;                 // m behind the chamber along its bore
         private static float breakShellOutAtCapture;
-        private static Vector3 breakShellHandAtCapture;     // the controller then, in the barrel bone's frame
+        private static Vector3 breakShellHandAtCapture;     // the controller at the capture, in the barrel bone's frame
         private static Vector3 breakShellSeatInBarrel;      // the model seated, in the barrel bone's frame
         private static Quaternion breakShellSeatRotationInBarrel;
         private static Vector3 breakShellBoreInBarrel;
         private static bool breakShellCommitted;
-        private static int breakShellLoaded;                // the move: 0 not back yet, 1 done, -1 refused
+        private static int breakShellLoaded;                // the move's result: 0 = no answer yet, 1 = done, -1 = refused
         private static Transform breakShellRider;
         private static Vector3 breakShellSnapFrom;          // the shell as the hand had it at the capture, in the barrel bone's frame
         private static Quaternion breakShellSnapFromRotation;
         private static float breakShellSnapStart;
         public static float breakShellSnapTime = 0.08f;     // s it eases from the hand onto the bore
         private static bool breakMoveInFlight;              // our move into / out of a chamber is running (LetsSingleRoundIn)
-        // Both barrels empty: a second shell from the same stack, held beside the first as the chambers sit (chamber 0 to 1), into the
-        // other chamber with it. Its own move runs once the first's is in.
+        // With both barrels empty, a second shell from the same stack is held beside the first, offset as the chambers are (chamber 0 to 1),
+        // and goes into the other chamber with it. Its own move runs once the first's is in.
         private static GameObject breakShellSecond;
         private static Vector3 breakShellPairPosition;      // the second in the first's frame
         private static Quaternion breakShellPairRotation;
@@ -1939,9 +1947,9 @@ namespace TarkovVR.Source.Weapons
         private static Quaternion breakShellSecondSeatRotationInBarrel;
         private static Vector3 breakShellSecondSnapFrom;
         private static Quaternion breakShellSecondSnapFromRotation;
-        private static int breakShellSecondLoaded;          // its move: 0 not back yet, 1 done, -1 refused
+        private static int breakShellSecondLoaded;          // its move's result: 0 = no answer yet, 1 = done, -1 = refused
 
-        // A grip at the chest (like TryGrabRound): true when it was this gun's (a shell taken, or none that fits: a double buzz)
+        // A grip at the chest (like TryGrabRound). Returns true when this gun took it: a shell was taken, or none fits (a double buzz).
         private static bool TryGrabBreakShell(bool gunHand)
         {
             if (gunHand || HoldingBarrels || HoldingBreakCase)
@@ -1988,7 +1996,7 @@ namespace TarkovVR.Source.Weapons
             breakShellBackBlocked = false;
             breakShellSecond = null;
             breakShellSecondChamber = -1;
-            // Both empty and two in the stack: both, chamber 0's beside chamber 1's as they sit in the gun
+            // Both chambers empty and two in the stack: take both, chamber 0's shell beside chamber 1's as they sit in the gun
             Transform first = ChamberBone(firearms, 0);
             Transform second = ChamberBone(firearms, 1);
             if (!data.revolver && BreakSlots(weapon).Length == 2 && ChamberEmpty(firearms, weapon, 0) && ChamberEmpty(firearms, weapon, 1) && source.StackObjectsCount >= 2
@@ -2013,7 +2021,7 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // A loose stack (in a grid) that goes into that chamber, the type already in the gun first
+        // Finds a loose stack (in a grid) that fits that chamber, preferring the round type already in the gun
         private static Ammo FindBreakShell(Weapon weapon, int chamber)
         {
             reachableRounds.Clear();
@@ -2125,7 +2133,7 @@ namespace TarkovVR.Source.Weapons
                     PulseRoundHand(false, 0.15f, 0.02f);
                     return;
                 }
-                // Drawn back off the bore, the barrels swung up past reach, or Tarkov took the gun: back in the hand
+                // Pulled back off the bore, the barrels swung up out of reach, or Tarkov took the gun: back in the hand
                 if (wanted > roundLength + breakShellReach + 0.02f || state.open < data.openDegrees * barrelOpenEnough * 0.5f || !GunIdle(firearmController))
                 {
                     TakeBreakShellOffBore();
@@ -2143,8 +2151,8 @@ namespace TarkovVR.Source.Weapons
                 FinishBreakShell(firearmController, weapon);
         }
 
-        // Lined up on an empty chamber's bore behind it: onto it. A pair: either shell lined up on either chamber puts it there and the
-        // other one on the other chamber.
+        // A shell lined up behind an empty chamber, on its bore, goes onto that bore. For a pair, either shell lined up on either chamber
+        // puts it there and the other shell on the other chamber.
         private static void TryPutShellOnBore(Firearms firearms, Weapon weapon)
         {
             if (breakShellData != null && breakShellData.revolver && breakShellSecond == null && TryPutShellAtCylinderBack(firearms, weapon))
@@ -2179,8 +2187,8 @@ namespace TarkovVR.Source.Weapons
             }
         }
 
-        // The back of a revolver's cylinder: the middle of its chamber bones (on the rear face), cylinderBackBehind out along the bore, and
-        // how far round it reaches
+        // The zone at the back of a revolver's cylinder: centred cylinderBackBehind along the bore from the middle of its chamber bones
+        // (on the rear face), with a radius that reaches cylinderBackReach past their ring
         private static bool CylinderBack(Firearms firearms, Weapon weapon, out Vector3 centre, out float radius)
         {
             centre = Vector3.zero;
@@ -2231,9 +2239,9 @@ namespace TarkovVR.Source.Weapons
             return false;
         }
 
-        private static bool breakShellBackBlocked;          // drawn back off a chamber: the back takes it again once it's been out of reach
+        private static bool breakShellBackBlocked;          // pulled back off a chamber: the cylinder back takes it again only after it left the zone
 
-        // A revolver's round near the back of its cylinder: onto the empty chamber whose mouth is nearest it, just behind it
+        // A revolver round near the back of the cylinder goes onto the bore of the empty chamber whose mouth is nearest, just behind it
         private static bool TryPutShellAtCylinderBack(Firearms firearms, Weapon weapon)
         {
             Transform prop = heldRoundProp.transform;
@@ -2275,7 +2283,7 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // A held shell lined up behind an empty chamber, along its bore: how far out
+        // True when a held shell is lined up behind an empty chamber, on its bore; along = how far out it is
         private static bool LinedUpOnBore(Firearms firearms, Weapon weapon, int chamber, Transform prop, out float along)
         {
             along = 0f;
@@ -2291,9 +2299,9 @@ namespace TarkovVR.Source.Weapons
                 && Vector3.Angle(prop.rotation * roundAxisInProp, seatedRotation * roundAxisInProp) <= breakShellCaptureAngle;
         }
 
-        // Seated as Tarkov seats a round (ParentShellToTransform: on the chamber bone, turned 90 deg about x), but turned about the bore to
-        // the roll it's held at: a round looks the same either way, and a cylinder's chamber bones are each rolled their own way round it
-        // (the hand riding the round in turned with the chamber). The pivot moves so the round's own centre stays on the bore.
+        // Seated as Tarkov seats a round (ParentShellToTransform: on the chamber bone, turned 90 deg about x), but rolled about the bore to
+        // the roll it is held at. A round looks the same at any roll, and each of a cylinder's chamber bones is rolled differently around
+        // it (the hand riding the round in would turn with the chamber). The pivot moves so the round's own centre stays on the bore.
         private static void SeatedKeepingRoll(Transform bone, Transform prop, out Vector3 seatPosition, out Quaternion seatRotation)
         {
             Quaternion seated = bone.rotation * Quaternion.Euler(90f, 0f, 0f);
@@ -2341,7 +2349,7 @@ namespace TarkovVR.Source.Weapons
             breakShellSnapStart = Time.time;
             prop.SetParent(barrelBone, worldPositionStays: true);
             PlaceBreakShellOnBore();
-            // The hand rides it in, from where it holds it
+            // The hand rides the shell in from where it holds it
             Transform controller = HandRig(gunHand: false);
             if (breakShellRider == null)
                 breakShellRider = new GameObject("VRBreakShellHand").transform;
@@ -2350,7 +2358,7 @@ namespace TarkovVR.Source.Weapons
             breakShellBlendAtCapture = breakShellBlend;
             if (breakShellApproachLatched && handLatched && !handLatchReleasing && handLatch != null)
             {
-                // Already turned toward the push on the way in: the latch moves onto the round as the hand is
+                // The hand already turned toward the push on the way in: move the latch onto the round where the hand is
                 handLatch.SetParent(breakShellRider, worldPositionStays: true);
                 RebaseLatch();
                 breakShellApproachLatched = false;
@@ -2429,7 +2437,7 @@ namespace TarkovVR.Source.Weapons
             });
         }
 
-        // Home: Tarkov's round model in the chamber for ours
+        // Seated: Tarkov's round model in the chamber replaces ours
         private static void FinishBreakShell(FirearmController firearmController, Weapon weapon)
         {
             int chamber = breakShellChamber;
@@ -2477,7 +2485,7 @@ namespace TarkovVR.Source.Weapons
             EndRoundHold();
         }
 
-        // EndRoundHold's part
+        // The break-action part of EndRoundHold
         private static void ClearBreakShell()
         {
             if (breakShellHeld)
@@ -2495,7 +2503,7 @@ namespace TarkovVR.Source.Weapons
             breakShellCommitted = false;
         }
 
-        // The held shell in the hand (PlaceHeldRound): the load clip's hold, mirrored on the right arm
+        // Places the held shell in the hand (from PlaceHeldRound) at the load clip's hold, mirrored on the right arm
         private static void PlaceHeldBreakShell()
         {
             if (breakShellOnBore || heldRoundProp == null || breakShellData == null || breakShellData.loadHold == null)
@@ -2503,9 +2511,9 @@ namespace TarkovVR.Source.Weapons
             Transform palm = ArmPalm(roundOnRightArm);
             if (palm == null)
                 return;
-            // Two: the both-barrels clip's hold on the pair, else the second beside the first as the chambers sit. One: a revolver's carried
-            // as its clip brings it over, off the controller's hand (the rendered one turns round it toward the push near a chamber:
-            // ApproachBreakShellHand, BlendBreakShellHand)
+            // Two shells: the both-barrels clip's hold on the pair, else the second beside the first as the chambers sit. One revolver
+            // round: carried as its clip brings it over, relative to the controller's hand (the rendered hand turns around it toward the
+            // push near a chamber: ApproachBreakShellHand, BlendBreakShellHand).
             BreakHold pair = breakShellSecond != null ? breakShellData.loadPair : null;
             bool carried = pair == null && breakShellData.carryHold != null;
             Transform frame = carried ? HandRig(gunHand: false) : palm;
@@ -2538,7 +2546,7 @@ namespace TarkovVR.Source.Weapons
             if (breakShellSecond == null && data?.carryHold?.fingers != null && data.loadHold?.fingers != null
                 && data.carryHold.fingers.Length == data.loadHold.fingers.Length)
             {
-                // The carry's fingers into the push's as it nears its chamber and goes in
+                // Blend the carry hold's fingers into the push hold's as the round nears its chamber and goes in
                 float push = breakShellBlend;
                 Vector3[] from = data.carryHold.fingers, to = data.loadHold.fingers;
                 if (breakFingersBlend.Length != from.Length)
@@ -2560,8 +2568,8 @@ namespace TarkovVR.Source.Weapons
             return Mathf.SmoothStep(0f, 1f, 1f - Mathf.Clamp01(breakShellOut / Mathf.Max(breakShellOutAtCapture, 0.005f)));
         }
 
-        // A revolver's round on its way in: the hand riding it, from the carry hold into the push behind it (the load clip's two
-        // moments) as it goes in
+        // A revolver round on its way in: the hand riding it blends from the carry hold into the push hold behind it (two moments of
+        // the load clip)
         private static void BlendBreakShellHand()
         {
             BreakData data = breakShellData;
@@ -2576,11 +2584,11 @@ namespace TarkovVR.Source.Weapons
             SnapHandTo(breakShellRider, prop.position - palmRotation * inPalm, palmRotation);
         }
 
-        private static float breakShellBlend;               // 0 the carry .. 1 the push behind it
+        private static float breakShellBlend;               // 0 = the carry hold .. 1 = the push hold behind it
         private static float breakShellBlendAtCapture;
-        private static bool breakShellApproachLatched;      // the hand latched on its own controller to turn round the round on the way in
+        private static bool breakShellApproachLatched;      // the hand latched to its own controller, to turn around the round on the way in
 
-        // The round in the palm between the carry and the push
+        // The round's pose in the palm, blended between the carry hold and the push hold
         private static bool BlendedShellHold(BreakData data, Transform prop, float blend, out Vector3 position, out Quaternion rotation)
         {
             breakShellBlendHold.position = Vector3.Lerp(data.carryHold.position, data.loadHold.position, blend);
@@ -2589,8 +2597,8 @@ namespace TarkovVR.Source.Weapons
             return BreakShellHoldInPalm(breakShellBlendHold, prop, roundOnRightArm, out position, out rotation);
         }
 
-        // Off the bore: the round stays where the controller carries it (PlaceHeldBreakShell, the carry hold off the controller's hand) and
-        // the hand turns round it toward the push as it nears an empty chamber's mouth, latched on its own controller
+        // Off the bore, the round stays where the controller carries it (PlaceHeldBreakShell: the carry hold relative to the controller's
+        // hand). As it nears an empty chamber's mouth, the hand turns around it toward the push hold, latched to its own controller.
         private static void ApproachBreakShellHand(Firearms firearms, Weapon weapon, bool openEnough)
         {
             BreakData data = breakShellData;
@@ -2623,7 +2631,7 @@ namespace TarkovVR.Source.Weapons
                 LatchHand(controller, gunHand: false);
                 breakShellApproachLatched = true;
             }
-            // The palm round the round: the round's carry pose off the controller, the palm from it by the blended hold
+            // Place the palm around the round: the round's carry pose comes from the controller, the palm from the round by the blended hold
             if (!BreakShellHoldInPalm(data.carryHold, prop, roundOnRightArm, out Vector3 carryPosition, out Quaternion carryRotation)
                 || !BlendedShellHold(data, prop, breakShellBlend, out Vector3 inPalm, out Quaternion inPalmRotation))
                 return;
@@ -2642,7 +2650,7 @@ namespace TarkovVR.Source.Weapons
                 ReleaseHandLatch();
         }
 
-        // OffHandPose: the barrels or a drawn case in the off hand
+        // For OffHandPose: the fingers for the barrels or a drawn case in the off hand
         private static Vector3[] BreakHandFingers(bool rightArm)
         {
             if (!TryGetBreakAction(VRGlobals.firearmController, out BreakData data))
@@ -2654,7 +2662,7 @@ namespace TarkovVR.Source.Weapons
             return BreakFingers(data.foreEnd, rightArm);
         }
 
-        // ApplyHeldFingerPose / ApplyGunHandFingerPose: the drawn case into the fingers once out
+        // From ApplyHeldFingerPose / ApplyGunHandFingerPose: places the drawn case in the fingers once it is out
         private static void PlaceBreakCaseInHand(bool rightArm)
         {
             if (HoldingBreakCase && caseFree && caseOnRightArm == rightArm && TryGetBreakAction(caseFor, out BreakData data))
@@ -2663,7 +2671,7 @@ namespace TarkovVR.Source.Weapons
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // Our move into or out of one of the break-action's chambers (LetsSingleRoundIn): no Tarkov chamber operation
+        // True for our move into or out of one of the break-action's chambers (LetsSingleRoundIn): Tarkov's chamber operation is skipped
         private static bool LetsBreakMoveThrough(FirearmController controller, EFT.InventoryLogic.Operations.IInventoryOperation operation)
         {
             if (!breakMoveInFlight || controller == null || controller != VRGlobals.firearmController || controller.Item == null
@@ -2699,7 +2707,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (firearmController == null || firearmController.FirearmsAnimator == null || firearmController.Item == null)
                 return;
-            // (a revolver's rounds are its cylinder's, as Tarkov's own cylinder operations count them)
+            // A revolver's rounds are counted in its cylinder, as Tarkov's own cylinder operations count them
             if (firearmController.Item.GetCurrentMagazine() is CylinderMagazine cylinder && IsRevolver(firearmController.Item))
             {
                 firearmController.FirearmsAnimator.SetAmmoOnMag(cylinder.Count);
@@ -2744,16 +2752,17 @@ namespace TarkovVR.Source.Weapons
 
         private static float breakLeverPress;               // 0 on the grip .. 1 on the lever
         private static FirearmController breakLeverPressFor;
-        private static Transform leverHandMarker;           // ours: Tarkov's arm IK target for the gun hand while pressing
+        private static Transform leverHandMarker;           // our transform: Tarkov's arm IK target for the gun hand while pressing
         private static Transform leverSavedMarker;          // what _markers[1] / _ikTargets[1] were, put back after the arm IK
         private static Transform leverSavedIkTarget;
         private static bool leverMarkerSwapped;
 
         public static bool BreakLeverPressing => breakLeverPress > 0f && breakLeverPressFor != null;
 
-        // Player.LateUpdate prefix, before the arm IK: Tarkov puts the gun hand on its IK marker, pulled onto the grip's pose near it
-        // (IkProcess: the grip reference within 10 cm); here on ours, from exactly that toward the clip's marker at the press. The gun
-        // itself was anchored on the gun's own marker in Update, so only the hand moves. Back after the IK (RestoreBreakLeverMarker).
+        // Player.LateUpdate prefix, before the arm IK. Tarkov puts the gun hand on its IK marker, pulled onto the grip's pose when near
+        // it (IkProcess: the grip reference within 10 cm). Here _markers[1] is swapped for our marker, which blends from exactly that pose
+        // toward the clip's marker at the press. The gun was already anchored on its own marker in Update, so only the hand moves.
+        // RestoreBreakLeverMarker swaps it back after the IK.
         private static void ApplyBreakLeverHand(FirearmController firearmController, BreakData data)
         {
             EFT.Player player = VRGlobals.player;
@@ -2788,7 +2797,7 @@ namespace TarkovVR.Source.Weapons
             leverMarkerSwapped = true;
         }
 
-        // Player.LateUpdate postfix (ShotgunPatches)
+        // Called from the Player.LateUpdate postfix (ShotgunPatches)
         public static void RestoreBreakLeverMarker()
         {
             if (!leverMarkerSwapped)
@@ -2805,8 +2814,8 @@ namespace TarkovVR.Source.Weapons
             leverSavedIkTarget = null;
         }
 
-        // UpdateMagazineReleaseButton (no magazine on these guns): the gun hand's finger on the lever, the clip's joints over the
-        // animator's (the magazine release's finger machinery), following the hand onto it. True = a break-action of ours.
+        // From UpdateMagazineReleaseButton (these guns have no magazine): puts the gun hand's finger on the lever, the clip's joints over
+        // the animator's (with the magazine release's finger code), as the hand moves onto it. Returns true for a break-action we handle.
         private static bool DriveBreakLeverFinger()
         {
             FirearmController firearmController = VRGlobals.firearmController;
@@ -2830,7 +2839,7 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // The gun went away, the hands changed, Tarkov took it: nothing held stays held
+        // The gun went away, the hands changed, or Tarkov took over: release everything held
         private static void EndBreakHolds()
         {
             if (HoldingBarrels)

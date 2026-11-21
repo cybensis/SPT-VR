@@ -7,7 +7,7 @@ namespace TarkovVR.Patches.Core.Player
     internal class VRGunControllerPatches
     {
         // VisualPass sets the arm IK weights from the animation (1 - LEFT_HAND_WEIGHT curve) right before IkProcess.
-        // During reloads and malfunctions that curve hands the left arm to the animation; put it back on the
+        // During reloads and malfunctions that curve hands the left arm to the animation; this puts it back on the
         // controller. Outside of those animations the weights are already 1, so nothing changes.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "IkProcess")]
@@ -15,8 +15,9 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.IsYourPlayer)
                 return;
-            // The gun arm too (VRGunController.keepGunArmOffAnimation): a weapon switch's body draw drops it through RIGHT_HAND_WEIGHT.
-            // The field as well: VisualPass checks it right after the IK for PlayerBones.Kinematics, which pulls the gun to the animated hand.
+            // The gun arm too (VRGunController.KeepGunArmOffAnimation): a weapon switch's body draw lowers its weight through RIGHT_HAND_WEIGHT.
+            // _firstPersonRightHand is set as well: VisualPass reads it right after the IK for PlayerBones.Kinematics, which would pull
+            // the gun to the animated hand.
             if (VRGunController.KeepGunArmOffAnimation(__instance))
             {
                 __instance._firstPersonRightHand = 1f;

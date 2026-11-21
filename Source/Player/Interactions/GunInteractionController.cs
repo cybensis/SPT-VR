@@ -25,11 +25,11 @@ public class GunInteractionController : MonoBehaviour
     public int lastHitCompIndex = -1;
 
     // --- off-hand weapon interact ---
-    // Reach the support hand to a weapon part to select it; the off-hand trigger executes (InteractHandler).
-    // The legacy dominant-grip + gaze activation can't work with the sling: the grip is always held while holding the gun.
-    public static float maxAnchorDistance = 5f;       // m: the right marker further from the holder than this isn't anchored to
-    public static float interactReachRadius = 0.14f;  // m off-palm to a part to select it (nearest part wins inside it)
-    public static float interactProbeForward = 0.08f; // m wrist->palm along the off controller forward
+    // Reaching the support hand to a weapon part selects it; the off-hand trigger executes it (InteractHandler).
+    // Selecting by dominant grip + gaze can't work with the sling: the grip is always held while holding the gun.
+    public static float maxAnchorDistance = 5f;       // m: a right-hand marker further than this from the holder is not anchored to
+    public static float interactReachRadius = 0.14f;  // m from the palm to a part to select it (the nearest part within it wins)
+    public static float interactProbeForward = 0.08f; // m from wrist to palm along the off controller's forward
     private GamePlayerOwner playerOwner;
     private List<AvailableInteractionState> weaponUiLists;
     private List<Part> meshList;
@@ -45,10 +45,8 @@ public class GunInteractionController : MonoBehaviour
     private Dictionary<Transform, AvailableInteractionState> tacDeviceDictionary;
     private Dictionary<Transform, AvailableInteractionState> malfunctionMeshDictionary;
 
-    //private bool
     public void Init()
     {
-        //gameObject.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
         if (interactables == null)
             interactables = new List<Transform>();
         if (tacDevices == null)
@@ -80,7 +78,6 @@ public class GunInteractionController : MonoBehaviour
             meshHighlighter = GetComponentInChildren<HighLightMesh>();
         else
             meshHighlighter.Awake();
-        //meshHighlighter.Awake();
         initialized = true;
     }
 
@@ -96,11 +93,6 @@ public class GunInteractionController : MonoBehaviour
         }
         transform.localEulerAngles = new Vector3(340, 340, 0);
 
-        //if (VRSettings.GetLeftHandedMode())
-        //    transform.localEulerAngles = new Vector3(340, 40, 0);
-        //else
-        //    transform.localEulerAngles = new Vector3(340, 340, 0);
-        
         Transform rightHandsPositioner = transform.Find("RightHandPositioner");
         if (rightHandsPositioner && rightHandsPositioner.GetComponent<HandsPositioner>())
         {
@@ -114,10 +106,10 @@ public class GunInteractionController : MonoBehaviour
         }
         
         if (VRGlobals.ikManager) {
-            // While the gun is slung / support-held (ChestHang.Detached) the right hand is off the gun: re-assert the freed arm
-            // instead of the gun-held reset (menus/interactions disable + re-enable this component).
-            // Only while that gun is still the one in the hands: a grenade drawn with the gun slung enables its own controller
-            // here before ChestHang has seen the switch (Tarkov sets HandsController, then Spawn).
+            // While the gun is slung or support-held (ChestHang.Detached) the right hand is off the gun, so keep that arm free
+            // instead of resetting it to hold the gun (menus and interactions disable and re-enable this component).
+            // Only while that gun is still in the hands: a grenade drawn with the gun slung enables its own controller here
+            // before ChestHang has seen the switch (Tarkov sets HandsController, then calls Spawn).
             if (TarkovVR.Source.Player.Interactions.ChestHang.Detached && VRGlobals.player != null
                 && VRGlobals.player.HandsController is EFT.Player.FirearmController)
             {
@@ -182,25 +174,22 @@ public class GunInteractionController : MonoBehaviour
 
     private void Update()
     {
-        if (!initialized) //|| VRGlobals.firearmController == null)
+        if (!initialized)
             return;
 
-        // Cache frequently accessed values
         bool isLeftHanded = VRSettings.GetLeftHandedMode();
         bool menuOpen = VRGlobals.menuOpen;      
         bool radialMenuActive = VRGlobals.vrPlayer.radialMenu.active;
 
-        //bool isAiming = VRGlobals.firearmController.IsAiming;
-        // firearmController is optional here: false when null
+        // firearmController can be null here: not aiming then
         bool isAiming = VRGlobals.firearmController?.IsAiming ?? false;
 
-        // Cache camera transform references
         Transform cameraTransform = VRGlobals.VRCam.transform;
         Vector3 cameraPosition = cameraTransform.position;
         Vector3 cameraForward = cameraTransform.forward;
         Vector3 cameraEulerAngles = cameraTransform.eulerAngles;
 
-        // Force cleanup if we're in a state where highlight should not be active
+        // Clean up the highlight in states where it must not be active
         bool interactCommon = !menuOpen && !radialMenuActive && !isAiming && !WeaponPatches.grenadeEquipped && !ManualReloadReplacesMenu();
         int nearestPartIdx = -1;
         bool shouldShowHighlight;
@@ -209,23 +198,9 @@ public class GunInteractionController : MonoBehaviour
         if (!shouldShowHighlight && highlightingMesh)
             ForceCleanupHighlight();
 
-        // Use cached values for player state
         bool isSprintEnabled = VRGlobals.player.IsSprintEnabled;
         bool isInPronePose = VRGlobals.player.IsInPronePose;
 
-        // Disabled, don't believe it's needed anymore as I'm handling shoulder placement elsewhere now
-        /*
-        // Use this to keep the upper arms positioned under the players camera if they're not prone or sprinting
-        if (!isSprintEnabled && !isInPronePose)
-        {
-            transform.position = cameraPosition + new Vector3(0, -0.12f, 0) + (cameraForward * -0.175f);
-        }
-        else
-        {
-            transform.localPosition = Vector3.zero;
-            transform.localEulerAngles = new Vector3(340, 340, 0);
-        }
-        */
         if (menuOpen && highlightingMesh)
         {
             DisableHighlighting();
@@ -246,13 +221,11 @@ public class GunInteractionController : MonoBehaviour
             SetJoystickBlock(isLeftHanded, false);
         }
 
-        // Update UI position if we have an active interaction
         if (lastHitCompIndex != -1)
         {
             UpdateInteractionUI(cameraTransform);
         }
 
-        // Handle weapon positioning (only when needed)
         if (ShouldUpdateWeaponPosition())
         {
             UpdateWeaponPosition();
@@ -264,9 +237,9 @@ public class GunInteractionController : MonoBehaviour
         }
     }
     
-    // Manual Reload on a gun with a magazine, or a tube shotgun the hands load (VRReloadController.Shotgun): the hands do what this menu
-    // did. A malfunction too, on a gun whose handle, slide or bolt the hands clear it with (VRReloadController.Malfunctions); any other
-    // jam (a shotgun's among them) still needs the menu's Fix Malfunction.
+    // True when the hands do what this menu would: Manual Reload on a gun with a magazine, or a gun the hands load (tube shotguns,
+    // bolt-actions, break-actions). Also a malfunction the hands clear with the handle, slide or bolt (VRReloadController.Malfunctions);
+    // any other jam (including a shotgun's) still needs the menu's Fix Malfunction.
     private static bool ManualReloadReplacesMenu()
     {
         if (VRReloadController.MalfunctionClearsByHand(VRGlobals.firearmController))
@@ -292,7 +265,7 @@ public class GunInteractionController : MonoBehaviour
         if (hasMalfunction)
         {
             HandleMalfunctionHighlighting(isLeftHanded);
-            SelectPart(boltIndex, hasExaminedAfterMalfunction ? 1 : 0);   // a jam routes any reach to the bolt, same as the gaze path
+            SelectPart(boltIndex, hasExaminedAfterMalfunction ? 1 : 0);   // during a jam, any reach selects the bolt
         }
         else
         {
@@ -301,8 +274,8 @@ public class GunInteractionController : MonoBehaviour
         }
     }
 
-    // The off hand reaching a weapon part selects it: no button, no gaze. Blocked while the off hand is busy: supporting
-    // (it's on the foregrip, and the mag/bolt zones overlap it) or the gun is detached from the hand (slung / support-held).
+    // Returns the weapon part the off hand is reaching (no button or gaze needed), or -1. Blocked while the off hand is busy:
+    // supporting (it's on the foregrip, which the mag and bolt zones overlap), or the gun is off the hand (slung or support-held).
     private int OffHandNearestPart()
     {
         if (interactables == null || interactables.Count == 0 || VRGlobals.vrPlayer == null ||
@@ -432,29 +405,29 @@ public class GunInteractionController : MonoBehaviour
         if (VRGlobals.weaponHolder == null || VRGlobals.player == null)
             return;
 
-        // Empty hands Tarkov didn't spawn: the holder isn't the gun's any more (WeaponPatches.RepairUnspawnedEmptyHands)
+        // Tarkov went to empty hands without spawning them, so the holder no longer belongs to this gun (WeaponPatches.RepairUnspawnedEmptyHands)
         if (WeaponPatches.RepairUnspawnedEmptyHands())
             return;
 
-        // Strip last frame's collision offsets so the anchor below measures the pristine pose
-        // (they are re-resolved and re-applied fresh by WeaponCollision.Apply after the anchor).
+        // Remove last frame's collision offset so the anchor below measures the unmodified pose
+        // (WeaponCollision.Apply resolves and applies it again after the anchor).
         TarkovVR.Source.Player.Interactions.WeaponCollision.PreAnchor();
-        // Then last frame's reload jolt (it went on before the collision offset)
+        // Then remove last frame's reload jolt (it was applied before the collision offset)
         TarkovVR.Source.Weapons.GunJolt.PreAnchor();
-        // A press check turns the gun in the hand about the thumb's knuckle (VRReloadController.PressCheck): before the anchor, which
-        // then lands the hand's marker on the turned gun at your hand
+        // A press check turns the gun in the hand about the thumb's knuckle (VRReloadController.PressCheck). It runs before the anchor,
+        // which then puts the hand's marker on the turned gun at your hand.
         TarkovVR.Source.Weapons.VRReloadController.ApplyPressCheckGunTurn(VRGlobals.weaponHolder.transform);
 
         if (!WeaponPatches.grenadeEquipped && VRGlobals.firearmController != null)
         {
-            // If the gun is pressed up against something that moves the animator around
+            // Pressing the gun against something makes the animator move GunBaseTransform, so it's reset here
             VRGlobals.firearmController.GunBaseTransform.localPosition = Vector3.zero;
             VRGlobals.firearmController.GunBaseTransform.localEulerAngles = Vector3.zero;
         }
 
-        // Detached from the dominant hand (chest sling, or held by the support hand alone): skip the marker anchor + collision
-        // and let ChestHang stamp the holder with an absolute world pose.
-        // (false = that gun was switched away from: this is the next one, placed below as usual)
+        // Off the dominant hand (chest sling, or held by the support hand alone): skip the marker anchor and collision,
+        // and let ChestHang set the holder's world pose.
+        // (false = the slung gun was switched away from; this is the next gun, placed below as usual)
         if (TarkovVR.Source.Player.Interactions.ChestHang.Hanging && TarkovVR.Source.Player.Interactions.ChestHang.DriveHangPose())
             return;
         if (TarkovVR.Source.Player.Interactions.ChestHang.SupportOnly && TarkovVR.Source.Player.Interactions.ChestHang.DriveSupportPose())
@@ -463,29 +436,30 @@ public class GunInteractionController : MonoBehaviour
         if (TarkovVR.Source.Player.Interactions.ChestHang.HandleHeld && TarkovVR.Source.Player.Interactions.ChestHang.DriveHandleHoldPose())
             return;
 
-        // A grenade with its pin out: turned so the hand keeps the turn it had (GrenadeHold.KeepHandTurn) - before the anchor below, which
-        // then lands the turned grip on your hand
+        // A grenade with its pin out is turned so the hand keeps its rotation (GrenadeHold.KeepHandTurn). This runs before the anchor
+        // below, which then puts the turned grip on your hand.
         if (WeaponPatches.grenadeEquipped)
             GrenadeHold.KeepHandTurn(VRGlobals.weaponHolder.transform);
 
-        // _markers[1] is weapon_R_IK_marker, a bone on the gun that reloads and malfunctions animate - while one plays,
-        // VRGunController keeps the gun where it was in your hand instead of following that marker
+        // _markers[1] is weapon_R_IK_marker, a bone on the gun that reload and malfunction clips animate. While one plays,
+        // VRGunController keeps the gun where it was in your hand instead of following that marker.
         if (!VRGunController.TryHoldGunInHand(VRGlobals.weaponHolder.transform))
         {
-            // The grip where it would be without the recoil on your hand, so the recoil shows on top (RecoilPose.kickShare)
+            // The grip position without the recoil on the hand, so the recoil shows on top of it (RecoilPose.kickShare)
             Vector3 anchor = !WeaponPatches.grenadeEquipped && VRGlobals.firearmController != null
                 ? TarkovVR.Source.Weapons.RecoilPose.GripAnchor(VRGlobals.player._markers[1].transform)
                 : VRGlobals.player._markers[1].transform.position;
-            // A grenade in the left hand is held where the right grip mirrors to across the grenade's own centre plane
-            // (RealLeftHandedPatches.GunPlane), so that mirrored grip lands on the controller. A gun's grip sits on its centre plane;
+            // A grenade in the left hand is anchored at the right grip mirrored across the grenade's centre plane
+            // (RealLeftHandedPatches.GunPlane), so the mirrored grip lands on the controller. A gun's grip sits on its centre plane;
             // a grenade's is 11-12 cm off it.
-            // Mirrored whole (GrenadeHold.mirrorInLeftHand: the positioner scaled -1 on x) the grip marker is the left grip: anchored
-            // as it is, through the positioner's scale (InverseTransformVector) so the holder's local position goes the mirrored way.
+            // When the whole grenade is mirrored (GrenadeHold.mirrorInLeftHand: the positioner scaled -1 on x), the grip marker already
+            // is the left grip. It's anchored as is, through the positioner's scale (InverseTransformVector), so the holder's local
+            // position is mirrored too.
             bool mirroredGrenade = GrenadeHold.MirroredInLeftHand;
             if (!mirroredGrenade && WeaponPatches.grenadeEquipped && Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
                 anchor = RealLeftHandedPatches.ReflectPoint(anchor, planePoint, planeNormal);
             Vector3 differenceBetweenHands = anchor - VRGlobals.weaponHolder.transform.position;
-            // A marker metres off is a gun model gone back to the pool, not one in the hand: the holder would follow it there
+            // A marker metres away belongs to a gun model returned to the pool, not one in the hand; the holder would follow it there
             if (differenceBetweenHands.sqrMagnitude < maxAnchorDistance * maxAnchorDistance)
             {
                 differenceBetweenHands = (mirroredGrenade ? cachedRightHandPositioner.InverseTransformVector(differenceBetweenHands)
@@ -496,15 +470,15 @@ public class GunInteractionController : MonoBehaviour
             }
         }
 
-        // A press check with the gun in the left hand: the gun moved so the left hand (the marker's mirror image) stays on the left controller
+        // A press check with the gun in the left hand moves the gun so the left hand (the marker's mirror image) stays on the left controller
         TarkovVR.Source.Weapons.VRReloadController.HoldPressCheckLeftHand(VRGlobals.weaponHolder.transform);
 
-        // A reload jolt from the gun's clips (a magazine seated, a bolt slammed home) on top of the anchor, before the collision so
-        // the gun's physics has it
+        // A reload jolt (a magazine seated, a bolt slammed home) on top of the anchor. It's applied before the collision so the
+        // collision physics includes it.
         TarkovVR.Source.Weapons.GunJolt.Apply(VRGlobals.weaponHolder.transform);
 
-        // Physical weapon collision, after the marker anchor: the last holder write of the frame, so the anchor math can't cancel it (done
-        // at the gun's final placement this frame, WeaponCollision.atFinalPlacement)
+        // Physical weapon collision runs after the marker anchor as the last holder write of the frame, so the anchor can't cancel it.
+        // It's done at the gun's final placement this frame (WeaponCollision.atFinalPlacement).
         TarkovVR.Source.Player.Interactions.WeaponCollision.Request();
     }
 
@@ -527,16 +501,16 @@ public class GunInteractionController : MonoBehaviour
 
         highlightingMesh = false;
 
-        // Always unblock joystick regardless of highlighter state
+        // Unblock the joysticks whatever the highlighter's state
         VRGlobals.blockLeftJoystick = false;
         VRGlobals.blockRightJoystick = false;
     }
 
-    // Different right handed rotation values in the VR settings can cause the position of the right hand to change, so this helps adjust that
+    // The right-hand rotation settings move the right hand's position, so this compensates for them
     public Vector3 CalculateRightHandPosOffset()
     {
-        // Vertical offset setting is a value from 0-100, horizontal starts at 0, the higher the slider, it goes into negative with the max being
-        // -50, or slider max to the left is +50.
+        // The vertical offset setting is 0-100. The horizontal one starts at 0; raising the slider makes it negative (down to -50),
+        // and the slider fully to the left gives +50.
         float normalizedVertical = VRSettings.GetPrimaryHandVertOffset();
         // Integer division on purpose: the compensation only steps at multiples of 50. "/ 50f" would track fractional offsets.
         float normalizedHorizontal = (int)VRSettings.GetPrimaryHandHorOffset() / 50;
@@ -747,41 +721,17 @@ public class GunInteractionController : MonoBehaviour
     }
 
     public Transform GetFireModeSwitch() { return this.fireModeSwitch; }
-    
-    //------------------------------------------------------------------------------------------------------------------------------------------------------------
-    /*
-    public void AddTacticalDevice(Transform tacDevice, FirearmsAnimator animator) {
-        CreateInteractableMarker(tacDevice, "tacDeviceMarker");
-        GetMesh(tacDevice);
-        List<ActionsTypesClass> listComponents = new List<ActionsTypesClass>();
-        ActionsTypesClass changeMode = new ActionsTypesClass();
-        ActionsTypesClass toggleTacDevice = new ActionsTypesClass();
-        changeMode.Name = "Change Mode";
-        toggleTacDevice.Name = "Turn On/Off";
-        TacticalDeviceController tacDeviceController = new TacticalDeviceController(tacDevice.GetComponent<TacticalComboVisualController>(), animator);
-        changeMode.Action = tacDeviceController.ChangeTacDeviceSetting;
-        toggleTacDevice.Action = tacDeviceController.ToggleTacDevice;
-        listComponents.Add(changeMode);
-        listComponents.Add(toggleTacDevice);
-        ActionsReturnClass fireModList = new ActionsReturnClass();
-        fireModList.Actions = listComponents;
-        weaponUiLists.Add(fireModList);
-        this.tacDevices.Add(tacDevice);
-    }
-    */
+
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private void CreateInteractableMarker(Transform parent, string name)
     {
         GameObject marker = new GameObject(name);
-        //marker.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
-        //marker.AddComponent<UnityEngine.UI.Image>().color = new Color(0, 0.7174f, 1, 1);
         marker.transform.localScale = new Vector3(0.0001f, 0.0001f, 0.0001f);
         marker.transform.parent = parent;
         marker.transform.localPosition = Vector3.zero;
         marker.transform.localEulerAngles = new Vector3(0, 270, 0);
-        //marker.layer = 5;
-        // A reload removes the existing mag marker; adding the new one at the end would put the array indexes out of line,
-        // so it takes the removed one's slot instead
+        // A reload removes the existing mag marker. Adding the new one at the end would put the list indexes out of line,
+        // so it takes the removed marker's slot instead.
         bool replaceInteractable = false;
         for (int i = 0; i < interactables.Count; i++)
         {

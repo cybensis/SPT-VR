@@ -12,7 +12,7 @@ namespace TarkovVR.Patches.Upscalers
     [HarmonyPatch]
     internal class FSRPatches
     {
-        // The two patches below intercept TryRenderFSR2/FSR3 and replaces with custom stereo-aware wrappers at the bottom of this file
+        // The two patches below intercept TryRenderFSR2/FSR3 and replace them with the stereo-aware wrappers at the bottom of this file
         //-----------------------------------------------------------------------------------------------------------------------------------------------
         public static StereoFSR3Wrapper _stereoFSR3Wrapper;
         private static StereoFSR2Wrapper _stereoFSR2Wrapper;
@@ -20,8 +20,8 @@ namespace TarkovVR.Patches.Upscalers
         [HarmonyPatch(typeof(SSAAImpl), "TryRenderFSR3", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(CommandBuffer) })]
         private static bool FixFSR3Render(SSAAImpl __instance, RenderTexture source, RenderTexture destination, CommandBuffer externalCommandBuffer, ref bool __result, bool __runOriginal)
         {
-            // The FSR4 Bridge mod (com.matsix.fsr4bridge) patches this method at higher priority. If it drove the
-            // upscale this frame, __runOriginal is false: let its result stand. Otherwise run the stereo FSR3 wrapper.
+            // The FSR4 Bridge mod (com.matsix.fsr4bridge) patches this method at a higher priority. If it did the
+            // upscale this frame, __runOriginal is false and its result stands. Otherwise run the stereo FSR3 wrapper.
             if (!__runOriginal)
                 return false;
 
@@ -54,7 +54,7 @@ namespace TarkovVR.Patches.Upscalers
                 source,
                 destination,
                 VRJitterComponent.CurrentJitter,
-                VRJitterHelper.CurrentSampleCount,   // sequence length == what the jitter actually cycles
+                VRJitterHelper.CurrentSampleCount,   // sequence length = the number of jitter samples actually cycled
                 __instance._currentCamera,
                 __instance.OpticLensRenderer != null || __instance.CollimatorRenderer != null,
                 externalCommandBuffer
@@ -95,7 +95,7 @@ namespace TarkovVR.Patches.Upscalers
                 source,
                 destination,
                 VRJitterComponent.CurrentJitter,
-                VRJitterHelper.CurrentSampleCount,   // sequence length == what the jitter actually cycles
+                VRJitterHelper.CurrentSampleCount,   // sequence length = the number of jitter samples actually cycled
                 __instance._currentCamera,
                 __instance.OpticLensRenderer != null || __instance.CollimatorRenderer != null,
                 externalCommandBuffer
@@ -177,19 +177,6 @@ namespace TarkovVR.Patches.Upscalers
             {
                 _ = __instance._rcasShader == null;
             }
-            /*
-            var prism = mainCamera.GetComponent<PrismEffects>();
-            if (prism != null && prism.useFog && prism.m_Material2 != null)
-            {
-                // 1. Setup the fog properties for this frame
-                prism.method_5(prism.m_Material2);
-
-                // 2. Draw the fog DIRECTLY onto the source texture.
-                // This forces FSR3 to treat the fog as part of the actual geometry.
-                // FSR3 will now upscale the fog and the object edges TOGETHER.
-                Graphics.Blit(source, source, prism.m_Material2, 0);
-            }
-            */
             __instance._mainCamera = mainCamera;
             __instance.CalcDeviceDepthToViewSpaceDepthParams(mainCamera);
             int num = source != null ? source.width : Screen.width;
@@ -290,7 +277,7 @@ namespace TarkovVR.Patches.Upscalers
             commandBuffer.SetComputeIntParams(__instance._computeLuminancePyramidShader, "workGroupOffset", __instance.zeroIntVec);
             commandBuffer.SetComputeIntParams(__instance._computeLuminancePyramidShader, "renderSize", __instance.renderSize);
             commandBuffer.DispatchCompute(__instance._computeLuminancePyramidShader, 0, num7, num8, 1);
-            // (FsrMaskClean.Remap: with the VR hidden-area mask on, copies where the mask reads as still, empty sky)
+            // FsrMaskClean.Remap: with the VR hidden-area mask on, FSR reads copies in which masked pixels are still, empty sky
             commandBuffer.SetComputeTextureParam(__instance._reconstructPreviousDepthShader, 0, "r_input_motion_vectors", FsrMaskClean.Remap(BuiltinRenderTextureType.MotionVectors));
             commandBuffer.SetComputeTextureParam(__instance._reconstructPreviousDepthShader, 0, "r_input_depth", FsrMaskClean.Remap(BuiltinRenderTextureType.ResolvedDepth));
             commandBuffer.SetComputeTextureParam(__instance._reconstructPreviousDepthShader, 0, "r_input_color_jittered", source);
@@ -374,8 +361,8 @@ namespace TarkovVR.Patches.Upscalers
             return false;
         }
         
-        // The game's FSR2Wrapper.PrepareOutput hands FSR the built-in depth / motion (implicit BuiltinRenderTextureType ->
-        // RenderTargetIdentifier, 5 calls): routed through FsrMaskClean.Remap like the FSR3 path above.
+        // The game's FSR2Wrapper.PrepareOutput passes FSR the built-in depth and motion textures through 5 implicit
+        // BuiltinRenderTextureType -> RenderTargetIdentifier conversions. These are rerouted through FsrMaskClean.Remap, like the FSR3 path above.
         [HarmonyTranspiler]
         [HarmonyPatch(typeof(FSR2Wrapper), "PrepareOutput")]
         private static IEnumerable<CodeInstruction> FSR2MaskCleanInputs(IEnumerable<CodeInstruction> instructions)
@@ -424,12 +411,9 @@ namespace TarkovVR.Patches.Upscalers
             cmdBuf.SetComputeFloatParam(shader, "fPreExposure", 1f);
             cmdBuf.SetComputeFloatParam(shader, "fPreviousFramePreExposure", 1f);
             float num3 = __instance.renderSize[0] / (float)__instance.renderSize[1];
-            //float val = Mathf.Tan(0.5f * __instance._mainCamera.fieldOfView * (Mathf.PI / 180f)) * num3;
-            //float val = 1.0f / __instance._mainCamera.projectionMatrix.m00;
             float val = 1.0f / __instance._mainCamera.projectionMatrix.m11;
             cmdBuf.SetComputeFloatParam(shader, "fTanHalfFOV", val);
             cmdBuf.SetComputeFloatParam(shader, "fJitterSequenceLength", __instance.jitterPhaseCount);
-            //float val2 = Mathf.Max(0f, Mathf.Min(1f, Time.deltaTime));
             float val2 = XRDevice.refreshRate > 0 ? 1f / XRDevice.refreshRate : Time.deltaTime;
             cmdBuf.SetComputeFloatParam(shader, "fDeltaTime", val2);
             cmdBuf.SetComputeFloatParam(shader, "fDynamicResChangeFactor", 0f);

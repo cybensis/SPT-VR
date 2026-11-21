@@ -5,7 +5,7 @@ namespace TarkovVR.Source.Controls
 {
     internal class ControllerVelocity
     {
-        //These two method handle getting velocity of your controller straight from SteamVR to handle throwing items/grenades
+        // Controller velocity and pose read straight from the pose actions, used for throwing items and grenades
         public static Vector3 GetSteamVRVelocity(SteamVR_Input_Sources inputSource)
         {
             VRPose poseAction = inputSource == SteamVR_Input_Sources.LeftHand

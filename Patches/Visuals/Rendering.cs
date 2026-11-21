@@ -55,7 +55,6 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(SSAAImpl), "ApplySwitch")]
         private static bool SSAAVROutputWidth(SSAAImpl __instance)
         {
-            //__instance._currentCamera.rect = new Rect(0f, 0f, 1f, 1f);
             __instance._cmdBufAfterForwardAlpha.Clear();
             __instance._cmdBufAfterForwardOpaque.Clear();
             __instance._currentCamera.GetCommandBuffers(CameraEvent.AfterDepthNormalsTexture);
@@ -75,7 +74,6 @@ namespace TarkovVR.Patches.Visuals
             {
                 if (__instance._currentSSRatio < 1f)
                 {
-                    //__instance._currentCamera.rect = new Rect(0f, 0f, __instance._currentSSRatio, __instance._currentSSRatio);
                     __instance.CurrentState = SSState.UPSCALE;
                 }
                 if (__instance._dlssWrapper != null)
@@ -83,7 +81,6 @@ namespace TarkovVR.Patches.Visuals
                     __instance._dlssWrapper.Quality = __instance._DLSSCurrentQuality;
                 }
             }
-            //__instance.RenderTexturesAreChanged?.Invoke();
             return false;
         }
 
@@ -96,10 +93,10 @@ namespace TarkovVR.Patches.Visuals
             __instance.FlippedV = true;
         }
 
-        // The game camera's last step (SSAAImpl.OnRenderImage) draws its image with a full-screen quad straight in clip space,
-        // the Y-flipped one while FlippedV. Its destination is the eye image every frame, and a headset camera drawing into the eye
-        // image after this one (uiCam) turns the image over once more. So: into the eye image, flipped only when another headset
-        // camera draws after it this frame (uiCam can be skipped: UiCameraGate); into a texture of its own, always flipped.
+        // The game camera's last step (SSAAImpl.OnRenderImage) draws its image as a full-screen quad directly in clip space,
+        // Y-flipped while FlippedV is set. Its destination is the eye image every frame, and a headset camera drawing into the
+        // eye image after it (uiCam) flips the image once more. So when drawing into the eye image, flip only if another headset
+        // camera draws after it this frame (UiCameraGate can skip uiCam). When drawing into its own texture, always flip.
         private static readonly List<XRDisplaySubsystem> xrDisplays = new List<XRDisplaySubsystem>();
         private static Camera[] cameraList = new Camera[16];
 
@@ -113,7 +110,7 @@ namespace TarkovVR.Patches.Visuals
             __instance.FlippedV = !intoEyeImage || drawnOverBy != null;
         }
 
-        // The desktop window drawn right where the game camera's picture is finished, when nothing draws over it (DesktopMirror)
+        // Draws the desktop window right after the game camera's image is finished, when nothing draws over it (DesktopMirror)
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SSAAImpl), "OnRenderImage")]
         private static void DesktopWindowAfterFinalImage(SSAAImpl __instance, RenderTexture destination)
@@ -121,7 +118,7 @@ namespace TarkovVR.Patches.Visuals
             TarkovVR.Source.Graphics.DesktopMirror.AfterFinalImage(__instance._currentCamera, destination);
         }
 
-        // An enabled headset camera that draws into the eye images after this one (higher depth, no texture of its own): uiCam
+        // Finds an enabled headset camera that draws into the eye images after this one (higher depth, no target texture), i.e. uiCam
         private static Camera LaterEyeCamera(Camera current)
         {
             int count = Camera.allCamerasCount;
@@ -142,7 +139,7 @@ namespace TarkovVR.Patches.Visuals
 
         private static bool IsEyeImage(RenderTexture texture)
         {
-#pragma warning disable CS0618 // GetInstances: the 2019 references' name; still in the game's 2022
+#pragma warning disable CS0618 // GetInstances is obsolete in Unity 2022 but still works
             SubsystemManager.GetInstances(xrDisplays);
 #pragma warning restore CS0618
             foreach (XRDisplaySubsystem display in xrDisplays)
@@ -576,7 +573,7 @@ namespace TarkovVR.Patches.Visuals
             TemporalAntialiasing.JitterSamplesGeneratorRepeatCount = __instance.UnityTAAJitterSamplesRepeatCount;
             if (__instance._impl != null && (__instance._impl.EnableDLSS || __instance._impl.EnableFSR2 || __instance._impl.EnableFSR3))
             {
-                // the live resolution's scale is SteamVR's slider, not supersampling
+                // This scale comes from SteamVR's resolution slider (OpenXRLiveResolution), not from supersampling
                 if (Mathf.Approximately(XRSettings.eyeTextureResolutionScale, TarkovVR.Source.XR.OpenXRLiveResolution.AppliedScale))
                     TemporalAntialiasing.k_SampleCount = 16;
                 else
@@ -594,12 +591,12 @@ namespace TarkovVR.Patches.Visuals
         //---------------------------------------------------------------------------------------------------------------------------------------------------------------
         // PER-LAYER CULL DISTANCES (CPU win)
         // -----------------------------------------------------------------------------------------
-        // Engine-level distance culling on the VR render camera. In MultiPass everything is culled and draw-submitted once per
-        // eye, so dropping renderers saves CPU twice. 0 = no extra cull (the camera far clip).
+        // Per-layer distance culling on the VR camera. In MultiPass everything is culled and submitted once per eye, so
+        // dropping renderers saves CPU twice. 0 = no extra cull (the camera's far clip).
         // Structural layers (Default world geometry, Terrain, Water, Player, PlayerRenderers, Sky, LevelBorder) stay at 0 so
-        // buildings/terrain/other players never pop in/out; the win comes from the high-count clutter layers.
-        // useLayerCullDistances is live (UnityExplorer); cullDistanceMultiplier follows the VR menu's
-        // "Clutter Draw Distance" slider (Graphics). Either change rebuilds + re-applies next frame. Log: "[CullDist]".
+        // buildings, terrain and other players never pop in and out; the savings come from the numerous clutter layers.
+        // cullDistanceMultiplier follows the VR menu's "Clutter Draw Distance" slider (Graphics); a change rebuilds the table
+        // and re-applies it the next frame. Log tag: "[CullDist]".
         public static float cullDistanceMultiplier = 1f;   // scales the whole table; <1 = more aggressive (set from the slider)
 
         private static float[] _cullDistances;             // cached scaled array (rebuilt on multiplier change)

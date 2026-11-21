@@ -14,19 +14,18 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace SptVrFikaSync
 {
-    // A VR player's manual reload on their copy here (VRReloadPacket, from SPT-VR's VRReloadController.Sync), drawn in the
-    // ObservedPlayer.LateUpdate postfix after ArmSyncApply placed the gun (lower priority = later), so everything rides the placed gun:
-    //  - Tarkov's own magazine-out / magazine-in / rechamber operations, which the VR player's inventory moves start on this copy, are
-    //    finished the frame they start (as on the VR player's game: their animation fights the synced arms, and a busy copy refuses
-    //    the next move of a quick reload)
-    //  - the gun's parts the reload moves or hides, by path under the gun's root (rest pose recorded, put back when they stop coming)
-    //  - the bolt catch and the bolt-open layer
-    //  - the magazines / round in the hands: the item's own model (found by id on this copy, or on the ground), on the synced pose
-    //  - a ground magazine in the hand: its world item hidden here too
-    //  - the arms not welded on the gun's markers (a hand on a part, off the gun, or the gun in the left hand) to the synced wrists
-    //  - the reload sounds the VR player played, on this copy's gun (the skipped animations' own sounds don't play)
-    //  - one-off events: the spent case thrown out by the bolt, the chambered round shown as the bolt closes
-    // Only VR players send this; anyone else's copy is left alone. Gate: FikaVrSync.enableReloadSync.
+    // Draws a VR player's manual reload on their copy on this machine, from VRReloadPacket (sent by SPT-VR's VRReloadController.Sync).
+    // Runs in the ObservedPlayer.LateUpdate postfix after ArmSyncApply has placed the gun (lower priority = later), so everything moves with the gun:
+    //  - Tarkov's magazine-out, magazine-in and rechamber operations, started on this copy by the VR player's inventory moves, are finished
+    //    the frame they start. Their animations would fight the synced arms, and a busy copy refuses the next move of a quick reload.
+    //  - Gun parts the reload moves or hides, found by path under the gun's root. Their rest pose is recorded and restored when they stop coming.
+    //  - The bolt catch and the bolt-open layer.
+    //  - Magazines and rounds in the hands: the item's own model (found by id on this copy, or on the ground) at the synced pose.
+    //    A ground magazine in the hand also has its world item hidden here.
+    //  - Arms not attached to the gun's markers (a hand on a part, off the gun, or the gun in the left hand), moved to the synced wrists.
+    //  - The reload sounds the VR player played, on this copy's gun (the skipped animations' own sounds don't play).
+    //  - One-off events: the spent case thrown out by the bolt, and the chambered round shown as the bolt closes.
+    // Only VR players send this packet; other players' copies are left alone. Gate: FikaVrSync.enableReloadSync.
     [HarmonyPatch]
     internal static class ReloadSyncApply
     {
@@ -106,13 +105,13 @@ namespace SptVrFikaSync
                 remote.sounds.Enqueue(nameHash);
         }
 
-        // The VR player works the bolt by hand (BoltCycleSync skips Tarkov's cycle for them)
+        // True when the VR player works the bolt by hand (BoltCycleSync then skips Tarkov's bolt cycle for them)
         public static bool WorksBoltByHand(int netId)
         {
             return remotes.TryGetValue(netId, out Remote remote) && remote.hasPacket && (remote.packet.Flags & VRReloadPacket.ManualBolt) != 0;
         }
 
-        // A new raid: the objects of the last one are gone, nothing to put back
+        // Called on a new raid. The last raid's objects are gone, so there is nothing to restore.
         public static void ResetState()
         {
             remotes.Clear();
@@ -153,7 +152,7 @@ namespace SptVrFikaSync
             Transform weaponRoot = firearmController.WeaponRoot;
             if (remote.pathsRoot != weaponRoot)
             {
-                // Another gun: what was moved on the last one goes back first
+                // The gun changed: restore the parts moved on the previous gun first
                 RestoreParts(remote);
                 remote.pathsRoot = weaponRoot;
                 remote.paths.Clear();
@@ -172,7 +171,7 @@ namespace SptVrFikaSync
             PlaySounds(firearmController, remote);
         }
 
-        // Puts everything back as Tarkov has it; cheap when there's nothing to put back
+        // Restores everything to Tarkov's own state. Cheap when nothing was drawn.
         private static void Release(Remote remote, FirearmController firearmController)
         {
             if (!remote.drawing)
@@ -188,16 +187,18 @@ namespace SptVrFikaSync
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Tarkov's operations the VR player's moves start here, finished at once (VRReloadController.TryForceExpectedOperation's skips).
-        // A VR player's magazines are always by hand, Manual Reload or not (Tarkov's B reload is a different operation, not touched
-        // here), so those are always skipped: else this copy plays the whole clip and the host's "done" to their game waits for its
-        // end (FIKA blocks their trigger till then). The charging handle's rechamber is by hand only with Manual Reload on.
+        // Finishes at once the Tarkov operations that the VR player's moves start on this copy (the same skips as
+        // VRReloadController.TryForceExpectedOperation makes on their game).
+        // A VR player always handles magazines by hand, with or without Manual Reload (Tarkov's B-button reload is a different operation and
+        // is not touched here), so magazine operations are always skipped. Otherwise this copy plays the whole clip, and the host's "done"
+        // reply to the VR player waits for it to end; FIKA blocks their trigger until then.
+        // The charging-handle rechamber is only done by hand with Manual Reload on.
         private static void SkipTarkovReload(FirearmController firearmController, Remote remote, bool manualReload)
         {
             FirearmController.FirearmOperation operation = firearmController.CurrentOperation;
             if (operation is FirearmController.PullOutMagOperation)
             {
-                // The magazine model goes back to Tarkov's pool as it found it
+                // Restore moved parts first, so the magazine model goes back to Tarkov's pool as it came out
                 RestoreParts(remote);
                 firearmController.FastForwardCurrentState();
                 FinishSkipped(firearmController, remote, "magazine out");
@@ -205,7 +206,7 @@ namespace SptVrFikaSync
             else if (operation is FirearmController.InsertMagOperation insertOperation)
             {
                 RestoreParts(remote);
-                // Not BSG's FastForward: it can switch to idle twice when there's no round to chamber
+                // Not BSG's FastForward: it can switch to idle twice when there is no round to chamber
                 insertOperation.OnMagAppeared();
                 insertOperation.OnMagInsertedToWeapon();
                 if (insertOperation.State != EFT.Player.EOperationState.Finished)
@@ -217,19 +218,19 @@ namespace SptVrFikaSync
             {
                 firearmController.FastForwardCurrentState();
                 PlayIdle(firearmController);
-                // FIKA routes the next shell-eject event to this operation while it's set; the skip called it directly
+                // While _isThrowingPatron is set, FIKA routes the next shell-eject event to this operation. The skip already called it, so clear it.
                 if (firearmController is ObservedFirearmController observedController)
                     observedController._isThrowingPatron = false;
                 FinishSkipped(firearmController, remote, "rechamber");
             }
         }
 
-        // A VR player clearing a malfunction by hand: their game runs Tarkov's notice / examine / repair back to back, each skipped to
-        // its end (SPT-VR's VRReloadController.RepairByHand), and FIKA sends them as CheckChamber / ExamineWeapon packets that arrive
-        // together. Skipped only at the next LateUpdate, the repair's CheckChamber would land on the examine still running and be
-        // refused (this copy keeps the malfunction), so both are finished the moment the packet starts them.
-        // Before them this copy may still be playing the "it jammed" beat (StartMalfunction, which ends on its animation's event): the
-        // packets can arrive sooner than its animation ends here, so it is ended first.
+        // When a VR player clears a malfunction by hand, their game runs Tarkov's notice, examine and repair back to back, each skipped to
+        // its end (SPT-VR's VRReloadController.RepairByHand). FIKA sends them as ExamineWeapon / CheckChamber packets that arrive together.
+        // If they were only skipped at the next LateUpdate, the repair's CheckChamber would arrive while the examine still runs and be
+        // refused, and this copy would keep the malfunction. So both are finished the moment the packet starts them.
+        // This copy may also still be playing the jam animation (StartMalfunction, which ends on its animation's event) when the packets
+        // arrive, so that is ended first.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(FirearmController), nameof(FirearmController.ExamineWeapon))]
         private static void EndJamBeatBeforeExamine(FirearmController __instance)
@@ -264,7 +265,7 @@ namespace SptVrFikaSync
             {
                 if (!ClearsMalfunctionsByHand(firearmController, out _) || !(firearmController.CurrentOperation is FirearmController.StartMalfunction))
                     return;
-                // BSG's own skip: the malfunction pose on, then idle
+                // BSG's own skip: applies the malfunction pose, then goes to idle
                 firearmController.FastForwardCurrentState();
                 if (debug)
                     FikaSyncPlugin.Log.LogInfo("[FikaSync] reload: the jam beat skipped to its end on a VR player's copy");
@@ -275,7 +276,7 @@ namespace SptVrFikaSync
             }
         }
 
-        // A VR player's copy, with Manual Reload on
+        // True for a VR player's copy with Manual Reload on
         private static bool ClearsMalfunctionsByHand(FirearmController firearmController, out Remote remote)
         {
             remote = null;
@@ -313,8 +314,8 @@ namespace SptVrFikaSync
             firearmsAnimator?.Animator?.Play(firearmsAnimator.FullIdleStateName, 1, 0.1f);
         }
 
-        // The reload block only clears on Idling's IdleStart event, which the skipped animation never sends. The gun's hierarchy may
-        // have changed (a magazine model back in the pool, a new one in): the paths are looked up again.
+        // The reload block only clears on Idling's IdleStart event, which the skipped animation never sends, so it is sent here.
+        // The gun's hierarchy may have changed (a magazine model back in the pool, a new one added), so the part paths are rebuilt.
         private static void FinishSkipped(FirearmController firearmController, Remote remote, string what)
         {
             if (firearmController.CurrentOperation is FirearmController.Idling idling)
@@ -343,7 +344,7 @@ namespace SptVrFikaSync
             remote.boltOpenWasDriven = driven;
         }
 
-        // As VRReloadController.SetBoltOpen: 0 = closed, 1 = Tarkov's locked-back pose
+        // Same as VRReloadController.SetBoltOpen: 0 = closed, 1 = Tarkov's locked-back pose
         private static void SetBoltOpen(FirearmsAnimator firearmsAnimator, float open)
         {
             IAnimator animator = firearmsAnimator.Animator;
@@ -393,7 +394,7 @@ namespace SptVrFikaSync
             bool missed = false;
             for (int index = 0; index < packet.PartCount; index++)
             {
-                // Still on this gun (a model Tarkov took back to its pool isn't ours to move)
+                // Skip parts no longer on this gun: a model Tarkov took back to its pool isn't ours to move
                 if (!remote.paths.TryGetValue(packet.PartPaths[index], out Transform part) || part == null || !part.IsChildOf(weaponRoot))
                 {
                     missed = true;
@@ -415,7 +416,7 @@ namespace SptVrFikaSync
                     part.gameObject.SetActive(packet.PartShown[index]);
                 remote.partsThisFrame.Add(part);
             }
-            // Stopped coming: as they were
+            // Parts no longer in the packet go back to their rest pose
             if (remote.parts.Count > remote.partsThisFrame.Count)
             {
                 partScratch.Clear();
@@ -430,7 +431,7 @@ namespace SptVrFikaSync
                     remote.parts.Remove(part);
                 }
             }
-            // The gun's hierarchy changed (a magazine swapped, a round model came): look again, at most once a second
+            // A missing part means the gun's hierarchy changed (a magazine swapped, a round model added): rebuild the paths, at most once a second
             if (missed && Time.time - remote.pathsBuiltAt > 1f)
                 BuildPaths(weaponRoot, remote);
         }
@@ -443,7 +444,7 @@ namespace SptVrFikaSync
             remote.parts.Clear();
         }
 
-        // Not one Tarkov has moved elsewhere since (a magazine model back in its pool): that one is its own again
+        // Skips a part Tarkov has reparented since (a magazine model back in its pool): Tarkov owns it again
         private static void RestorePart(Transform part, PartRest rest)
         {
             if (part == null || part.parent != rest.parent)
@@ -454,7 +455,7 @@ namespace SptVrFikaSync
                 part.gameObject.SetActive(rest.active);
         }
 
-        // Every transform under the root by the path SPT-VR sends (names joined by '/', from under the root); the first of equal paths
+        // Maps every transform under the root by the path SPT-VR sends: the names below the root joined by '/'. Of equal paths, the first wins.
         private static void BuildPaths(Transform weaponRoot, Remote remote)
         {
             remote.paths.Clear();
@@ -541,7 +542,7 @@ namespace SptVrFikaSync
             remote.props.Clear();
         }
 
-        // The item on this copy of the player (a magazine in the gun or the rig, the round's stack), else on the ground
+        // Finds the item on this copy of the player (a magazine in the gun or the rig, the round's stack), else on the ground
         private static Item FindItem(ObservedPlayer observed, int itemHash)
         {
             IEnumerable<Item> items = observed.Inventory?.Equipment?.GetAllItems();
@@ -567,8 +568,8 @@ namespace SptVrFikaSync
             return null;
         }
 
-        // Tarkov's own model of the item from its pool (as SPT-VR's CreateProp): colliders off, on the gun's layer, put back before it
-        // returns to the pool
+        // Takes Tarkov's own model of the item from its pool, like SPT-VR's CreateProp. Its colliders are turned off and it is put on the
+        // gun's layer; ReturnProp undoes both before the model goes back to the pool.
         private static PropView CreateProp(Item item, int layer)
         {
             ObjectsFactory objectsFactory = Singleton<ObjectsFactory>.Instance;
@@ -613,8 +614,8 @@ namespace SptVrFikaSync
             view.model = null;
         }
 
-        // A ground magazine whose model is in the VR player's hand: its world item hidden here too (re-asserted, as theirs: the loot
-        // drop schedules its own make-visible)
+        // Hides the world item of a ground magazine whose model is in the VR player's hand. It is hidden again every frame, as on their
+        // game, because the loot drop schedules its own MakeVisible.
         private static void HideGroundMagazine(Remote remote, int itemHash)
         {
             if (itemHash != remote.hiddenGroundHash)
@@ -666,7 +667,8 @@ namespace SptVrFikaSync
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // The arms SPT-VR doesn't have welded on the gun's markers, onto the rendered wrists (in the gun's frame: they ride it)
+        // Moves the arms that SPT-VR doesn't attach to the gun's markers onto the wrists the VR player's game rendered.
+        // The poses are in the gun's frame, so they move with the gun.
         private static void DrawArms(ObservedPlayer observed, Transform weaponRoot, Remote remote, VRReloadPacket packet)
         {
             bool driveLeft = (packet.Flags & VRReloadPacket.DriveLeft) != 0;
@@ -698,7 +700,7 @@ namespace SptVrFikaSync
                 ArmSyncApply.DriveArm(limbs[1], weaponRoot.position + weaponRoot.rotation * remote.rightPosition, weaponRoot.rotation * remote.rightRotation);
         }
 
-        // Each forwarded sound by its event name on this copy's gun (as the eating's: the hash resolved against the gun's sound bank)
+        // Plays each forwarded sound by its event name on this copy's gun. As with eating sounds, the hash is resolved against the gun's sound bank.
         private static void PlaySounds(FirearmController firearmController, Remote remote)
         {
             if (remote.sounds.Count == 0)
@@ -724,7 +726,7 @@ namespace SptVrFikaSync
             }
         }
 
-        // SPT-VR plays them by the name its reload uses (MagOut, BoltOut ...); the gun's bank names them with or without "Snd"
+        // SPT-VR sends the names its reload uses (MagOut, BoltOut ...). The gun's sound bank names them with or without a "Snd" prefix.
         private static string ResolveSoundName(BaseSoundPlayer soundPlayer, int nameHash)
         {
             foreach (var sound in soundPlayer.AdditionalSounds)
@@ -750,11 +752,11 @@ namespace SptVrFikaSync
         }
     }
 
-    // A VR player's bolt-action shot: they work the bolt by hand, so FIKA's bolt cycle on their copy (HandleObservedBoltAction: the
-    // cycle animation, then at its shell-eject event the next round into the chamber) is replaced by just the move, at once, which is
-    // when the VR player's own game makes it (Tarkov chambers a bolt-action's next round as it fires). The spent case flies when their
-    // bolt comes back (ReloadSyncApply's shell counter). SPT-VR sends the cycle packet itself (VRArmSync.SendBoltCycle): FIKA's own
-    // only goes from a fire operation, which the manual bolt ends first.
+    // A VR player works a bolt-action's bolt by hand. On their copy, FIKA's bolt cycle (HandleObservedBoltAction: the cycle animation, then
+    // the next round into the chamber at its shell-eject event) is replaced by moving the round at once. That matches the VR player's own
+    // game, where Tarkov chambers a bolt-action's next round as it fires. The spent case is thrown when their bolt comes back
+    // (ReloadSyncApply's shell counter). SPT-VR sends the cycle packet itself (VRArmSync.SendBoltCycle), because FIKA only sends one from a
+    // fire operation, which the manual bolt ends first.
     [HarmonyPatch]
     internal static class BoltCycleSync
     {

@@ -6,7 +6,7 @@ namespace TarkovVR.Patches.Core.Player
     [HarmonyPatch]
     internal static class LateGunPlacementPatches
     {
-        // Last among the IkProcess prefixes: IKPatches' airborne / run-animation zeroing moves the hands root before it
+        // Runs last among the IkProcess prefixes, because IKPatches' airborne and run-animation zeroing moves the hands root first
         [HarmonyPrefix]
         [HarmonyPriority(Priority.Last)]
         [HarmonyPatch(typeof(EFT.Player), "IkProcess")]
@@ -15,7 +15,7 @@ namespace TarkovVR.Patches.Core.Player
             if (!__instance.IsYourPlayer || __instance.HandsIsEmpty)
                 return;
             LateGunPlacement.BeforeArmIk(__instance);
-            // The gun's collision on that final pose, before the arm IK reaches for it
+            // Apply the gun's collision to that final pose, before the arm IK reaches for it
             Source.Player.Interactions.WeaponCollision.ApplyAtFinalPlacement();
         }
     }

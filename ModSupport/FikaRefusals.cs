@@ -3,8 +3,9 @@ using HarmonyLib;
 
 namespace TarkovVR.ModSupport.FIKA
 {
-    // As a FIKA client: the host's answer to a hands change (FikaClient -> FikaPlayer.HandleCallbackResponse). An error = refused:
-    // FIKA has already undone the change here (it leaves empty hands). CoopHost keeps when, for the quick moves that need to repair it.
+    // On a FIKA client, HandleCallbackResponse is the host's answer to a hands change (FikaClient -> FikaPlayer.HandleCallbackResponse).
+    // A non-empty error means the host refused it, and FIKA has already undone the change locally (leaving empty hands).
+    // CoopHost records when this happened so the quick hands moves that need to repair it can check.
     [HarmonyPatch]
     internal static class FikaRefusals
     {

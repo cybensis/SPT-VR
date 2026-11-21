@@ -4,16 +4,16 @@ using UnityEngine.Rendering;
 
 namespace TarkovVR.Source.Weapons
 {
-    // Decouples the scope's scene resolution from its reticle resolution without redirecting the optic camera's render target:
-    // pointing it at a different RT freezes/blues GPU-Instancer grass (GPUI's motion-vector MRT is tied to the registered target);
-    // shrinking the camera's own target is safe.
+    // Decouples the scope's scene resolution from its reticle resolution without redirecting the optic camera's render target.
+    // Pointing the camera at a different RT freezes GPU-Instancer grass or turns it blue (GPUI's motion-vector MRT is tied to the
+    // registered target); shrinking the camera's own target is safe.
     //
     // The optic camera renders into its own RenderTexture_0 (GClass3687), shrunk in place to opticRenderResolution. Each frame a
-    // CommandBuffer at AfterEverything (after scene + grass + post FX are composited) upscales the camera target into the full-res
-    // lensTex and draws the reticle into it sharp. WeaponPatches points the lens's global _CamTex at lensTex.
+    // CommandBuffer at AfterEverything (after the scene, grass and post FX are composited) upscales the camera target into the
+    // full-res lensTex and draws the reticle into it sharp. WeaponPatches points the lens's global _CamTex at lensTex.
     internal class OpticReticleDecoupler : MonoBehaviour
     {
-        public RenderTexture lensTex;   // full-res texture the lens samples (_CamTex). We own/release it.
+        public RenderTexture lensTex;   // full-res texture the lens samples (_CamTex). This component owns and releases it.
         public OpticRetrice retrice;    // source of the reticle mesh (Renderer is public)
 
         public static bool FlipBlit = false; // flip the upscale blit, if the scope renders upside-down
@@ -61,7 +61,7 @@ namespace TarkovVR.Source.Weapons
                 cmd.Blit(BuiltinRenderTextureType.CameraTarget, lensTex);
 
             // Re-draw the reticle at full res on top (the vanilla low-res draw is suppressed in WeaponPatches).
-            // Material + scale read live from the current sight, so scope swaps stay correct.
+            // The material and scale are read from the current sight each frame, so scope swaps stay correct.
             Renderer partRenderer = retrice != null ? retrice.Renderer : null;
             if (partRenderer != null && partRenderer.gameObject.activeInHierarchy)
             {

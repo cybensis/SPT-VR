@@ -9,48 +9,47 @@ using GrenadeHandsController = EFT.Player.GrenadeHandsController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // A grenade in the hand. The hold button holds it; letting go throws it once it's armed and puts it back (to the chest slot, your
-    // hands as they were) before that.
-    //  - A grenade with a ring (GrenadeRings: the game's own pin and ring bones, eleven of its twelve models): the other hand's index
-    //    finger hooks the ring on its trigger (the arm's IK target latched there, its fingers in the ring), and pulling along the pin
-    //    slides it out; past pinFreeDistance it's armed, its ring stays on that finger. Brought back to the grenade (after being away
-    //    from it) the hand latches on the pin's hole and pushing in re-pins it: Tarkov's PutGrenadeBack, its pin-back clip.
-    //  - Without one (the RDG-2's caps): armed as soon as it's in the hand.
-    // Armed = Tarkov's own pin pull (TryHighThrow -> HighThrowOperation, through its input path, which FIKA syncs), its clip played
-    // through at animatorRushSpeed; the throw = RepositionGrenadeThrow (VRGrenadeController). The pin's pose is set at onBeforeRender,
-    // after the animator wrote it, and put back when the grenade leaves the hands (its model goes back to Tarkov's pool).
+    // A grenade in the hand. It stays held while the hold button (the holding hand's grip) is down. Letting go throws it once it is
+    // armed; before that, letting go puts it back (to the chest slot, with your hands as they were).
+    //  - A grenade with a ring (GrenadeRings: the game's own pin and ring bones, on eleven of its twelve models): the other hand's index
+    //    finger hooks the ring when its trigger is pressed (the arm's IK target is latched there, the fingers in the ring), and pulling
+    //    along the pin slides it out. Past pinFreeDistance the grenade is armed and the ring stays on that finger. Brought back to the
+    //    grenade (after being away from it), the hand latches on the pin's hole, and pushing in re-pins it with Tarkov's PutGrenadeBack
+    //    (its pin-back clip).
+    //  - Without a ring (the RDG-2's caps): armed as soon as it is in the hand.
+    // Arming is Tarkov's own pin pull (TryHighThrow -> HighThrowOperation through its input path, which FIKA syncs), with its clip played
+    // through at animatorRushSpeed. The throw is RepositionGrenadeThrow (VRGrenadeController). The pin's pose is set in onBeforeRender,
+    // after the animator has written it, and restored when the grenade leaves the hands (its model goes back to Tarkov's pool).
     public static class GrenadeHold
     {
-        public static float ringReachRadius = 0.05f;        // m the off hand's index middle joint off where it hooks the ring
+        public static float ringReachRadius = 0.05f;        // m from the off hand's index middle joint to the ring's hook point, to hook it
         public static float pinFreeDistance = 0.03f;        // m the pin slides along its pull before it's out (a real pin's prongs)
-        public static float ringLateralEscape = 0.12f;      // m the off controller strays off the pull line before the finger slips out
+        public static float ringLateralEscape = 0.12f;      // m the off controller may stray off the pull line before the finger slips out
         public static float animatorRushSpeed = 30f;        // Tarkov's pin-pull clip (1.33 s on every grenade) played through at this speed
         public static float animatorRushTime = 0.07f;       // s
-        public static float drawRushTime = 0.05f;           // s of the same for the draw a slot grab skips (its clip still plays out)
-        public static float repinArmDistance = 0.08f;       // m the ring on the finger must first go from the grenade before bringing it back re-pins
-        public static float repinBackOut = 0.02f;           // m pulling back out while pushing the pin in: the finger leaves the grenade, the ring still on it
-        // The left hand (a grenade it took off the chest): the grenade itself mirrored, not only the hold - its pin and ring on the right,
-        // toward the right hand that pulls them. The hand positioner it hangs from is scaled -1 on its x (the controller's left-right),
-        // so hand, grenade and ring are the right hold's mirror.
-        // false = the hand mirrored across the grenade's centre plane, the grenade as it is.
-        public static float swapRadius = 0.08f;             // m any point of the other hand to the grenade's middle: its grip there takes the grenade over
-        // The pin out (and while it goes back in): the hand keeps the turn it had when the pull began. The hand rides Tarkov's grip
-        // marker, and the armed clip turns that marker.
-        // false = the hand follows the clip, and four models get a fixed turn (PlaceArmed).
+        public static float drawRushTime = 0.05f;           // s of the same rush for the draw clip a slot grab skips (its clip still plays out)
+        public static float repinArmDistance = 0.08f;       // m the ring on the finger must first move away from the grenade before bringing it back re-pins
+        public static float repinBackOut = 0.02f;           // m of pulling back out while pushing the pin in that lets go (the ring stays on the finger)
+        // In the left hand (a grenade it took off the chest) the grenade itself is mirrored, not only the hold, so its pin and ring face
+        // the right hand that pulls them. The hand positioner it hangs from is scaled -1 on its x (the controller's left-right), so the
+        // hand, grenade and ring are the mirror of the right-hand hold.
+        public static float swapRadius = 0.08f;             // m from any point of the other hand to the grenade's middle for its grip to take the grenade over
+        // While the pin is out (and while it goes back in), the hand keeps the turn it had when the pull began (KeepHandTurn).
+        // The hand follows Tarkov's grip marker, and the armed clip turns that marker.
 
         private static GrenadeHandsController controller;
         private static Transform pin, ring;
         private static GrenadeRings.RingData ringData;
         private static Vector3 pinRestLocalPosition;
         private static Quaternion pinRestLocalRotation = Quaternion.identity;
-        private static Vector3 pinRestLocalScale = Vector3.one;     // the pin-pull clip scales the pin away: kept while it's ours
-        private static Transform mirroredPositioner;                // the RightHandPositioner scaled -1 on x (mirrorInLeftHand)
+        private static Vector3 pinRestLocalScale = Vector3.one;     // the pin-pull clip scales the pin away: re-applied while we drive the pin
+        private static Transform mirroredPositioner;                // the RightHandPositioner scaled -1 on x for a grenade in the left hand
         private static bool pinWasActive;
-        private static bool heldSeen;               // the hold button down since it's in hand (a grenade drawn another way waits for it)
+        private static bool heldSeen;               // the hold button has been down since it came into the hand (a grenade drawn another way waits for that)
         private static bool holdDown;
         private static bool armRequested, armed, thrown, putBack;
         private static float armRequestedAt;
-        private static bool armCommandSent;         // Tarkov's pin pull asked for (co-op as a client: once the host has answered the take)
+        private static bool armCommandSent;         // Tarkov's pin pull was requested (as a co-op client: only once the host has answered the take)
         private static float armCommandAt;
         private static float pinRushEnds = -1f;
         private static float rushUntil = -1f;
@@ -63,16 +62,16 @@ namespace TarkovVR.Source.Weapons
         private static Transform latchedArmTargetBefore;
         private static Vector3 controllerAtLatch;
         private static float pull;
-        // The pin out: its ring on the off hand's index finger (its middle joint) until the grenade's thrown or the pin's pushed back in
+        // Pin out: its ring hangs on the off hand's index finger (middle joint) until the grenade is thrown or the pin is pushed back in
         private static bool pinInHand;
-        private static Transform pinFinger;         // the finger the ring's on (it stays on it when that hand takes the grenade over)
+        private static Transform pinFinger;         // the finger the ring is on (it stays there when that hand takes the grenade over)
         private static Vector3 pinOnFingerPosition;
         private static Quaternion pinOnFingerRotation = Quaternion.identity;
         private static bool pushingIn;              // the ring's latch is pushing the pin back in (pull runs pinFreeDistance -> 0)
         private static bool repinArmed;             // the ring has been away from the grenade since the pull (or the last push)
-        private static bool pinReseated;            // pushed back in: the pin held on its seat (the pin-back clip would carry it about)
+        private static bool pinReseated;            // pushed back in: the pin is held on its seat (the pin-back clip would move it around)
         private static bool holderTurnedArmed;      // PlaceArmed turned the holder (four models): turned back when the pin goes back in
-        // keepHandTurn: the holder's turn as the grenade came in, and the grip marker's turn under it the last frame it rested
+        // KeepHandTurn: the holder's rotation when the grenade came in, and the grip marker's rotation under it on the last resting frame
         private static Quaternion holderRest = Quaternion.identity;
         private static Quaternion markerAtRest = Quaternion.identity;
         private static bool markerAtRestSeen;
@@ -81,8 +80,8 @@ namespace TarkovVR.Source.Weapons
         private static bool ringInReach;
         private static bool hooked;
 
-        // The off hand on the ring or gripping the pin: its fingers (VRReloadController.OffHandPose) and its arm (ArmLatch) are ours. The
-        // ring just hanging on the finger (trigger open) leaves the hand its own.
+        // With the off hand on the ring or gripping the pin, we drive its fingers (VRReloadController.OffHandPose) and its arm (ArmLatch).
+        // With the ring just hanging on the finger (trigger open) the hand is left alone.
         private static bool OffHandHoldsRing => controller != null && (ringLatched || (pinInHand && offTriggerDown && pinFinger == HookJoint()));
         private static bool offGripDown;
         private static readonly System.Collections.Generic.List<Vector3> offTouchPoints = new System.Collections.Generic.List<Vector3>();
@@ -91,7 +90,7 @@ namespace TarkovVR.Source.Weapons
         internal static Transform ArmLatch(bool rightArm) => controller != null && ringLatched && latch != null && latchedOnRightArm == rightArm ? latch : null;
         public static bool PinOut => controller != null && armed;
 
-        // The grenade in the left hand, mirrored (mirrorInLeftHand): the mirror's world plane normal, the positioner's x
+        // The grenade mirrored in the left hand: the mirror plane's world normal is the positioner's x
         public static bool MirroredInLeftHand => controller != null && mirroredPositioner != null;
         public static bool TryMirrorNormal(out Vector3 normal)
         {
@@ -125,7 +124,7 @@ namespace TarkovVR.Source.Weapons
             }
             if (UpdateSwap())
                 return;
-            // The holding hand's trigger: the quick-access grenades to swap to (the pin in, held, no hand on the ring)
+            // The holding hand's trigger picks a quick-access grenade to swap to (pin in, held, no hand on the ring)
             GrenadePicker.Update(controller, canPick: holdDown && !armed && !armRequested && !ringLatched && !pinInHand);
             if (armRequested && !armed)
                 UpdateArming();
@@ -137,7 +136,7 @@ namespace TarkovVR.Source.Weapons
                     RequestArm("no ring to pull");
                 return;
             }
-            // Let go: thrown once armed (let go while arming, a frame or two: the moment it is), else back to the slot
+            // Let go: thrown once armed (released while arming, which takes a frame or two: thrown the moment it is armed), else put back
             if (armed)
                 Throw();
             else if (!armRequested)
@@ -158,17 +157,17 @@ namespace TarkovVR.Source.Weapons
                 pinRestLocalScale = pin.localScale.sqrMagnitude > 1e-6f ? pin.localScale : Vector3.one;
                 pinWasActive = pin.gameObject.activeSelf;
             }
-            // As its spawn set it (VRGrenadeController.HandleGrenade): what an armed hold's turn is measured off
+            // The holder's rotation as its spawn set it (VRGrenadeController.HandleGrenade): the armed hold's turn is measured from it
             holderRest = VRGlobals.weaponHolder != null ? VRGlobals.weaponHolder.transform.localRotation : Quaternion.identity;
             markerAtRestSeen = false;
-            // In the left hand (taken from the slot with it): the whole hold mirrored on the left controller, or the hold alone
+            // In the left hand (taken from the slot with it): the whole hold is mirrored onto the left controller
             SetMirror(Handedness.GunInLeftHand);
             offGripDown = Handedness.OffHandGrip.state;
             if (Handedness.GunInLeftHand)
                 PlaceHolder(VRGlobals.weaponHolder.transform.localPosition);
         }
 
-        // The positioner scaled -1 on x for the left hand (mirrorInLeftHand), back to 1 for the right
+        // Scales the positioner -1 on x for the left hand, and back to 1 for the right
         private static void SetMirror(bool leftHand)
         {
             Transform positioner = VRGlobals.weaponHolder != null ? VRGlobals.weaponHolder.transform.parent : null;
@@ -235,8 +234,8 @@ namespace TarkovVR.Source.Weapons
             return Handedness.GunHandGrip.state;
         }
 
-        // The other hand's grip pressed at the grenade: that hand takes it over. The ring stays on the finger it's on; not while a
-        // hand is on the ring, or for the moment its pin-pull clip is played through.
+        // The other hand's grip pressed at the grenade: that hand takes it over, and the ring stays on its finger. Not while a hand
+        // is on the ring, or while the pin-pull clip is being played through.
         private static bool UpdateSwap()
         {
             bool offGrip = Handedness.OffHandGrip.state;
@@ -246,7 +245,7 @@ namespace TarkovVR.Source.Weapons
                 return false;
             if (!RealLeftHandedPatches.GrenadeCentre(controller.WeaponRoot, out Vector3 centre))
                 return false;
-            // The other hand's points (palm, knuckles, fingertips): the physical right controller's with the grenade in the left hand
+            // The other hand's points (palm, knuckles, fingertips); with the grenade in the left hand, that is the physical right controller
             VRGlobals.handsInteractionController.GetHandTouchPoints(Handedness.GunHandIsLeft, offTouchPoints);
             float nearest = float.MaxValue;
             foreach (Vector3 point in offTouchPoints)
@@ -282,9 +281,9 @@ namespace TarkovVR.Source.Weapons
             SendArmCommandWhenHostReady();
         }
 
-        // Tarkov's pin pull. Co-op client: only once the host has answered the take (its copy of you still runs the draw we skipped).
-        // Sent sooner, the pin pull and the throw's discard would reach a copy that isn't holding the grenade yet (FIKA's own throw
-        // gate waits on the same answer: FikaClientGrenadeController.CanThrow). Goes anyway after CoopHost.waitLimit.
+        // Tarkov's pin pull. As a co-op client it is sent only once the host has answered the take (its copy of you still runs the draw
+        // we skipped). Sent sooner, the pin pull and the throw's discard would reach a copy that isn't holding the grenade yet (FIKA's
+        // own throw gate waits for the same answer: FikaClientGrenadeController.CanThrow). It is sent anyway after CoopHost.waitLimit.
         private static void SendArmCommandWhenHostReady()
         {
             if (armCommandSent)
@@ -313,7 +312,7 @@ namespace TarkovVR.Source.Weapons
                 }
                 return;
             }
-            // Its pin-pull clip: played through
+            // Play its pin-pull clip through quickly
             if (pinRushEnds < 0f)
             {
                 pinRushEnds = Time.time + animatorRushTime;
@@ -327,7 +326,7 @@ namespace TarkovVR.Source.Weapons
             PlaceArmed();
         }
 
-        // The arms animator run fast for a moment (a clip of something the hands already did), then back at normal speed
+        // Runs the arms animator fast for a moment (through a clip of something the hands already did), then back at normal speed
         internal static void Rush(GrenadeHandsController grenade, float seconds)
         {
             if (grenade == null || grenade._firearmsAnimator == null || ThrowingNow(grenade))
@@ -337,7 +336,7 @@ namespace TarkovVR.Source.Weapons
             rushUntil = Time.time + seconds;
         }
 
-        // Its own throw playing (the throw's freeze owns its animator). Asked per grenade: another grenade's throw must not count
+        // Whether this grenade's throw is playing (the throw's freeze owns its animator). Checked per grenade: another grenade's throw must not count
         private static bool ThrowingNow(GrenadeHandsController grenade) => TarkovVR.Patches.Core.VR.VRGrenadeController.Throwing(grenade);
 
         // The armed hold's holder pose (the same as InputHandlers' PositionGrenadeAfterPinPull)
@@ -353,10 +352,10 @@ namespace TarkovVR.Source.Weapons
                 WeaponPatches.currentGunInteractController.framesAfterEnabled = 0;
         }
 
-        // From GunInteractionController.UpdateWeaponPosition, before the anchor lands the grip marker on the hand. Resting: the hand
-        // follows Tarkov's hold and its grip marker's turn is noted. From the pull until the grenade rests again (pin back in, its clip
-        // played) the holder turns so the marker keeps that turn. Measured under the holder only (the mirrored positioner's -1 scale is
-        // above it), like VRReloadController.ApplyPressCheckGunTurn.
+        // Called from GunInteractionController.UpdateWeaponPosition, before the anchor puts the grip marker on the hand. While resting, the
+        // hand follows Tarkov's hold and the grip marker's rotation is recorded. From the pull until the grenade rests again (pin back in,
+        // its clip played), the holder turns so the marker keeps that rotation. Measured under the holder only (the mirrored positioner's
+        // -1 scale is above it), like VRReloadController.ApplyPressCheckGunTurn.
         internal static void KeepHandTurn(Transform holder)
         {
             if (controller == null || thrown || holder == null || VRGlobals.player == null
@@ -379,7 +378,7 @@ namespace TarkovVR.Source.Weapons
             keptTurnMax = Mathf.Max(keptTurnMax, Quaternion.Angle(markerAtRest, markerNow));
         }
 
-        // The marker's turn in the holder's frame, off the local turns between them (no scale in that chain)
+        // The marker's rotation in the holder's frame, from the local rotations between them (no scale in that chain)
         private static bool MarkerUnderHolder(Transform marker, Transform holder, out Quaternion rotation)
         {
             rotation = Quaternion.identity;
@@ -398,8 +397,8 @@ namespace TarkovVR.Source.Weapons
             return false;
         }
 
-        // The holder where the right-handed hold has it, mirrored for the left hand (VRPlayerManager.MirroredHolderPosition; the hold's
-        // rotation is mirrored by PlaceRightHandForGun, read once here)
+        // Places the holder where the right-handed hold has it, mirrored for the left hand when the grenade itself isn't mirrored
+        // (VRPlayerManager.MirroredHolderPosition; the hold's rotation is mirrored by PlaceRightHandForGun, read once here)
         private static void PlaceHolder(Vector3 rightHanded)
         {
             Transform holder = VRGlobals.weaponHolder.transform;
@@ -417,7 +416,7 @@ namespace TarkovVR.Source.Weapons
         private static void Throw()
         {
             thrown = true;
-            // Bookkeeping only: it must never stop the throw (thrown is set: a throw that didn't happen leaves the grenade in the hand)
+            // Bookkeeping only, and it must never stop the throw: thrown is already set, so a throw that didn't happen would leave the grenade in the hand
             try
             {
                 GrenadeSlot.NoteThrown(controller.Item);
@@ -447,7 +446,7 @@ namespace TarkovVR.Source.Weapons
             if (ring == null || pin == null)
                 return;
 
-            // The ring on the finger: it stays there (trigger open or not) until the grenade's thrown or the pin's pushed back in
+            // The ring stays on the finger (trigger open or not) until the grenade is thrown or the pin is pushed back in
             if (pinInHand)
             {
                 UpdateRepin();
@@ -490,9 +489,9 @@ namespace TarkovVR.Source.Weapons
             return VRGlobals.vrPlayer != null && hands != null && hands.heldItem == null && !VRReloadController.OffHandHolds;
         }
 
-        // The pin out, its ring on the finger: the ring taken away from the grenade and brought back latches the hand where the pin came
-        // out (no button), and pushing in along the pull seats the pin - then Tarkov's own PutGrenadeBack (its pin-back clip, the
-        // grenade idle and safe again). Pulling back out or off the line leaves the pin out, the ring still on the finger.
+        // Pin out, ring on the finger: taking the ring away from the grenade and bringing it back latches the hand where the pin came out
+        // (no button), and pushing in along the pull seats the pin. Then Tarkov's own PutGrenadeBack runs (its pin-back clip; the grenade
+        // is idle and safe again). Pulling back out or off the line leaves the pin out, with the ring still on the finger.
         private static void UpdateRepin()
         {
             if (!armed || thrown || !holdDown)
@@ -564,9 +563,9 @@ namespace TarkovVR.Source.Weapons
             Haptic(Handedness.OffHandSource, 0.4f, 0.04f);
         }
 
-        // The arm's IK target on the ring where the clip's hand holds it, the ring where the pull has it; mirrored across the grenade for
-        // the right hand (the clip's is a left hand). The right arm takes it through RealLeftHandedPatches (VRReloadController.ArmLatch);
-        // the left directly, re-asserted every frame like the reload's latch (VRPlayerManager's edges set it back).
+        // Puts the arm's IK target on the ring where the clip's hand holds it, with the ring where the pull has it. Mirrored across the
+        // grenade for the right hand (the clip's hand is a left hand). The right arm gets it through RealLeftHandedPatches
+        // (VRReloadController.ArmLatch); the left arm directly, set again every frame like the reload's latch (VRPlayerManager's edges reset it).
         private static void PlaceLatch()
         {
             Matrix4x4 ringMatrix = RingMatrix(pull);
@@ -575,11 +574,11 @@ namespace TarkovVR.Source.Weapons
             Quaternion rotation = RingRotation() * ringData.latchRotation;
             if (latchedOnRightArm)
             {
-                // The mirrored grenade: the clip's left hand on the ring, mirrored with it (the position already is). Unmirrored: across
-                // the plane through the ring itself - the grenade isn't mirrored, its ring is where it is.
+                // Mirrored grenade: the clip's left hand on the ring is mirrored with it (the position already is). Unmirrored grenade:
+                // mirror across the plane through the ring itself, since the ring is where it is.
                 if (MirroredInLeftHand)
                 {
-                    // Off the ring's own matrix (the -1 is in it), as the left hand's grip (RealLeftHandedPatches)
+                    // From the ring's own matrix (which includes the -1), like the left hand's grip (RealLeftHandedPatches)
                     if (TarkovVR.Source.Player.Body.HandMirror.TryOtherPalmFromMirroredFrame(ringMatrix * Matrix4x4.Rotate(ringData.latchRotation),
                         rightToLeft: false, out Quaternion mirroredPalm))
                         rotation = mirroredPalm;
@@ -619,15 +618,15 @@ namespace TarkovVR.Source.Weapons
                 repinArmed = false;
                 pinReseated = false;
             }
-            // The hand off the ring's latch, the ring on its index finger from here
+            // The hand comes off the ring's latch; from here on the ring is on its index finger
             Unlatch();
             Haptic(Handedness.OffHandSource, 0.8f, 0.07f);
             Haptic(Handedness.GunHandSource, 0.3f, 0.04f);
             RequestArm("pin out");
         }
 
-        // The pin on the grenade: at rest on its seat, slid out along its pull. Set through its local pose (Transform.rotation goes wrong
-        // under a mirrored grenade's -1 scale), then read back as the world pose SetPositionAndRotation takes.
+        // The pin on the grenade, slid out from its seat along its pull. Set through its local pose (Transform.rotation goes wrong under a
+        // mirrored grenade's -1 scale), then read back as the world pose SetPositionAndRotation takes.
         private static void PinPose(float slid, out Vector3 position, out Quaternion rotation)
         {
             SeatPin(slid);
@@ -652,8 +651,8 @@ namespace TarkovVR.Source.Weapons
             return hookPoint;
         }
 
-        // The ring's full world matrix with the pin slid that far out, scale included (a mirrored grenade's -1 reaches it); its rotation
-        // Unity's way (parent rotations multiplied, the scale's sign left out - what SetPositionAndRotation and HandMirror take)
+        // The ring's full world matrix with the pin slid that far out, scale included (a mirrored grenade's -1 reaches it). RingRotation
+        // gives its rotation the Unity way (parent rotations multiplied, the scale's sign left out), which SetPositionAndRotation and HandMirror take.
         private static Matrix4x4 RingMatrix(float slid)
         {
             Matrix4x4 pinMatrix = Matrix4x4.Translate(PullAxisWorld() * slid) * pin.parent.localToWorldMatrix
@@ -671,7 +670,7 @@ namespace TarkovVR.Source.Weapons
             return pin.parent.TransformVector(ringData.pullAxis).normalized;
         }
 
-        // The off controller's place in the world (the rig's off hand follows it, whichever hand holds the grenade)
+        // The off controller's world position (the rig's off hand follows it, whichever hand holds the grenade)
         private static Vector3 OffController()
         {
             return VRGlobals.vrPlayer.LeftHand.transform.position;
@@ -688,7 +687,7 @@ namespace TarkovVR.Source.Weapons
 
         private static Transform hookJointPalm, hookJoint;
 
-        // The off hand's index middle joint to where it hooks the ring
+        // Distance from the off hand's index middle joint to where it hooks the ring
         private static float HookDistance()
         {
             Transform joint = HookJoint();
@@ -720,7 +719,7 @@ namespace TarkovVR.Source.Weapons
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // After every LateUpdate: the pin where the pull or the fingers have it (the animator wrote its own pose this frame), the rush ended
+        // After every LateUpdate: puts the pin where the pull or the finger has it (the animator wrote its own pose this frame), and ends the rush
         private static void OnBeforeRender()
         {
             if (rushing != null && Time.time >= rushUntil)
@@ -744,7 +743,7 @@ namespace TarkovVR.Source.Weapons
                 pin.localScale = pinRestLocalScale;
             if (ringLatched && pushingIn && joint != null)
             {
-                // Pushed back in: blended from the finger onto its seat as the push goes
+                // Being pushed back in: blended from the finger onto its seat as the push goes on
                 float seated = 1f - Mathf.Clamp01(pull / pinFreeDistance);
                 PinPose(pull, out Vector3 seatPosition, out Quaternion seatRotation);
                 pin.SetPositionAndRotation(Vector3.Lerp(joint.position + joint.rotation * pinOnFingerPosition, seatPosition, seated),
@@ -760,7 +759,7 @@ namespace TarkovVR.Source.Weapons
             }
             else if (pinReseated)
             {
-                // Pushed back in: on its seat through Tarkov's pin-back clip (its pin comes from the clip's own hand)
+                // Pushed back in: kept on its seat through Tarkov's pin-back clip (that clip moves the pin with its own hand)
                 SeatPin(0f);
             }
         }

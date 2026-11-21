@@ -4,11 +4,11 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // The free left hand's open pose = the right hand's baked open pose (rightRestPoseEuler), mirrored (HandMirror: each joint's turn
-    // from its bind pose reflected through the body's centre plane), so both hands show the same pose. Replaces the left bake
-    // (restPoseEuler) and its fixed idle flex / spread deltas, which were tuned for that bake; the loot-dot "ready" curl stays on top,
-    // and Index finger tracking curls from it. Recomputed every frame (15 joints), so a live edit of the right bake shows on both
-    // hands. false = the left bake.
+    // The free left hand's open pose is the right hand's baked open pose (rightRestPoseEuler), mirrored by HandMirror (each joint's
+    // turn from its bind pose is reflected through the body's centre plane), so both hands show the same pose. It replaces the left
+    // bake (restPoseEuler) and its fixed idle flex / spread deltas. The loot pointer's "ready" curl still goes on top, and Index finger
+    // tracking curls from it. Recomputed every frame (15 joints), so a live edit of the right bake shows on both hands.
+    // mirrorOpenHand = false uses the left bake.
     internal partial class HandsInteractionController
     {
         public static bool mirrorOpenHand = true;
@@ -17,7 +17,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static readonly Dictionary<string, Quaternion> mirrorLeftLocals = new Dictionary<string, Quaternion>();
         private Vector3[] mirroredLeftRest;
 
-        // In ReplayRestPose's order (the left's fingers as found, three joints each)
+        // The pose is in ReplayRestPose's order: the left hand's fingers in the order found, three joints each
         private bool TryGetMirroredLeftRest(out Vector3[] pose)
         {
             pose = null;

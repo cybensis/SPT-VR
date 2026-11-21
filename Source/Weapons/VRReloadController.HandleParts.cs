@@ -5,12 +5,12 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // Parts the held handle moves that Tarkov's held bolt pose can't (data from gen_extras.py):
-    //  - the bolt of a gun with no locked-back pose (Mk47, STM-9: no *catch_on clip, so blending that pose in leaves the bolt shut),
-    //    moved back with the handle as far as the gun's own rack clip moves it
-    //  - a second handle on a part of the gun (the Spear's folding side handle, on its upper): the knob folds out as the hand takes it,
-    //    the base slides back under the hand, and the slider it runs in follows once the base has come sliderLag back. The hand rides
-    //    our own frame on the receiver, which none of those parts moves.
+    // Parts the held charging handle moves that Tarkov's held-bolt pose can't (data from gen_extras.py):
+    //  - the bolt of a gun with no locked-back pose (Mk47, STM-9 have no *catch_on clip, so blending that pose in leaves the bolt shut).
+    //    It moves back with the handle as far as the gun's own rack clip moves it.
+    //  - a second handle on another part of the gun (the Spear's folding side handle, on its upper). The knob folds out as the hand
+    //    takes it, the base slides back under the hand, and the slider it runs in follows once the base has come back sliderLag.
+    //    The hand rides our own frame on the receiver, which none of those parts move.
     public static partial class VRReloadController
     {
         public static float sideKnobFoldTime = 0.1f;        // s the knob takes to fold out as the hand takes it
@@ -32,7 +32,7 @@ namespace TarkovVR.Source.Weapons
             public Vector3 restLocalPosition;
             public Vector3 axis;                            // one metre back, in the bone's parent's frame
             public float ratio;                             // m of bolt per m of handle
-            public float gap = 0f;                          // m it rests back of where the rack starts: the handle comes that far before it moves it
+            public float gap = 0f;                          // m it rests behind where the rack starts; the handle travels that far before it moves the bolt
             public float room = float.MaxValue;             // m from where it rests to its full back
         }
 
@@ -47,7 +47,7 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 sideBaseRestLocalPosition;
         private static Quaternion sideKnobRestLocalRotation;
         private static Vector3 sideSliderAxis;              // one metre back, in the slider's parent's frame
-        private static Vector3 sideBaseAxis;                // and in the slider's, which the base sits in
+        private static Vector3 sideBaseAxis;                // the same, in the slider's frame (the base's parent)
         private static float sideKnobFold;                  // 0 = folded away, 1 = out
         private static readonly List<MovedBolt> movedBolts = new List<MovedBolt>();
 
@@ -64,7 +64,7 @@ namespace TarkovVR.Source.Weapons
             return sideHandle;
         }
 
-        // The middle of the knob, folded away: only a gun with that part fitted has one
+        // The centre of the knob in its folded position. Only a gun with that part fitted has one.
         private static bool TryGetSideKnobPoint(FirearmController firearmController, out Vector3 point)
         {
             point = Vector3.zero;
@@ -83,7 +83,7 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // On a jammed gun only when the hands clear it, like the main handle
+        // On a jammed gun, only while the hands may clear it, like the main handle
         private static bool InSideHandleZone(FirearmController firearmController, Weapon weapon)
         {
             if (!HandsMayWorkAction(firearmController, weapon) || !TryGetSideKnobPoint(firearmController, out Vector3 point))
@@ -130,8 +130,8 @@ namespace TarkovVR.Source.Weapons
                 if (bone == null || bone.parent == null)
                     continue;
                 MovedBolt moved = new MovedBolt { bone = bone, restLocalPosition = bone.localPosition, axis = bone.parent.InverseTransformVector(backWorld), ratio = saved.ratio };
-                // An open bolt rests cocked (the Uzi's and AA-12's at full back): the handle meets it only once it's come back that far,
-                // and it stops at full back
+                // An open bolt rests cocked (the Uzi's and AA-12's at full back). The handle only meets it after travelling that far,
+                // and it stops at full back.
                 if (saved.closed != null && saved.closed.Length >= 3 && saved.fullBack != null && saved.fullBack.Length >= 3 && moved.axis.sqrMagnitude > 1e-8f)
                 {
                     Vector3 closed = new Vector3(saved.closed[0], saved.closed[1], saved.closed[2]);
@@ -143,7 +143,7 @@ namespace TarkovVR.Source.Weapons
             }
         }
 
-        // LateUpdate, after the animator has posed them this frame
+        // Called in LateUpdate, after the animator has posed these parts this frame
         private static void ApplyHandleMovedParts()
         {
             if (heldSideHandle != null && sideSlider != null && sideBase != null && sideKnob != null)

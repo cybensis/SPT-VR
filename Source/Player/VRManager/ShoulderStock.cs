@@ -6,32 +6,33 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.VRManager
 {
-    // Virtual gunstock, modelled on the VR Expansion Plugin's GS_GunTools stock: the gun stays in the rear hand and only its aim changes,
-    // the mount rides the head's position (never its turning) under the neck, and its influence fades with distance instead of snapping.
-    // The support hand is drawn on the foregrip, so the gun must keep passing through it: the pivot starts on the gun's line at the
-    // butt, then rides the neck and follows the real butt only slowly (filters the rear hand's shake out of the aim).
-    // Only guns with a stock on the shoulder: a mod Tarkov marks HasShoulderContact and not Weapon.Folded, or a built-in stock
-    // (no stock slot: AUG, MDR, ASh-12, RFB, AXMC, AK-50) by its measured length.
-    // All maths in tracking space (hand rig-locals + the raw headset pose): the hideout rewrites the camera's local transform.
+    // Virtual gunstock, modelled on the VR Expansion Plugin's GS_GunTools stock. The gun stays in the rear hand and only its aim changes.
+    // The stock's mount follows the head's position (never its rotation) under the neck, and its influence fades with distance instead
+    // of snapping. The support hand is drawn on the foregrip, so the gun must keep passing through it: the pivot starts on the gun's line
+    // at the butt, then moves with the neck and only slowly follows the real butt, which filters the rear hand's shake out of the aim.
+    // Only guns with a shouldered stock count: a mod Tarkov marks HasShoulderContact that isn't Weapon.Folded, or a built-in stock
+    // (no stock slot: AUG, MDR, ASh-12, RFB, AXMC, AK-50) judged by its measured length.
+    // All maths is in tracking space (hand rig-locals and the raw headset pose), because the hideout rewrites the camera's local transform.
     public static class ShoulderStock
     {
 
 
-        // Influence = reach x height x posture, each a fade (full -> zero):
-        // reach = the butt's sideways/forward distance from the line straight down from the neck (a butt in the shoulder pocket sits
-        // ~15-18 cm out; a gun held out at arm's length has it 30+ cm ahead)
+        // Influence = reach x height x posture, each fading from full to zero.
+        // Reach (m): the butt's horizontal distance from the line straight down from the neck. A butt in the shoulder pocket sits
+        // ~15-18 cm out; a gun held out at arm's length has it 30+ cm ahead.
         public static float fullInfluenceReach = 0.20f;
         public static float zeroInfluenceReach = 0.30f;
-        // height = how far the butt sits below the neck point: full between these, fading over heightFade outside them
+        // Height (m): how far the butt sits below the neck point. Full between these, fading over heightFade outside them.
         public static float minBelowNeck = -0.05f;
         public static float maxBelowNeck = 0.40f;
         public static float heightFade = 0.08f;
-        // posture = the gun points away from you along its line (the angle between the gun and neck -> a point 1 m down the gun)
+        // Posture (deg): the gun must point away from you along its line. Measured as the angle between the gun and the line from the neck
+        // to a point 1 m down the gun.
         public static float fullInfluenceAngle = 25f;
         public static float zeroInfluenceAngle = 40f;
-        public static float influenceRate = 6f;      // 1/s the influence can change at most (a fast hand move can't jerk the aim)
+        public static float influenceRate = 6f;      // 1/s, the fastest the influence can change (so a fast hand move can't jerk the aim)
 
-        // How slowly the resting butt follows where the gun's butt really is (s). Longer = steadier aim, slower to follow a re-shoulder.
+        // s, how slowly the resting pivot follows the gun's real butt. Longer = steadier aim, but slower to follow a re-shoulder.
         public static float pivotFollowTime = 0.35f;
 
         public static float integralStockMinLength = 0.12f; // m behind the grip for a gun without a stock slot to count as stocked
@@ -52,8 +53,8 @@ namespace TarkovVR.Source.Player.VRManager
         public static float Blend => influence;
         public static float SpringMult => 1f + (braceStiffness - 1f) * influence;
 
-        // Called from the two-handed aim build each frame; returns the aim base (world space): the rear hand, moved toward the
-        // resting pivot by the influence. The gun aims from it at the support hand.
+        // Called from the two-handed aim each frame. Returns the aim base in world space: the rear hand, moved toward the
+        // resting pivot by the influence. The gun aims from it toward the support hand.
         public static Vector3 UpdateAimBase(Transform rearHandTransform, Transform supportHandTransform, float deltaTime)
         {
             Vector3 rearWorld = rearHandTransform.position;
@@ -63,7 +64,7 @@ namespace TarkovVR.Source.Player.VRManager
 
             if (!VRSettings.GetVirtualStockOn() || TarkovVR.Source.Player.Interactions.ChestHang.Detached)
             {
-                // Detached = the rear hand is off the gun (slung / support-held): no stock butt to speak of
+                // Detached = the rear hand is off the gun (slung / support-held), so there is no stock butt
                 ResetState();
                 HideViz();
                 return rearWorld;
@@ -103,8 +104,8 @@ namespace TarkovVR.Source.Player.VRManager
             }
             influence = Mathf.MoveTowards(influence, target, influenceRate * deltaTime);
 
-            // The resting pivot: captured on the gun's line at the butt (no aim change when the stock comes on), then held to the
-            // neck, turning with the gun around it (not with the head), and pulled slowly toward the real butt
+            // The resting pivot is captured on the gun's line at the butt, so the aim doesn't change when the stock comes on. After that
+            // it is held relative to the neck, turns around it with the gun (not with the head), and is pulled slowly toward the real butt.
             float supportYaw = HorizontalYaw(supportHand - neck, lastSupportYaw);
             if (!engaged && influence > 0f)
             {
@@ -262,8 +263,8 @@ namespace TarkovVR.Source.Player.VRManager
             }
         }
 
-        // Grip -> buttplate: the rear-most extent behind the grip marker along the barrel-back axis (WeaponRoot +up; muzzle = -up) of
-        // the stock's own renderers (under the mod_stock* slot transforms), not the whole gun, whose receiver caps, scope eyecups and
+        // Grip-to-buttplate length: how far the stock's own renderers (under the mod_stock* slot transforms) reach behind the grip marker
+        // along the barrel's back axis (WeaponRoot +up; the muzzle is -up). Not the whole gun: its receiver caps, scope eyecups and
         // stock-release bones sit behind the grip too. A gun without a stock slot (built-in stock) measures every renderer.
         private static float MeasureStock(EFT.Player.FirearmController firearmController, bool hasStockSlot)
         {
@@ -284,8 +285,8 @@ namespace TarkovVR.Source.Player.VRManager
             float rearMost = 0f;
             foreach (Renderer renderer in stockRenderers)
             {
-                // Mesh-local bounds corners transformed out, not Renderer.bounds: a world box grows with the gun's world turn
-                // (~40% on a diagonal), so the length would depend on facing
+                // Use the mesh-local bounds corners transformed to world, not Renderer.bounds: a world-aligned box grows as the gun turns
+                // (~40% on a diagonal), so the length would depend on facing.
                 Mesh mesh = null;
                 if (renderer is SkinnedMeshRenderer skinned)
                     mesh = skinned.sharedMesh;
@@ -332,7 +333,7 @@ namespace TarkovVR.Source.Player.VRManager
 
         private static void DrawViz(Transform rig, Vector3 neck, Vector3 butt, Vector3 pivot, bool stocked)
         {
-            // The full-influence zone at the butt's height under the neck (the zone is really a column; a sphere at the butt's height reads the same)
+            // The full-influence zone, drawn at the butt's height under the neck. The zone is really a column; a sphere there shows the same.
             Vector3 zoneCentre = new Vector3(neck.x, butt.y, neck.z);
             Color zoneColor = !stocked ? new Color(0.5f, 0.5f, 0.5f, 0.15f)
                 : Color.Lerp(new Color(0.2f, 0.4f, 1f, 0.15f), new Color(0.2f, 1f, 0.3f, 0.25f), influence);
@@ -353,7 +354,7 @@ namespace TarkovVR.Source.Player.VRManager
             DebugShapes.Sphere(ref sphere, "ShoulderStockViz", true, position, radius, color);
         }
 
-        // The stock coming fully on: every hand on the gun (GunHaptics)
+        // The stock coming fully on: a pulse to every hand on the gun (GunHaptics)
         private static void Pulse()
         {
             TarkovVR.Source.Weapons.GunHaptics.Pulse(null, TarkovVR.Source.Weapons.GunHaptics.Feel.Mechanism, 0.5f, 0.06f, 110f);

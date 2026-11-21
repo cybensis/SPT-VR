@@ -8,25 +8,25 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // A bolt-action rifle's bolt, by hand (Manual Reload). Either hand's trigger takes the knob: the off hand while the gun hand
-    // has the grip, the gun hand while the off hand holds the gun up (ChestHang's support hold). The handle turns up, then slides
+    // A bolt-action rifle's bolt, worked by hand (Manual Reload). Either hand's trigger takes the knob: the off hand while the gun hand
+    // has the grip, or the gun hand while the off hand holds the gun up (ChestHang's support hold). The handle turns up, then slides
     // back, forward and down; let go anywhere and the bolt stays there.
-    //  - After a shot Tarkov's own bolt cycle doesn't play (BoltActionPatches skips it): the spent case stays in and the trigger
-    //    is dead until the bolt has been all the way back. Tarkov already counted the next round in the chamber at the shot.
-    //  - All the way back: the spent case flies out (Tarkov's own shell); a live round is thrown out by Tarkov's rechamber, which
-    //    takes the next one in; a round a draw or a magazine brought in on an empty chamber is still in the magazine (WaitingForRack).
-    //  - Closed and turned down: the round in the chamber shows, the trigger works.
-    // The bolt is two bones from the gun's own after-shot clip (gen_bolts.py, ReloadHolds.json "bolts"): one slides back, one (or the
-    // same, the DVL-10) turns the handle up. While the bolt isn't closed they are moved off their closed pose in Update (the
-    // latched hand reads them this frame) and again after the animator (LateUpdate), which may write them too.
+    //  - After a shot, Tarkov's own bolt cycle doesn't play (BoltActionPatches skips it): the spent case stays in and the trigger is
+    //    dead until the bolt has been all the way back. Tarkov already counted the next round in the chamber at the shot.
+    //  - All the way back: the spent case flies out (Tarkov's own shell). A live round is thrown out by Tarkov's rechamber, which takes
+    //    the next one in. A round that a draw or a magazine brought in on an empty chamber is still in the magazine (WaitingForRack).
+    //  - Closed and turned down: the round in the chamber shows and the trigger works.
+    // The bolt is two bones from the gun's own after-shot clip (gen_bolts.py, ReloadHolds.json "bolts"): one slides back, and one (the
+    // same bone on the DVL-10) turns the handle up. While the bolt isn't closed they are moved off their closed pose in Update (the
+    // latched hand reads them this frame) and again after the animator in LateUpdate, since the animator may write them too.
     public static partial class VRReloadController
     {
-        public static float boltGrabRadius = 0.07f;         // m any point of the hand to the knob (the knob's middle, from its mesh: gen_bolts.py)
+        public static float boltGrabRadius = 0.07f;         // m from any point of the hand to the knob's middle (from its mesh, gen_bolts.py)
         public static float boltFullBack = 0.92f;           // share of the slide that counts as all the way back
         public static float boltTurnedUp = 0.97f;           // share of the turn before it slides
         public static float boltClosedTurn = 0.03f;         // share of the turn left that counts as turned down
         public static float boltTurnSign = 1f;          // -1 if the handle turns the wrong way (the clip's turn read the other way round)
-        public static bool boltDebugLog = false;            // the bolt's grabs, strokes and what came out of the chamber
+        public static bool boltDebugLog = false;            // logs the bolt's grabs, strokes and what came out of the chamber
 
         public static bool HoldingBolt { get; private set; }
         public static bool BoltInGunHand => HoldingBolt && boltInGunHand;
@@ -39,7 +39,7 @@ namespace TarkovVR.Source.Weapons
             {
                 if (HoldingBolt)
                     return true;
-                // Only while the bolt is ours: Manual Reload switched off leaves the gun to Tarkov, never stuck
+                // Only while the bolt is worked by hand: with Manual Reload off the gun is left to Tarkov and never stuck
                 FirearmController firearmController = VRGlobals.firearmController;
                 return firearmController != null && firearmController.Item != null && boltStates.TryGetValue(firearmController.Item, out BoltState state)
                     && (state.spentCase || !state.Closed) && ManualBoltOn(firearmController);
@@ -72,7 +72,7 @@ namespace TarkovVR.Source.Weapons
 
         private static readonly Dictionary<string, string> boltFamilies = new Dictionary<string, string>();   // by template id: the bolt clip's family
 
-        // The current gun's bolt bones and their closed pose (read while closed: then nothing of ours is on them)
+        // The current gun's bolt bones and their closed pose (read while the bolt is closed, when none of our offsets are on them)
         private static FirearmController boltBonesFor;
         private static BoltData boltBonesData;
         private static Transform boltSlider;
@@ -85,22 +85,22 @@ namespace TarkovVR.Source.Weapons
         private static bool boltClosedPoseRead;
         private static bool drivingBolt;                    // we've moved the bones off their closed pose
 
-        // Our knob, on the turner's pose in the gun body's frame: the hand latches on it, so it rides the gun as the gun moves
+        // The knob transform, placed on the turner's pose in the gun body's frame. The hand latches on it, so it rides the gun as the gun moves.
         private static Transform boltKnob;
         private static bool boltInGunHand;
         private static FirearmController boltForFirearm;
         private static Vector3 controllerToKnob;            // at the grab, in the gun body's rotation (m)
         private static Vector3[] boltHandFingers;
         private static bool loggedBoltSounds;
-        // The stroke's sounds, once each per stroke. Guns name and cut them differently: the M700 has four short ones (BoltOpen the
-        // lift, BoltBack, BoltForward, BoltClose the turn down), the Mosin two long ones (BoltOut = toward you 0.55 s, BoltIn = away
-        // 0.45 s) that only fit from the start of the movement, the DVL-10 BoltStart / BoltOut / BoltIn / BoltEnd
+        // The stroke's sounds, each played once per stroke. Guns name and cut them differently: the M700 has four short ones (BoltOpen =
+        // the lift, BoltBack, BoltForward, BoltClose = the turn down); the Mosin has two long ones (BoltOut = toward you, 0.55 s; BoltIn =
+        // away, 0.45 s) that only fit from the start of the movement; the DVL-10 has BoltStart / BoltOut / BoltIn / BoltEnd.
         private static bool boltPullSounded, boltPushSounded;
         private static float boltSlidePeak;
         private static GameObject boltZoneViz;
 
-        // The chamber while the bolt is open (from leaving closed until closed again), like the charging handle's: Tarkov's round
-        // model sits on the patron_in_weapon bone; we show it and move it back with the slider
+        // The chamber while the bolt is open (from leaving closed until closed again), handled like the charging handle's. Tarkov's
+        // round model sits on the patron_in_weapon bone; it is shown and moved back with the slider.
         private static FirearmController boltChamberFor;
         private static Transform boltChamberBone;
         private static bool boltChamberBoneWasActive;
@@ -161,8 +161,8 @@ namespace TarkovVR.Source.Weapons
                 && firearmController._player.IsYourPlayer && TryGetBolt(firearmController, out _);
         }
 
-        // The hands load this bolt-action round by round through its open action (the Mosin's internal magazine, VRReloadController.Rounds):
-        // the off hand's weapon-part menu isn't needed (GunInteractionController.ManualReloadReplacesMenu)
+        // True when the hands load this bolt-action round by round through its open action (the Mosin's internal magazine,
+        // VRReloadController.Rounds), so the off hand's weapon-part menu isn't needed (GunInteractionController.ManualReloadReplacesMenu)
         public static bool HandsLoadBoltAction(FirearmController firearmController)
         {
             if (!ManualBoltOn(firearmController))
@@ -184,8 +184,9 @@ namespace TarkovVR.Source.Weapons
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The shot (BoltActionPatches: FireOperation.OnFireEvent, on a bolt-action's fire)
 
-        // True = we take the bolt cycle: the caller skips Tarkov's (its fire operation fast-forwarded to idle, no cycle animation).
-        // The shot moved the fired round's model to the shell port; the next round, already in the chamber for Tarkov, isn't shown.
+        // Returns true when the bolt cycle is done by hand: the caller then skips Tarkov's (its fire operation is fast-forwarded to
+        // idle, with no cycle animation). The shot moved the fired round's model to the shell port; the next round, already in the
+        // chamber for Tarkov, isn't shown.
         public static bool BoltShotFired(FirearmController firearmController)
         {
             if (!ManualBoltOn(firearmController) || firearmController.Item.MalfState.State != Weapon.EMalfunctionState.None)
@@ -231,7 +232,7 @@ namespace TarkovVR.Source.Weapons
             BoltState state = BoltStateOf(weapon);
             if (!boltClosedPoseRead)
                 ReadClosedBoltPose();
-            // A bolt left open (before a weapon swap): back where it was
+            // A bolt left open before a weapon swap is put back where it was
             if (!state.Closed)
                 drivingBolt = true;
             if (handBusy)
@@ -254,7 +255,7 @@ namespace TarkovVR.Source.Weapons
             bolt = null;
             if (!ManualBoltOn(firearmController) || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.LeftHand == null)
                 return false;
-            // A malfunction only when the hands clear it (VRReloadController.Malfunctions): cycling the bolt does
+            // During a malfunction only when the hands clear it (VRReloadController.Malfunctions), which cycling the bolt does
             if (firearmController.IsInLauncherMode() || !HandsMayWorkAction(firearmController, firearmController.Item))
                 return false;
             if (HandsInteractionController.HoldingLoot)
@@ -309,7 +310,7 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // The closed pose: only read while nothing of ours is on the bones
+        // Reads the closed pose, only while our offsets aren't on the bones
         private static void ReadClosedBoltPose()
         {
             if (drivingBolt || boltSlider == null)
@@ -355,7 +356,7 @@ namespace TarkovVR.Source.Weapons
             boltInGunHand = gunHand;
             HoldingBolt = true;
             BeginMalfunctionGrab(firearmController);
-            // A hard-slide bolt let go of already open has broken free
+            // A hard-slide bolt that was let go of already open has broken free
             if (state.slide > 0f)
                 hardSlideFree = true;
             Transform handRig = HandRig(gunHand);
@@ -467,7 +468,7 @@ namespace TarkovVR.Source.Weapons
         private static void BoltAllTheWayBack(FirearmController firearmController, BoltState state)
         {
             Weapon weapon = firearmController.Item;
-            // Its pull sound went with the start of the pull (UpdateHeldBolt); a gun that had none there gets it here
+            // The pull sound normally plays at the start of the pull (UpdateHeldBolt); a gun that had none there gets it here
             if (!boltPullSounded)
                 boltPullSounded = PlayFirstGunSound(firearmController, BoltSoundHand, "BoltBack", "BoltOut", "HandleOut", "SlideOut");
             PulseBoltHand(0.5f, 0.04f);
@@ -520,8 +521,8 @@ namespace TarkovVR.Source.Weapons
             boltPushSounded = false;
             boltSlidePeak = 0f;
             PulseBoltHand(0.6f, 0.05f);
-            // Cycled all the way on a malfunction: closing it clears it (Tarkov's repair chambers and shows the next round). The bolt's
-            // own stroke, not this grab's: it may have been let go open and taken again.
+            // Cycled all the way back during a malfunction: closing the bolt clears it (Tarkov's repair chambers and shows the next
+            // round). backThisStroke covers the bolt's whole stroke, not just this grab: it may have been let go open and taken again.
             if (state.backThisStroke && MalfunctionClearsByHand(firearmController))
             {
                 RepairByHand(firearmController);
@@ -568,7 +569,7 @@ namespace TarkovVR.Source.Weapons
             FirearmController firearmController = boltForFirearm;
             boltForFirearm = null;
             boltHandFingers = null;
-            // Let go turned all but down: it drops the rest of the way
+            // Let go while turned nearly down: it drops the rest of the way
             if (firearmController != null && firearmController.Item != null && boltStates.TryGetValue(firearmController.Item, out BoltState state) && state.Closed)
             {
                 state.turn = 0f;
@@ -612,10 +613,10 @@ namespace TarkovVR.Source.Weapons
             ApplyBoltChamberView(firearmController, state, boltBonesData);
         }
 
-        // Closed and ours, the gun idle: held shut against the animator, so the bolt shows where it is. Left to the animator once
-        // closed, the bolt can stay drawn open while our state is closed (suspected: the rechamber skip sends only the arms layer back
-        // to idle, and a layer left in Tarkov's rechamber clip holds it open). Tarkov's own operations (its reload, check chamber, a
-        // malfunction) aren't idle: their bolt animations play.
+        // While the bolt is closed and worked by hand and the gun is idle, it is held shut against the animator so it shows where it
+        // is. Left to the animator once closed, the bolt can stay drawn open while our state is closed (probably because the rechamber
+        // skip sends only the arms layer back to idle, and a layer left in Tarkov's rechamber clip holds it open). Tarkov's own
+        // operations (its reload, check chamber, a malfunction) aren't idle, so their bolt animations play.
 
         private static void KeepBoltShut(FirearmController firearmController)
         {
@@ -628,8 +629,8 @@ namespace TarkovVR.Source.Weapons
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The chambered round on the bolt face
 
-        // The bolt leaves closed: a live round in the chamber shows and rides back with it. After a shot the fired case's model is at
-        // the shell port already (nothing in the chamber to show); a round Tarkov counts in but that's still in the magazine stays hidden.
+        // When the bolt opens, a live round in the chamber shows and rides back with it. After a shot the fired case's model is already
+        // at the shell port (nothing in the chamber to show). A round Tarkov counts as chambered but that is still in the magazine stays hidden.
         private static void BeginBoltChamberView(FirearmController firearmController, BoltState state)
         {
             EndBoltChamberView();
@@ -652,8 +653,9 @@ namespace TarkovVR.Source.Weapons
                     + $"{(boltChamberEmpty ? "still in the magazine: shown empty" : "rides the bolt")}, chamber on the slider {chamberBone.IsChildOf(boltSlider)}");
         }
 
-        // After the animator: the round moves back as far as the slider has. A chamber bone that is itself on the slider rides it already.
-        // Once the full stroke threw the round out (its model goes back to Tarkov's pool) the chamber stays empty until the bolt closes.
+        // Runs after the animator: the round moves back as far as the slider has. A chamber bone that is itself on the slider already
+        // rides it. Once the full stroke has thrown the round out (its model goes back to Tarkov's pool), the chamber stays empty until
+        // the bolt closes.
         private static void ApplyBoltChamberView(FirearmController firearmController, BoltState state, BoltData bolt)
         {
             if (boltChamberBone == null || boltChamberFor != firearmController)

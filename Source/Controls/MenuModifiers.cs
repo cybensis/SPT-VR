@@ -2,9 +2,9 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Controls
 {
-    // The modifier keys in menus, held by the hand that isn't pointing: its trigger = Ctrl (click = quick-move, drag = split a
-    // stack), its lower face button = Alt (click = equip). Not the grips: a held gun is held by its grip, so a grip as a modifier
-    // turned every click into a Ctrl-click.
+    // Menu modifier keys, held on the hand that isn't pointing. Its trigger is Ctrl (click = quick-move, drag = split a stack) and
+    // its lower face button is Alt (click = equip). The grips aren't used: a gun is held by its grip, so a grip modifier would make
+    // every click a Ctrl-click.
     internal static class MenuModifiers
     {
         public static float ctrlTriggerPress = 0.5f;
@@ -36,7 +36,7 @@ namespace TarkovVR.Source.Controls
 
         internal static bool AltHeld => AltButton.state;
 
-        // A new press of the Alt button starts unused
+        // A new press of the Alt button starts as not used for a click
         internal static void Tick()
         {
             if (tickedFrame == Time.frameCount)
@@ -48,7 +48,7 @@ namespace TarkovVR.Source.Controls
             altWasDown = altDown;
         }
 
-        // The pointer clicked: with Alt held, that press of the button was a modifier
+        // Called when the pointer clicks. If Alt is held, that press of the button counts as a modifier.
         internal static void NoteClick()
         {
             Tick();
@@ -56,7 +56,7 @@ namespace TarkovVR.Source.Controls
                 altUsedForClick = true;
         }
 
-        // The button let go of was the Alt button and a click used it: its release mustn't also do the button's own job
+        // True when the released button is the Alt button and a click used it. Its release must not also do the button's normal job.
         internal static bool ReleaseWasModifier(VRBoolean button)
         {
             Tick();

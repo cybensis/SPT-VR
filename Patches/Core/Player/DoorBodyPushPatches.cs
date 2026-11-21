@@ -8,8 +8,8 @@ namespace TarkovVR.Patches.Core.Player
     [HarmonyPatch]
     internal static class DoorBodyPushPatches
     {
-        // This frame's step, before the character controller's collision stops the body at a door (after MovementPatches' analog
-        // redirect, so it's the heading actually walked)
+        // Hands this frame's movement step to PhysicalDoors before the character controller's collision stops the body at a door.
+        // Runs after MovementPatches' analog redirect, so the motion is the heading actually walked.
         [HarmonyPrefix]
         [HarmonyPriority(Priority.Low)]
         [HarmonyPatch(typeof(MovementState), "ApplyMotion")]

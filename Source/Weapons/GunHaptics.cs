@@ -8,16 +8,16 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Weapons
 {
-    // Which controllers feel something that happens to the gun. The gun is one solid object: the hand doing the work feels it
-    // most, every other hand on the gun feels it through the gun, and the gun's own parts moving (a slam, a seat, a wall) reach
-    // every hand on its body at full. A hand that's let go feels nothing.
+    // Decides which controllers feel something that happens to the gun. The gun is one solid object: the hand doing the work feels
+    // it most, and every other hand on the gun feels it through the gun. The gun's own parts moving (a slam, a seat, a wall hit)
+    // reach every hand on its body at full strength. A hand that has let go feels nothing.
     public static class GunHaptics
     {
         public enum Feel
         {
             Alone,      // only the hand doing it: off the gun (a pouch, a zone blip)
-            Carried,    // that hand full, every other hand on the gun through it (HapticMixer.throughGain / throughPitch)
-            Mechanism,  // the gun's own parts: every hand on its body full, a hand on one of its parts through it
+            Carried,    // that hand at full, every other hand on the gun through the gun (HapticMixer.throughGain / throughPitch)
+            Mechanism,  // the gun's own parts: every hand on its body at full, a hand on one of its parts through the gun
         }
 
         // Recoil kick on every shot: a sharp snap, then the shove
@@ -26,7 +26,7 @@ namespace TarkovVR.Source.Weapons
         public static float recoilHeaviest = 1f;        // ...and the hardest
         public static float recoilSoftForce = 150f;     // RecoilForceBack mapped onto that range
         public static float recoilHardForce = 700f;
-        public static float recoilSupportGain = 0.7f;   // the hand on the handguard
+        public static float recoilSupportGain = 0.7f;   // share for the hand on the handguard
         public static float recoilSnapPitch = 160f;
         public static float recoilSnapLength = 0.012f;
         public static float recoilShovePitch = 70f;
@@ -81,8 +81,8 @@ namespace TarkovVR.Source.Weapons
                 HapticMixer.PlayPulse(Handedness.OffHandSource, amplitude * offGain, duration, frequency * offPitch, delay);
         }
 
-        // RecoilHapticsPatch (FirearmController.Shot), our player's shots only. The hand on the grip takes it full, the hand on
-        // the handguard most of it; a gun held some other way can't fire.
+        // Called by RecoilHapticsPatch (FirearmController.Shot) for our player's shots only. The hand on the grip feels it at full,
+        // the hand on the handguard most of it; a gun held any other way can't fire.
         public static void Recoil(Weapon weapon)
         {
             if (!recoilKick || weapon == null)

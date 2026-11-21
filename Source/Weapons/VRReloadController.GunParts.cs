@@ -11,25 +11,25 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // The small parts of the gun the hands work, moved the way Tarkov's own animations move them:
-    //  - the mag release button goes in while a magazine rides up the last of the well and pops back out as it seats,
-    //    and is held in while B (the mag release, Manual Reload) is down or the gun's magazine is pulled out by hand.
-    //    Its travel is measured from the gun's own insert animation; the gun hand's index finger presses it, posed like the
-    //    gun's own mag-out animation has it.
-    //  - a magazine just seated stays in the hand while the grip is held
-    //  - slapping the bolt catch with the open off hand releases a locked-back bolt: it runs forward (Tarkov's locked-back
-    //    pose eased out, the bolt catch paddle is part of it)
+    // The small gun parts the hands work, moved the way Tarkov's own animations move them:
+    //  - The mag release button goes in while a magazine travels up the last part of the well, and pops back out as it seats.
+    //    It is held in while B (the mag release, Manual Reload) is down or while the gun's magazine is pulled out by hand.
+    //    Its travel is measured from the gun's own insert animation. The gun hand's index finger presses it, posed as in the
+    //    gun's own mag-out animation.
+    //  - A magazine that was just seated stays in the hand while the grip is held.
+    //  - Slapping the bolt catch with the open off hand releases a locked-back bolt, which runs forward (Tarkov's locked-back
+    //    pose is eased out; the bolt catch paddle is part of that pose).
     public static partial class VRReloadController
     {
         public static float releaseButtonTime = 0.06f;      // s for the button to go all the way in or out (Tarkov's mag-out: ~0.1)
-        // A pistol's magazine seated with the grip still held: the hand goes on into the two-handed grip, eased from the magazine
-        // onto EFT's support pose, then handed to the two-handing as if the grip were pressed there (VRPlayerManager.TakeSupportGrip)
+        // When a pistol magazine is seated with the grip still held, the hand moves on into the two-handed grip: it is eased from the
+        // magazine onto EFT's support pose, then switched to two-handing as if the grip were pressed there (VRPlayerManager.TakeSupportGrip)
         public static bool pistolSupportAfterSeat = true;
         public static float pistolSupportDelay = 0.15f;     // s the grip stays held on the seated magazine before the hand moves on
-        public static float pistolSupportMoveTime = 0.3f;   // s the move takes at most (it hands over as soon as it's there)
+        public static float pistolSupportMoveTime = 0.3f;   // s the move takes at most (it switches as soon as the hand arrives)
         public static float boltReleaseTime = 0.08f;        // s for the bolt to run forward (Tarkov: the paddle 0.07, then the bolt 0.13)
-        public static float boltSlapRadius = 0.07f;         // m palm to the bolt catch that counts as hitting it
-        public static float boltSlapSpeed = 1.0f;           // m/s the off hand comes in at, against the gun hand, to count as a slap
+        public static float boltSlapRadius = 0.07f;         // m from the palm to the bolt catch that counts as a hit
+        public static float boltSlapSpeed = 1.0f;           // m/s the off hand must move at, relative to the gun hand, to count as a slap
 
         public static bool HoldingSeatedMagazine => seatedHoldFor != null;
 
@@ -42,8 +42,8 @@ namespace TarkovVR.Source.Weapons
             public Quaternion[] pressedRotationOffsets;
             public float pressStartDepth;
             public float pressFullDepth;
-            // The gun hand's index joints (knuckle to tip) with the button all the way in, in the mag-out animation. Its press
-            // is the finger alone: the markers the hand is placed on don't move. Null = no mag-out animation presses it.
+            // The gun hand's index joints (knuckle to tip) with the button all the way in, from the mag-out animation. Only the
+            // finger moves for the press: the markers the hand is placed on don't move. null = no mag-out animation presses it.
             public Quaternion[] pressFingerRotations;
         }
 
@@ -61,13 +61,13 @@ namespace TarkovVR.Source.Weapons
         private static float releasePressTarget;
         private static float releasePressShown;
 
-        // The gun hand's finger on the button, its own state apart from the button parts: a press read off the gun's clip (the
-        // thumb on a pistol) poses it even where no insert clip moves the button (Glock)
+        // The gun hand's finger on the button, with its own state separate from the button parts. A press read from the gun's clip
+        // (the thumb on a pistol) poses it even where no insert clip moves the button (Glock).
         private static FirearmController releaseFingerFor;
         private static Transform[] releaseFingerJoints;
         private static Quaternion[] releaseFingerPressed;   // the joints with the button all the way in
-        private static Quaternion[] releaseFingerAnimated;  // the animator's pose under ours
-        private static Quaternion[] releaseFingerWritten;   // ours, last frame
+        private static Quaternion[] releaseFingerAnimated;  // the animator's pose before ours
+        private static Quaternion[] releaseFingerWritten;   // what we wrote last frame
         private static bool releaseFingerWriting;
         private static float releaseFingerTarget;
         private static float releaseFingerShown;
@@ -76,7 +76,7 @@ namespace TarkovVR.Source.Weapons
         private static Transform seatedHoldWell;
         private static Vector3 handAtSeatInWell;            // the controller (LeftHand) when the magazine seated
         private static float seatedHoldStartTime;
-        private static float pistolSupportMoveStart = -1f;  // the hand on its way to the support grip since then (-1: not)
+        private static float pistolSupportMoveStart = -1f;  // when the hand started moving to the support grip (-1 = not moving)
 
         private static FirearmController boltReleaseFor;
         private static float boltReleaseStartTime;
@@ -89,7 +89,7 @@ namespace TarkovVR.Source.Weapons
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The mag release button
 
-        // Tick: how far in the button should be this frame (ApplyMagazineReleaseButton moves it, after the animator)
+        // Tick: how far in the button should be this frame (ApplyMagazineReleaseButton moves it after the animator)
         private static void UpdateMagazineReleaseButton(bool releaseHeld)
         {
             releasePressTarget = 0f;
@@ -99,7 +99,7 @@ namespace TarkovVR.Source.Weapons
                 ForgetReleaseParts();
             if (releaseFingerFor != VRGlobals.firearmController)
                 ForgetReleaseFinger();
-            // A break-action's lever (VRReloadController.BreakAction): its own finger
+            // A break-action's lever poses its own finger (VRReloadController.BreakAction)
             if (DriveBreakLeverFinger())
                 return;
             if (!TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
@@ -109,7 +109,7 @@ namespace TarkovVR.Source.Weapons
 
             // B, or the gun's magazine pulled out by hand without Manual Reload (that grab is the button press)
             bool pressedByFinger = releaseHeld || (HoldingGunMagazine && onRail && railPullingOut && !VRSettings.GetManualReloadOn());
-            // A paddle catch is the off hand's thumb, not the gun hand's finger; other off-hand presses their clip's finger
+            // A paddle catch is pressed by the off hand's thumb, not the gun hand's finger; other off-hand presses use their clip's finger
             RockIn rockIn = RockInOf(firearmController);
             bool thumbPresses = OffHandPressesCatch(firearmController);
             ReleasePress clipPress = ReleasePressOf(firearmController);
@@ -121,7 +121,7 @@ namespace TarkovVR.Source.Weapons
                 latchFinger = clipPress.finger;
             }
             latchThumbTarget = pressedByFinger && thumbPresses ? 1f : 0f;
-            // The magazine pushes it in on the way up, not the finger; a hand off the gun (slung, support-held) can't
+            // On the way up the magazine pushes it in, not the finger. A hand off the gun (slung, support-held) can't press it.
             bool fingerPresses = pressedByFinger && !thumbPresses && !ChestHang.Detached;
             if (fingerPresses && EnsureReleaseFinger(firearmController, clipOnly: true))
                 releaseFingerTarget = 1f;
@@ -131,7 +131,7 @@ namespace TarkovVR.Source.Weapons
                 return;
             if (!EnsureReleaseParts(firearmController, weapon, magazineSlot))
                 return;
-            // Seated = back out (the catch has snapped into the magazine)
+            // The magazine pushes it in near the top, and it is back out once seated (the catch has snapped into the magazine)
             if (inserting && railPosition > 0f)
             {
                 float pushedBy = rockIn != null
@@ -140,13 +140,13 @@ namespace TarkovVR.Source.Weapons
                 target = Mathf.Max(target, pushedBy);
             }
             releasePressTarget = target;
-            // No press read off the clip: the index, as the parts' own mag-out measure has it
+            // No press read from the clip: use the index finger as measured with the button parts from the mag-out clip
             if (fingerPresses && EnsureReleaseFinger(firearmController, clipOnly: false))
                 releaseFingerTarget = 1f;
         }
 
-        // The gun hand's finger for this gun's button: the clip's press (gen_release.py), else the index as MeasurePressFinger read
-        // it with the button parts (clipOnly: not yet, the parts aren't measured)
+        // The gun hand's finger for this gun's button: the clip's press (gen_release.py), else the index finger as MeasurePressFinger
+        // read it with the button parts. clipOnly = only the clip's press, because the parts aren't measured yet.
         private static bool EnsureReleaseFinger(FirearmController firearmController, bool clipOnly)
         {
             if (releaseFingerFor == firearmController && releaseFingerJoints != null)
@@ -184,7 +184,7 @@ namespace TarkovVR.Source.Weapons
             releaseFingerShown = 0f;
         }
 
-        // Called from HandsInteractionController.LateUpdate: the animator has posed the button this frame
+        // Called from HandsInteractionController.LateUpdate, after the animator has posed the button this frame
         public static void ApplyMagazineReleaseButton()
         {
             if (releaseFingerFor != null && releaseFingerFor == VRGlobals.firearmController)
@@ -234,8 +234,8 @@ namespace TarkovVR.Source.Weapons
             releasePartsPressed = false;
         }
 
-        // The index joints from the animator's pose toward the pressed one, over the animator every frame. A joint still
-        // holding our value from last frame wasn't animated since: it blends from the pose it had under ours.
+        // Blends the finger joints from the animator's pose toward the pressed pose, on top of the animator every frame. A joint still
+        // holding the value we wrote last frame hasn't been animated since, so it blends from the animated pose it had before ours.
         private static void ApplyReleaseFinger()
         {
             if (releaseFingerJoints == null)
@@ -321,7 +321,7 @@ namespace TarkovVR.Source.Weapons
         }
 
         // The gun hand's finger by EFT's digit number (1 thumb .. 5 pinky), knuckle to tip, under the right arm IK's wrist bone.
-        // None with the gun in the left hand: the right hand is off the gun then (its button press isn't drawn)
+        // null with the gun in the left hand: the right hand is off the gun then, so its button press isn't drawn.
         private static Transform[] GunHandFinger(int digit)
         {
             if (Handedness.GunInLeftHand)
@@ -342,7 +342,7 @@ namespace TarkovVR.Source.Weapons
         }
 
         // The gun hand's index finger, knuckle to tip (EFT: Base HumanRDigit21..23 under the right palm, the right arm
-        // IK's wrist bone), and the top of its arm (the collarbone: the mag-out clip's paths start there)
+        // IK's wrist bone), and the top of its arm (the collarbone, where the mag-out clip's paths start)
         private static Transform[] GunHandIndexFinger(out Transform armTop)
         {
             armTop = null;
@@ -455,8 +455,8 @@ namespace TarkovVR.Source.Weapons
             return null;
         }
 
-        // An empty object for the bone and each parent up to the top bone (Weapon_root, or the arm's collarbone: where the
-        // clips' paths start), named and posed like the live ones
+        // Creates an empty object for the bone and for each parent up to the top bone (Weapon_root, or the arm's collarbone,
+        // where the clips' paths start), named and posed like the live ones
         private static Transform CopyBoneChain(Transform bone, Transform topBone, Transform samplerRoot, Dictionary<Transform, Transform> copies)
         {
             if (copies.TryGetValue(bone, out Transform copy))
@@ -491,8 +491,8 @@ namespace TarkovVR.Source.Weapons
                     wellPositions[sample] = well.localPosition;
             }
 
-            // The end of the clip is seated with the button out; the magazine's distance from there, against the gun body
-            // (the well bone's parent, which the animation also sways), is its depth
+            // At the end of the clip the magazine is seated and the button is out. The magazine's distance from there, measured
+            // against the gun body (the well bone's parent, which the animation also sways), is its depth.
             int last = sampleCount - 1;
             float deepest = 0f;
             for (int sample = 0; sample < sampleCount; sample++)
@@ -583,8 +583,8 @@ namespace TarkovVR.Source.Weapons
             return motion;
         }
 
-        // The gun hand's index joints at the moment a mag-out animation has the button furthest in (from its first frame,
-        // the hand on the grip). The finger's copy goes on the same sampler, from the collarbone down.
+        // The gun hand's index joints at the moment a mag-out animation has the button furthest in (compared with its first
+        // frame, the hand on the grip). The finger's bone copy goes on the same sampler, from the collarbone down.
         private static Quaternion[] MeasurePressFinger(RuntimeAnimatorController animatorController, GameObject sampler, List<Transform> sampledParts,
             Dictionary<Transform, Transform> copies, string gunName)
         {
@@ -654,7 +654,7 @@ namespace TarkovVR.Source.Weapons
             return null;
         }
 
-        // Going up the well: the magazine's depth when the button first reaches this share of its travel (between samples)
+        // Going up the well: the magazine's depth when the button first reaches this share of its travel (interpolated between samples)
         private static float DepthWherePressReaches(float share, float[,] travels, int part, float peakTravel, float[] depths, int seatSample)
         {
             for (int sample = 1; sample <= seatSample; sample++)
@@ -670,7 +670,7 @@ namespace TarkovVR.Source.Weapons
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The hand on a seated magazine, and the bolt release
 
-        // Just seated with the grip still held: the rendered hand stays where it holds the magazine, riding the gun
+        // Just seated with the grip still held: the rendered hand stays where it holds the magazine and moves with the gun
         private static void BeginSeatedHold(FirearmController firearmController, Transform well)
         {
             if (firearmController == null || well == null || handLatch == null || !handLatched)
@@ -680,7 +680,7 @@ namespace TarkovVR.Source.Weapons
             handAtSeatInWell = well.InverseTransformPoint(VRGlobals.vrPlayer.LeftHand.transform.position);
             seatedHoldStartTime = Time.time;
             pistolSupportMoveStart = -1f;
-            // ClearHold just started easing it back to the controller: it stays on the magazine instead
+            // ClearHold has just started easing the hand back to the controller; keep it on the magazine instead
             handLatch.SetParent(well, worldPositionStays: true);
             handLatchReleasing = false;
             handLatchSnapping = false;
@@ -721,8 +721,8 @@ namespace TarkovVR.Source.Weapons
                 EndSeatedHold();
         }
 
-        // A pistol, the magazine in and the grip still held: the latched hand eases onto the support pose, then two-handing takes it.
-        // True while that's under way (or done this frame).
+        // A pistol with the magazine in and the grip still held: the latched hand eases onto the support pose, then two-handing takes
+        // over. Returns true while that is under way (or finished this frame).
         private static bool UpdatePistolSupportMove(FirearmController firearmController)
         {
             if (!pistolSupportAfterSeat || !VRGlobals.vrPlayer.isWeapPistol || VRGlobals.vrPlayer.isSupporting || expectedOperation == ExpectedOperation.Insert
@@ -733,18 +733,20 @@ namespace TarkovVR.Source.Weapons
                 if (Time.time - seatedHoldStartTime < pistolSupportDelay)
                     return false;
                 pistolSupportMoveStart = Time.time;
-                // The gun in the left hand: its support pose is the right side's mirror image (RealLeftHandedPatches), straight over
+                // Skipped with the gun in the left hand: there the support pose is the right side's mirror image (RealLeftHandedPatches)
+                // and the hand goes straight over
                 if (!Handedness.GunInLeftHand && TryGetSupportGripPose(out Vector3 position, out Quaternion rotation) && handLatch != null && handLatch.parent != null)
                     SnapHandTo(handLatch.parent, position, rotation);
                 if (debugLog)
                     LogAction("[VRReload] pistol magazine seated, grip still held: the hand goes onto the support grip");
             }
-            // The latch's own pose against where it's easing to (the controller's twist wiggles it on top: UpdateHandLatch)
+            // Compare the latch's own pose with where it is easing to (the controller's twist adds a wiggle on top, in UpdateHandLatch)
             bool arrived = !handLatchSnapping || ((latchBaseLocalPosition - handSnapLocalPosition).sqrMagnitude < 0.006f * 0.006f
                 && Quaternion.Angle(latchBaseLocalRotation, handSnapLocalRotation) < 4f);
             if (!arrived && Time.time - pistolSupportMoveStart < pistolSupportMoveTime)
                 return true;
-            // There: two-handing has it. The latch lets go; seeing the support grip it gives the arm straight to EFT's IK (UpdateHandLatch).
+            // Arrived: two-handing takes over. The latch lets go, and since the support grip is held, UpdateHandLatch gives the arm
+            // straight to EFT's IK.
             VRGlobals.vrPlayer.TakeSupportGrip();
             seatedHoldFor = null;
             seatedHoldWell = null;
@@ -754,7 +756,7 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // Where EFT's IK puts the support hand (Player.IkProcess): the gun's left marker, onto its grip pose near the grip reference
+        // Where EFT's IK puts the support hand (Player.IkProcess): the gun's left marker, blended onto its grip pose near the grip reference
         private static bool TryGetSupportGripPose(out Vector3 position, out Quaternion rotation)
         {
             Transform marker = TarkovVR.Patches.Core.Player.WeaponPatches.previousLeftHandMarker;
@@ -782,9 +784,9 @@ namespace TarkovVR.Source.Weapons
             ReleaseHandLatch();
         }
 
-        // The open off hand coming into the bolt catch fast (against the gun hand, which carries the gun) is a slap on it,
-        // the way an AR's bolt is released (and an MP5's: there it's the handle in its notch).
-        // Only coming in counts: a hand already resting there has to leave first.
+        // The open off hand moving fast into the bolt catch (relative to the gun hand, which carries the gun) slaps it, the way
+        // an AR's bolt is released (on an MP5 it is the handle in its notch). Only arriving counts: a hand already resting there
+        // has to leave first.
         private static void UpdateBoltSlap(bool handFree)
         {
             FirearmController firearmController = null;
@@ -813,10 +815,10 @@ namespace TarkovVR.Source.Weapons
                 atCatch ? new Color(0f, 1f, 0f, 0.3f) : new Color(0.7f, 0f, 1f, 0.3f));
         }
 
-        // The bolt catch paddle (a part named like bolt_catch), else the chamber: on the gun's side by the receiver
+        // The bolt catch paddle (a part named like bolt_catch), else the chamber, which is on the side of the receiver
         private static bool TryGetBoltCatchPoint(FirearmController firearmController, out Vector3 point)
         {
-            // Held back in a notch, the handle is what's slapped
+            // When the handle is held back in a notch, the handle is what gets slapped
             if (HandleNotchOf(firearmController) != null && TryGetChargingHandle(firearmController, firearmController.Item))
             {
                 point = ChargingHandleGrabPoint(firearmController.WeaponRoot.up);
@@ -867,12 +869,13 @@ namespace TarkovVR.Source.Weapons
                 LogAction($"[VRReload] bolt release, chamber: {weapon.ChamberAmmoCount}");
             firearmsAnimator.SetBoltCatch(false);
             BoltStripsRound(weapon);
-            // SetBoltCatch snaps the pose shut; it runs forward instead (UpdateBoltRelease)
+            // SetBoltCatch snaps the pose shut; instead the bolt runs forward over boltReleaseTime (UpdateBoltRelease)
             SetBoltOpen(firearmsAnimator, 1f);
             boltReleaseFor = firearmController;
             boltReleaseStartTime = Time.time;
-            // The catch let go (a slap: the hand hitting it, an AR's HandHit), then the bolt running home: whatever this gun calls them
-            // (pistols, the SCAR, the Vector and the shotguns have no BoltInFast). The MP5's, out of its notch: its slap.
+            // Sounds: the catch letting go (for a slap, the hand hitting it: an AR's HandHit), then the bolt running home, by whatever
+            // names this gun uses (pistols, the SCAR, the Vector and the shotguns have no BoltInFast). An MP5 handle slapped out of its
+            // notch plays its slap sound.
             SoundHand releaseHand = SoundHand.OffHand.Seating;
             if (!(slapped && PlayFirstGunSound(firearmController, releaseHand, "HandHit")))
                 PlayFirstGunSound(firearmController, releaseHand, CATCH_OFF_SOUNDS);
@@ -894,7 +897,7 @@ namespace TarkovVR.Source.Weapons
             {
                 boltReleaseFor = null;
                 RestoreBoltPose(firearmController);
-                // Home: the spring's slam, however the catch was let go
+                // Home: the spring slams the bolt shut, however the catch was let go
                 BoltSlamJolt(firearmController, 1f, "bolt catch let go");
                 return;
             }

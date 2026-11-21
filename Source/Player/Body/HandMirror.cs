@@ -3,12 +3,12 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Body
 {
-    // A hand's finger pose mirrored onto the other hand's bones (every grip, hold and finger pose in the mod is measured on one hand).
-    // Copying the joint angles across can't work: the two hands' bones aren't set up as mirror images, only their rest poses are.
-    // So each bone's turn away from its rest pose (the skinned mesh's bind pose), relative to its palm, is reflected through the
+    // Mirrors a hand's finger pose onto the other hand's bones. Every grip, hold and finger pose in the mod is measured on one hand.
+    // Copying the joint angles across doesn't work: the two hands' bones aren't set up as mirror images, only their rest poses are.
+    // So each bone's rotation away from its rest pose (the skinned mesh's bind pose), relative to its palm, is reflected through the
     // body's centre plane and applied to the other hand's bone from that bone's own rest pose:
     //     to = toPalmRest^-1 * Mirror(fromPalmRest * (fromPalm^-1 * from) * fromRest^-1) * toRest      (rest rotations in mesh space)
-    // The rest pose maps exactly onto the rest pose; the centre plane is read off the two palms' bind positions (logged once).
+    // The rest pose maps exactly onto the rest pose. The centre plane is read off the two palms' bind positions (logged once).
     public static class HandMirror
     {
         private const string RIGHT = "Base HumanR";
@@ -21,8 +21,8 @@ namespace TarkovVR.Source.Player.Body
             public Quaternion fromRest, toRest;   // in the mesh's bind space
         }
 
-        // A right-hand finger pose given as joint locals (by digit, "Digit11".."Digit53"; each finger's first joint is relative to the
-        // palm) -> the left hand's joint locals for its mirror image. No bones are touched. False until the hands mesh is found.
+        // Turns a right-hand finger pose (joint local rotations by digit, "Digit11".."Digit53"; each finger's first joint is relative to
+        // the palm) into the left hand's joint locals for its mirror image. No bones are touched. Returns false until the hands mesh is found.
         public static bool TryMirrorRightToLeft(Dictionary<string, Quaternion> rightLocals, Dictionary<string, Quaternion> leftLocals)
         {
             leftLocals.Clear();
@@ -58,10 +58,10 @@ namespace TarkovVR.Source.Player.Body
         private static readonly Matrix4x4 FlipX = Matrix4x4.Scale(new Vector3(-1f, 1f, 1f));
         private static Matrix4x4 palmRightToLeft, palmLeftToRight;
 
-        // A palm's world rotation -> the OTHER palm's for its mirror image through a world plane (e.g. the gun's centre plane). The
-        // frame reflected through the plane, then turned into the other palm's bone frame by the rest poses:
+        // Turns a palm's world rotation into the other palm's rotation for its mirror image through a world plane (for example the gun's
+        // centre plane). The frame is reflected through the plane, then turned into the other palm's bone frame by the rest poses:
         //     mirrored = Reflection(plane) * palm * FlipX * (FlipX * fromRest^-1 * Reflection(mesh centre plane) * toRest)
-        // At rest, mirrored through the body's own centre plane, that is exactly the other palm's rest (same rule as the fingers).
+        // A rest pose mirrored through the body's own centre plane gives exactly the other palm's rest pose (the same rule as the fingers).
         public static bool TryMirrorPalm(Quaternion palmRotation, Vector3 planeNormal, bool rightToLeft, out Quaternion mirrored)
         {
             mirrored = palmRotation;
@@ -72,9 +72,9 @@ namespace TarkovVR.Source.Player.Body
             return true;
         }
 
-        // A palm frame that is mirrored already - a world matrix under a -1 scale (a grenade mirrored whole in the left hand) - to the
-        // OTHER palm's rotation: TryMirrorPalm past its reflection. Straight off the matrix, so it never goes through a Transform.rotation
-        // under that scale.
+        // Turns a palm frame that is already mirrored (a world matrix under a -1 scale, e.g. a grenade mirrored whole in the left hand)
+        // into the other palm's rotation. This is TryMirrorPalm without the reflection step. It reads the matrix directly, so it never
+        // goes through a Transform.rotation under that scale.
         public static bool TryOtherPalmFromMirroredFrame(Matrix4x4 frame, bool rightToLeft, out Quaternion palm)
         {
             palm = Quaternion.identity;
@@ -91,14 +91,14 @@ namespace TarkovVR.Source.Player.Body
             return true;
         }
 
-        // The fingers while the gun is in the left hand. EFT still animates the right hand gripping the gun and the left as its support
-        // hand, so: the left = the right's animated grip, mirrored; the right = the left's animated foregrip pose, mirrored, only while
-        // on the foregrip (off it, its own open pose: HandsInteractionController.UpdateRightHandFingers). Each is read as EFT animated
-        // it: a joint still holding what was on it at the end of last frame wasn't re-animated, and keeps its last animated value.
-        // Otherwise our own (or the open pose's) output feeds back in.
+        // Finger poses while the gun is in the left hand. EFT still animates the right hand gripping the gun and the left hand as the
+        // support hand. So the left hand gets the right's animated grip, mirrored, and the right hand gets the left's animated foregrip
+        // pose, mirrored, but only while it is on the foregrip (off it, it uses its own open pose: HandsInteractionController.UpdateRightHandFingers).
+        // Each pose is read as EFT animated it. A joint that still holds its value from the end of last frame wasn't re-animated, so it
+        // keeps its last animated value; otherwise our own output (or the open pose's) would feed back in.
         private static Quaternion[] rightAnimated, leftAnimated, rightFinal, leftFinal, mirroredOut;
 
-        // Before the right hand's own finger update (it may put the open pose on): the gun grip, after the trigger discipline
+        // Captures the gun grip. Called after trigger discipline and before the right hand's own finger update, which may put the open pose on.
         public static void CaptureGunHandGrip()
         {
             bool active = TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active;
@@ -111,10 +111,11 @@ namespace TarkovVR.Source.Player.Body
                 Capture(right: true, ref rightAnimated, rightFinal);
         }
 
-        // The right hand holding the gun alone (RealLeftHandedPatches.SupportHeld): the left's foregrip grip as EFT animated it, before
-        // the left hand's own finger update puts its open pose on (it's free then). Kept on after the left takes the gun back while
-        // the right stays on the foregrip: the left's open pose eases out over a few frames, and read after it the right hand would
-        // open and close again. A fresh foregrip grab reads it after the left's update (that ease is the hand closing on it).
+        // True while the left's foregrip grip is read (as EFT animated it) before the left hand's own finger update. When the right hand
+        // holds the gun alone (RealLeftHandedPatches.SupportHeld), the left hand is free and that update puts its open pose on.
+        // It stays true after the left takes the gun back while the right stays on the foregrip: the left's open pose eases out over a few
+        // frames, and reading after it would make the right hand open and close again. A fresh foregrip grab reads after the left's
+        // update (that ease is the hand closing on the grip).
         private static bool supportGripEarly;
 
         public static void CaptureSupportGrip()
@@ -126,7 +127,7 @@ namespace TarkovVR.Source.Player.Body
             Capture(right: false, ref leftAnimated, leftFinal);
         }
 
-        // End of HandsInteractionController.LateUpdate, with RealLeftHandedPatches' arm swap
+        // Called at the end of HandsInteractionController.LateUpdate, together with RealLeftHandedPatches' arm swap.
         public static void ApplyRealLeftHanded()
         {
             if (TarkovVR.Patches.Core.Player.RealLeftHandedPatches.SupportHeld && !TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active)
@@ -156,7 +157,7 @@ namespace TarkovVR.Source.Player.Body
             Record(right: false, ref leftFinal);
         }
 
-        // Only the right hand: the left's foregrip grip mirrored onto it (CaptureSupportGrip); the left keeps its own open pose
+        // Poses only the right hand: the left's foregrip grip (from CaptureSupportGrip) is mirrored onto it. The left keeps its own open pose.
         private static void ApplySupportHeld()
         {
             if (VRGlobals.player == null || leftAnimated == null || !EnsureBones())
@@ -186,9 +187,9 @@ namespace TarkovVR.Source.Player.Body
             }
         }
 
-        // The gun in the left hand, a press check (VRReloadController.PressCheck): the left hand shows the mirror image of the press-check
-        // fingers worked out for the right hand that holds the gun as far as EFT knows (by right bone; one not given keeps the captured
-        // grip). After ApplyRealLeftHanded, which put the grip's mirror on.
+        // A press check (VRReloadController.PressCheck) with the gun in the left hand. The press-check fingers are worked out for the right
+        // hand, which holds the gun as far as EFT knows, and the left hand shows their mirror image. They are given per right-hand bone;
+        // a bone that isn't given keeps the captured grip. Runs after ApplyRealLeftHanded, which has already put on the grip's mirror.
         private static Quaternion[] mirrorPressFrom, mirrorPressOut;
 
         public static void ApplyMirroredRight(Dictionary<Transform, Quaternion> rightLocals)
@@ -219,7 +220,8 @@ namespace TarkovVR.Source.Player.Body
                 final[index] = right ? rightToLeft[index].from.localRotation : rightToLeft[index].to.localRotation;
         }
 
-        // One hand's finger joint locals -> the other hand's for its mirror image (the pairs run finger by finger, joint 1 in the palm)
+        // Turns one hand's finger joint locals into the other hand's for its mirror image (the pairs run finger by finger; joint 1 is
+        // relative to the palm).
         private static void MirrorLocals(Quaternion[] fromLocals, bool rightToLeft, Quaternion[] toLocals)
         {
             Quaternion fromPalmRest = rightToLeft ? rightPalmRest : leftPalmRest;
@@ -237,9 +239,9 @@ namespace TarkovVR.Source.Player.Body
             }
         }
 
-        // A finger pose as joint locals in the reload code's order (0 the palm, left alone, then three joints a finger, thumb first:
-        // DigitFJ at (F - 1) * 3 + J) -> the other hand's, for its mirror image. With the gun in the left hand the right hand holds the
-        // magazine, whose finger poses were all recorded on the left (VRReloadController).
+        // Mirrors a finger pose given as joint locals in the reload code's order: index 0 is the palm (left alone), then three joints per
+        // finger, thumb first (DigitFJ at (F - 1) * 3 + J). With the gun in the left hand, the right hand holds the magazine, and the
+        // magazine finger poses were all recorded on the left hand (VRReloadController).
         private static Quaternion[] poseFrom, poseTo;
 
         public static bool TryMirrorPose(Quaternion[] fromPose, bool rightToLeft, Quaternion[] toPose)
@@ -367,8 +369,8 @@ namespace TarkovVR.Source.Player.Body
             return Quaternion.LookRotation(rest.GetColumn(2), rest.GetColumn(1));
         }
 
-        // The palms sit mirrored across the body's centre plane: its normal is the axis they're furthest apart on. How far off a true
-        // mirror image they are (should be ~0) goes in the log.
+        // The palms sit mirrored across the body's centre plane, so its normal is the axis they are furthest apart on. The log shows how
+        // far they are from a true mirror image (should be about 0).
         private static void ReadCentrePlane(Vector3 rightPalmPosition, Vector3 leftPalmPosition)
         {
             Vector3 apart = rightPalmPosition - leftPalmPosition;

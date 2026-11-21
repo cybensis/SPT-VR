@@ -5,22 +5,22 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Misc
 {
-    // Every gun / reload / eating buzz goes through here, one mix per controller. Each vibration sent to a controller replaces the
-    // one it's playing, so unmixed, the sound stream (a new one every 20 ms) and a clunk cut each other off. Here the strongest wins,
-    // the others add a little on top, the pitches blend, and a new vibration goes out only when the mix changes (or the last one is
-    // about to run out).
+    // Every gun, reload and eating vibration goes through here, mixed per controller. Each vibration sent to a controller replaces
+    // the one it is playing, so without mixing, the sound stream (a new vibration every 20 ms) and a knock would cut each other off.
+    // Here the strongest wins, the others add a little on top, the pitches blend, and a new vibration is sent only when the mix
+    // changes or the last one is about to run out.
     public static class HapticMixer
     {
         public static bool enabled = true;          // false = each one goes straight to the controller, the last replacing the rest
-        public static float sendLength = 0.04f;     // s a sent vibration lasts at most; sent again before it runs out while something plays
-        public static float resendAmplitude = 0.06f; // sent again when the mix moves this much...
-        public static float resendPitch = 0.1f;     // ...or its pitch moves this fraction
+        public static float sendLength = 0.04f;     // s, longest a sent vibration lasts; resent before it runs out while something plays
+        public static float resendAmplitude = 0.06f; // resend when the mixed amplitude moves this much...
+        public static float resendPitch = 0.1f;     // ...or its pitch moves by this fraction
         public static float minAmplitude = 0.03f;   // quieter than this isn't sent
         public static float layerBlend = 0.35f;     // how much the weaker ones add on top of the strongest
-        public static float pulseFade = 0.5f;       // the share of a pulse spent fading out: a knock dies away instead of stopping dead (0 = flat)
-        // A hand holding the thing something happens to (another hand's work on the gun, the can the other hand opens)
-        public static float throughGain = 0.5f;     // feels it at this much...
-        public static float throughPitch = 0.7f;    // ...and this much lower: a solid body carries the thump, not the fine texture
+        public static float pulseFade = 0.5f;       // fraction of a pulse spent fading out, so a knock dies away instead of stopping dead (0 = flat)
+        // For a hand holding the object being worked on (the gun while the other hand works on it, the can the other hand opens)
+        public static float throughGain = 0.5f;     // it feels the vibration at this strength...
+        public static float throughPitch = 0.7f;    // ...and at this fraction of the pitch: a solid body carries the thump, not the fine texture
         public static float lowestPitch = 45f;      // Hz; lower barely moves the controller's motor
 
         private struct Pulse
@@ -49,7 +49,7 @@ namespace TarkovVR.Source.Misc
             return index == 0 ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
         }
 
-        // A knock or buzz of this length on one controller
+        // Plays a knock or buzz of the given length on one controller
         public static void PlayPulse(SteamVR_Input_Sources hand, float amplitude, float duration, float frequency, float delay = 0f)
         {
             int index = HandIndex(hand);
@@ -72,7 +72,7 @@ namespace TarkovVR.Source.Misc
             }
         }
 
-        // The sound stream (AudioHaptics): the level and pitch now, held until the next update or `hold` runs out
+        // The sound stream from AudioHaptics: the current level and pitch, held until the next update or until `hold` runs out
         public static void Stream(SteamVR_Input_Sources hand, float amplitude, float frequency, float hold)
         {
             int index = HandIndex(hand);
@@ -134,7 +134,7 @@ namespace TarkovVR.Source.Misc
                 || Mathf.Abs(frequency / Mathf.Max(mix.sentFrequency, 1f) - 1f) > resendPitch;
             if (!mix.newPulse && !runningOut && !changed)
                 return;
-            // No longer than what's playing: a vibration left running past the end of its pulses would stretch every knock
+            // Never longer than what is playing: a vibration running past the end of its pulses would stretch every knock
             float length = Mathf.Min(sendLength, lastEnd - now);
             if (length <= 0f)
                 return;
@@ -163,7 +163,7 @@ namespace TarkovVR.Source.Misc
             runner.AddComponent<Runner>();
         }
 
-        // Fades, delayed pulses starting, and the resend before a vibration runs out happen here, once a frame
+        // Once a frame: updates fades, starts delayed pulses, and resends before a vibration runs out
         private class Runner : MonoBehaviour
         {
             private void LateUpdate()

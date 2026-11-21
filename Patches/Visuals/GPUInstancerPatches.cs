@@ -9,12 +9,13 @@ namespace TarkovVR.Patches.Visuals
     [HarmonyPatch]
     internal class GPUInstancerPatches
     {
-        // Grass (GPUI) motion vectors in stereo. GPUI's MotionVectors pass writes uv(A * pos with this frame's wind) -
-        // uv(B * pos with last frame's wind), A/B = the _NonJitteredVP / _PreviousVP globals, and BSG's camera motion-vector
-        // pass (Hidden/Internal-MotionVectorsEFT) adds that where grass is in front, on top of the camera motion it gets from
-        // depth. So the added term must be the grass's own wind motion only: A = B = this eye's current VP (SetEyeGrassMatrices).
-        // Vanilla fills A/B once a frame from the mono camera (wrong in each eye). false = identity matrices: the wind sway reads
-        // as screen motion and FSR drops the history on swaying grass. The scope's own managers stay vanilla.
+        // Grass (GPUI) motion vectors in stereo. GPUI's MotionVectors pass writes uv(A * pos with this frame's wind) minus
+        // uv(B * pos with last frame's wind), where A and B are the _NonJitteredVP and _PreviousVP globals. BSG's camera
+        // motion-vector pass (Hidden/Internal-MotionVectorsEFT) adds that where grass is in front, on top of the camera motion it
+        // gets from depth. So the added term must be only the grass's own wind motion: A = B = this eye's current VP
+        // (SetEyeGrassMatrices). Vanilla fills A and B once a frame from the mono camera, which is wrong in each eye.
+        // false = identity matrices: the wind sway reads as screen motion and FSR drops the history on swaying grass.
+        // The scope's own managers stay vanilla.
         public static bool perEyeGrassMotion = true;
         private static readonly int NonJitteredVP = Shader.PropertyToID("_NonJitteredVP");
         private static readonly int PreviousVP = Shader.PropertyToID("_PreviousVP");
@@ -64,8 +65,8 @@ namespace TarkovVR.Patches.Visuals
             return false;
         }
 
-        // Before each eye: the eye's own current non-jittered VP in both slots. The engine sets its own matrices for its camera
-        // motion pass, so this only feeds GPUI's grass pass.
+        // Runs before each eye and puts the eye's own current non-jittered VP in both slots. The engine sets its own matrices for
+        // its camera motion pass, so this only feeds GPUI's grass pass.
         private static void SetEyeGrassMatrices(Camera cam)
         {
             if (!perEyeGrassMotion || cam == null || cam != VRGlobals.VRCam)
@@ -84,24 +85,6 @@ namespace TarkovVR.Patches.Visuals
             Shader.SetGlobalMatrix(PreviousVP, viewProjection);
         }
 
-        // GPU Instancer's culling: in multipass it only takes the left eye into account. Not needed any more; kept for reference.
-        /*
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(GPUInstancerManager), "UpdateBuffers")]
-        private static void DisableAllCulling(GPUInstancerManager __instance)
-        {
-
-            if (VRSettings.GetOccCulling())
-                __instance.isOcclusionCulling = false;
-            else
-                __instance.isOcclusionCulling = true;
-            if (VRSettings.GetFrusCulling())
-                __instance.isFrustumCulling = false;
-            else
-                __instance.isFrustumCulling = true;
-        }
-        */
-
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GPUInstancerManager), "Awake")]
         private static void ForceVRComputeShader(GPUInstancerManager __instance)
@@ -114,9 +97,9 @@ namespace TarkovVR.Patches.Visuals
                 {
                     kernelIDs[i] = vrShader.FindKernel(GPUInstancerConstants.CAMERA_COMPUTE_KERNELS[i]);
                 }
-                // Both fields are protected static in the game (public in our publicized reference; AllowUnsafeBlocks lets Mono skip the
-                // access check). Written directly, in its own method so a refusal at JIT time lands in this catch too; reflection is
-                // the fallback.
+                // Both fields are protected static in the game and public in the publicized reference; AllowUnsafeBlocks lets Mono skip
+                // the access check. The write is in its own method so a refusal at JIT time also lands in this catch, with reflection
+                // as the fallback.
                 try
                 {
                     SetCameraComputeShader(vrShader, kernelIDs);

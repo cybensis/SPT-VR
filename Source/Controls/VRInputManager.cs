@@ -36,15 +36,13 @@ namespace TarkovVR.Source.Controls
         {
             float cooldown = GetCooldown(command);
 
-            // If this command has no cooldown, it can always fire
             if (cooldown <= 0f)
                 return false;
 
-            // Check if cooldown was triggered
+            // The timer is shared: any command with a cooldown also blocks the other cooldown commands.
             if ((currentTime - lastCooldownCommandTime) < cooldown)
                 return true;
 
-            // Also check individual command cooldown
             if (lastExecutionTime.ContainsKey(command) &&
                 (currentTime - lastExecutionTime[command]) < cooldown)
                 return true;
@@ -56,7 +54,6 @@ namespace TarkovVR.Source.Controls
         {
             lastExecutionTime[command] = currentTime;
 
-            // Only update shared cooldown timer if this command has a cooldown
             if (GetCooldown(command) > 0f)
             {
                 lastCooldownCommandTime = currentTime;
@@ -103,7 +100,7 @@ namespace TarkovVR.Source.Controls
         public static void UpdateCommands(ref List<ECommand> commands)
         {
             float currentTime = UnityEngine.Time.time;
-            // Every frame, menus included: B's wait after a menu closes has to see the menu open
+            // Runs every frame, menus included: the B-button wait after a menu closes has to see the menu while it is open.
             MenuExitButtonWait.Tick();
 
             if (VRGlobals.inGame && !VRGlobals.menuOpen)

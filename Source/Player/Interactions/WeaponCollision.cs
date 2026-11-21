@@ -12,19 +12,19 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Physical weapon collision via a sandboxed PhysX rigidbody (WeaponPhysicsProxy): an invisible Rigidbody shaped like the
-    // gun (fat body + thin barrel capsule), driven toward the controller pose and collided in its own local physics scene
-    // against copies of the nearby world colliders (so stepping it can't disturb the game's loot/ragdolls).
+    // Physical weapon collision through a sandboxed PhysX rigidbody (WeaponPhysicsProxy): an invisible Rigidbody shaped like the
+    // gun (a fat body capsule and a thin barrel capsule), driven toward the controller pose and collided in its own local physics
+    // scene against copies of the nearby world colliders, so stepping it can't disturb the game's loot or ragdolls.
     // It is stepped at render rate (proxy.Step from Apply, not FixedUpdate) and the visible gun is placed on its resolved
-    // pose every frame. Rig motion (locomotion + turning) is in the target, so near geometry it goes through the collision
-    // (rigMotionThroughPhysics); in open space the proxy snaps to the target anyway.
+    // pose every frame. Rig motion (locomotion and turning) is part of the target, so near geometry it also goes through the
+    // collision; in open space the proxy reaches the target anyway.
     // Vanilla's TurnAwayEffector pose is suppressed for the local player (IKPatches); its OverlapValue still runs (ADS-stop
-    // etc.). The fireport is a child of WeaponRoot, so shots originate at the clamped muzzle, and the FIKA arm sync
+    // etc.). The fireport is a child of WeaponRoot, so shots come from the clamped muzzle, and the FIKA arm sync
     // samples WeaponRoot's world pose, so observers see the clamp too.
-    // The ComputePenetration alternative clips thin walls: don't use it.
+    // Kinematic depenetration (ComputePenetration) clips through thin walls: don't use it.
     public static class WeaponCollision
     {
-        // ---- live-tunable knobs (UnityExplorer) ----
+        // ---- live tunables ----
         public static bool enabled = true;                 // master switch (also gates HandCollision + the TurnAway suppression)
         public static float bodyRadius = 0.05f;            // m; gun body/receiver capsule
         public static float barrelRadius = 0.02f;          // m; gun barrel capsule
@@ -38,40 +38,41 @@ namespace TarkovVR.Source.Player.Interactions
         public static float glassBreakDamage = 30f;        // melee damage carried by the synthetic hit (~knife slash)
         public static bool leftoverGlassAtTouch = true;    // what's left of a broken window breaks at any touch (false = it needs the whack too)
         public static bool logContacts = false;            // a line per new contact: what the gun hit (path, layer, collider, bullet surface)
-        // A line a second while the gun touches something: how much the drawn muzzle shakes frame to frame (its second difference, in the
-        // rig's frame: walking and turning aren't shake) against the hand's own, how deep the hand is in, the substeps. The drawn gun
-        // shaking more than the hand = the contact solve; as much = the hand's own tremor carried along the surface.
+        // Logs a line a second while the gun touches something: how much the drawn muzzle shakes frame to frame (its second difference,
+        // in the rig's frame so walking and turning don't count) against the hand's own shake, how deep the hand is in, and the substeps.
+        // The drawn gun shaking more than the hand points at the contact solve; the same amount is the hand's own tremor carried along
+        // the surface.
         public static bool contactJitterLog = true;
 
-        public static int proxyLayerOverride = -1;         // force the proxy/sandbox layer (UnityExplorer) if the auto-pick misbehaves
-        // Solved on the gun's final pose of the frame (Player.IkProcess prefix, after LateGunPlacement), not in Update: the gun's parent
-        // is put on the hand again after Update (HandsPositioner.Update can run after GunInteractionController.Update, and the end-of-frame
-        // placement moves it once more), carrying an Update-time collision offset one frame of hand motion on - a hard swing drew the gun
-        // 20-30 cm into what had stopped it for a frame or two. false = solved in Update as before.
+        public static int proxyLayerOverride = -1;         // force the proxy/sandbox layer if the automatic pick misbehaves
+        // Solves on the gun's final pose of the frame (Player.IkProcess prefix, after LateGunPlacement) instead of in Update. The gun's
+        // parent is put back on the hand after Update (HandsPositioner.Update can run after GunInteractionController.Update, and the
+        // end-of-frame placement moves it again), so a collision offset solved in Update is carried one frame of hand motion further:
+        // on a hard swing the gun is drawn 20-30 cm into what stopped it for a frame or two. false = solve in Update.
         public static bool atFinalPlacement = true;
 
         private static WeaponPhysicsProxy proxy;
-        private static Vector3 lastTargetGrip;             // the hand's gun pose last frame: how fast the gun meets a surface
+        private static Vector3 lastTargetGrip;             // the hand's gun pose last frame, for how fast the gun meets a surface
         private static Quaternion lastTargetRotation;
         private static bool hasLastTarget;
         private static Vector3 targetGrip;
         private static Vector3 targetVelocity;
         private static Vector3 targetAngularVelocity;      // rad/s
-        private static float contactEndStamp = -10f;       // impact re-arm
+        private static float contactEndStamp = -10f;       // time of the last contact event (impact re-arm)
         private static float lastImpactSoundStamp = -10f;
         private static int occlusionMask;
         private static int glassLayer = -1;
 
-        // Barrel tip: farthest of fireport + muzzle-device transforms (suppressors extend past the fireport), re-picked
-        // periodically so attachment changes are caught. Live world distance, not fc.WeaponLn: vanilla's value carries a
-        // lossyScale correction for EFT's shrunken first-person rig that inflates it ~15cm in the VR rig.
+        // Barrel tip: the farthest of the fireport and the muzzle-device transforms (suppressors extend past the fireport), re-picked
+        // every second so attachment changes are caught. The length is the live world distance, not WeaponLn: vanilla's value carries
+        // a lossyScale correction for EFT's shrunken first-person rig that inflates it by ~15 cm in the VR rig.
         private static Transform muzzleTip;
         private static object muzzleTipOwner;
         private static float muzzleTipRefresh;
 
-        // Enactment bookkeeping: the collision offset is applied to weaponHolder after the marker anchor each frame and
-        // stripped right before the next frame's anchor (PreAnchor). Without the strip it accumulates (the anchor
-        // rewrites holder localPosition per frame but rotation only at equip).
+        // The collision offset is applied to weaponHolder after the marker anchor each frame and removed right before the next
+        // frame's anchor (PreAnchor). Without that it would accumulate: the anchor rewrites the holder's localPosition every frame
+        // but its rotation only at equip.
         private static bool enacted;
         private static Vector3 preEnactLocalPos;
         private static Quaternion preEnactLocalRot;
@@ -86,9 +87,9 @@ namespace TarkovVR.Source.Player.Interactions
             proxy?.Deactivate();
         }
 
-        // Called at the top of UpdateWeaponPosition, before the anchor measures weaponHolder: restores the holder's
-        // pre-enactment local pose so the anchor starts from the controller-desired state. Change detection lets
-        // equip-path re-stamps win.
+        // Called at the top of UpdateWeaponPosition, before the anchor measures weaponHolder. Restores the holder's local pose from
+        // before the collision offset, so the anchor starts from the controller pose. If something else (the equip path) has written
+        // the holder since, that write is kept.
         public static void PreAnchor()
         {
             StripEnacted();
@@ -114,7 +115,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool hasResolvedOffset;
 
         // The gun's pose as drawn this frame, for the co-op arm sync (VRPlayerManager.LateUpdate, which Unity may run before or after
-        // Player.LateUpdate): with this frame's solve still to come, the gun where the hand has it carries the last solve's offset
+        // Player.LateUpdate). If this frame's solve hasn't run yet, the last solve's offset is applied to the hand's gun pose.
         public static void DrawnPose(Transform weaponRoot, out Vector3 position, out Quaternion rotation)
         {
             position = weaponRoot.position;
@@ -125,8 +126,8 @@ namespace TarkovVR.Source.Player.Interactions
             rotation *= resolvedInTargetRotation;
         }
 
-        // UpdateWeaponPosition, after the marker anchor: the solve, at the final placement this frame (ApplyAtFinalPlacement), or now if
-        // the last one asked for there never came
+        // Called from UpdateWeaponPosition after the marker anchor. Defers the solve to this frame's final placement
+        // (ApplyAtFinalPlacement), or solves now if atFinalPlacement is off or the previous deferred solve never ran
         public static void Request()
         {
             if (!atFinalPlacement || deferredFrame >= 0)
@@ -138,7 +139,7 @@ namespace TarkovVR.Source.Player.Interactions
             deferredFrame = Time.frameCount;
         }
 
-        // Player.IkProcess prefix (LateGunPlacementPatches), after the gun was put on the hand at the frame's final rig pose
+        // Called from the Player.IkProcess prefix (LateGunPlacementPatches), after the gun is put on the hand at the frame's final rig pose
         public static void ApplyAtFinalPlacement()
         {
             if (deferredFrame != Time.frameCount)
@@ -147,7 +148,7 @@ namespace TarkovVR.Source.Player.Interactions
             Apply();
         }
 
-        // On the gun at its controller-desired pose (the marker anchor's), as the last write to weaponHolder this frame
+        // Runs on the gun at its controller pose (the marker anchor's) and must be the last write to weaponHolder this frame
         public static void Apply()
         {
             if (!enabled || VRGlobals.firearmController == null ||
@@ -174,7 +175,7 @@ namespace TarkovVR.Source.Player.Interactions
             Vector3 rawGrip = weaponRoot.position;
             Quaternion weaponRootRotation = weaponRoot.rotation;
 
-            // How the hand moves the gun (locomotion and turning included): the speed it meets a surface at
+            // How fast the hand moves the gun (locomotion and turning included), for the speed it meets a surface at
             float deltaTime = Mathf.Max(Time.deltaTime, 1e-4f);
             if (hasLastTarget && (rawGrip - lastTargetGrip).sqrMagnitude < 1f)
             {
@@ -201,7 +202,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             // Draw the gun on the PhysX-resolved pose every frame. The proxy was stepped this frame: in free space it
             // reaches the hand exactly and EnactHolderPose no-ops (its epsilon check); against a wall the visible gun
-            // stops the same frame the proxy does. Feedback comes from the proxy's collision events -> OnProxyContact.
+            // stops the same frame the proxy does. Feedback comes from the proxy's collision events through OnProxyContact.
             EnactHolderPose(rawGrip, weaponRootRotation, proxy.ResolvedPos, proxy.ResolvedRot);
             Quaternion toTarget = Quaternion.Inverse(weaponRootRotation);
             resolvedInTargetPosition = toTarget * (proxy.ResolvedPos - rawGrip);
@@ -257,8 +258,8 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Moves weaponHolder so the gun's root goes from its current (un-collided) pose to the resolved pose: a rigid
-        // delta on the holder (weaponRoot is its descendant). Pre/post poses are captured so PreAnchor strips it next frame.
+        // Moves weaponHolder so the gun's root goes from its current (un-collided) pose to the resolved pose, as a rigid move of the
+        // holder (weaponRoot is its descendant). The poses before and after are saved so PreAnchor can undo it next frame.
         private static void EnactHolderPose(Vector3 currentPosition, Quaternion currentRotation, Vector3 targetPosition, Quaternion targetRotation)
         {
             Transform holder = VRGlobals.weaponHolder.transform;
@@ -276,8 +277,8 @@ namespace TarkovVR.Source.Player.Interactions
             enacted = true;
         }
 
-        // Creates the sandboxed physics proxy. The world mask selects which colliders are copied into the sandbox: static
-        // world (+ glass) only, not Player/Deadbody (the body-sized proxy would jam against your own body / corpses).
+        // Creates the sandboxed physics proxy. The world mask selects which colliders are copied into the sandbox: the static
+        // world and glass only, not Player/Deadbody (the proxy would jam against your own body or corpses).
         // The layer only needs the proxy and its copies to collide with each other.
         private static bool EnsureProxy()
         {
@@ -372,8 +373,8 @@ namespace TarkovVR.Source.Player.Interactions
         // Any contact (pressing, sliding): a new impact needs freshContactGap off the surface first
         internal static void NoteContact() => contactEndStamp = Time.time;
 
-        // The physics proxy reports its collisions here. Impact only: fires once on a fresh contact (freshContactGap since the
-        // last contact event); contactEndStamp advances every event so pressing/sliding stays quiet.
+        // The physics proxy reports its collisions here. Impact feedback fires only on a fresh contact (freshContactGap since the
+        // last contact event); contactEndStamp advances on every event, so pressing or sliding stays quiet.
         internal static void OnProxyContact(Collider col, Vector3 point, Vector3 normal)
         {
             bool fresh = Time.time - contactEndStamp > freshContactGap;
@@ -382,8 +383,8 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             Vector3 barrelDir = VRGlobals.firearmController?.WeaponRoot != null
                 ? -VRGlobals.firearmController.WeaponRoot.up : -normal;
-            // What's left of a broken window gives at a touch (vanilla: walking into it breaks it). Every piece is its own collider,
-            // so pushing on into the next one is a new contact.
+            // What's left of a broken window breaks at a touch, as in vanilla where walking into it breaks it. Every piece is its own
+            // collider, so pushing on into the next piece is a new contact.
             bool leftoverGlass = leftoverGlassAtTouch && IsLeftoverGlass(col);
             if (leftoverGlass)
                 TryBreakGlass(col, point, normal, barrelDir);
@@ -429,8 +430,8 @@ namespace TarkovVR.Source.Player.Interactions
                 + $"{(ballistic != null ? ", bullet surface " + ballistic.TypeOfMaterial : "")}");
         }
 
-        // The gun's own surface-aware drop bank (what vanilla plays when a weapon hits the ground), played at the contact
-        // point; surface resolved off the hit collider's BaseBallistic like LootDropSoundPatches.
+        // Plays the gun's surface-aware drop sound bank (what vanilla plays when a weapon hits the ground) at the contact point.
+        // The surface comes from the hit collider's BaseBallistic, like LootDropSoundPatches.
         private static void PlayImpactSound(Collider hitCollider, Vector3 point, float approach)
         {
             BetterAudio betterAudio = Singleton<BetterAudio>.Instance;
@@ -439,7 +440,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             BaseBallistic.ESurfaceSound surface = BaseBallistic.ESurfaceSound.Concrete;
             BaseBallistic ballistic = hitCollider.GetComponent<BaseBallistic>();
-            // A movement collider (a door's, a tree trunk's) has no surface: its door's / tree's bullet mesh does
+            // A movement-layer collider (a door's, a tree trunk's) has no surface; the door's or tree's bullet mesh has it
             if (ballistic == null && IsMovementLayer(hitCollider.gameObject.layer))
             {
                 Door door = hitCollider.GetComponentInParent<Door>();
@@ -466,9 +467,9 @@ namespace TarkovVR.Source.Player.Interactions
             betterAudio.PlayAtPoint(point, bank, distance, volume, -1f, EnvironmentType.Outdoor, EOcclusionTest.OneShotPropagation);
         }
 
-        // A hard whack on a window shatters it like a VR melee surface hit: a melee DamageInfoStruct through
-        // GameWorld.HackShot (glass-break handler + knife-hit effects). Mirrors FikaSync/MeleeHitApply; observers replay
-        // the same melee-hit packet. Glass only: a gun bump must not chip walls or leave knife decals.
+        // A hard hit on a window shatters it like a VR melee hit: a melee DamageInfo sent through GameWorld.HackShot (glass-break
+        // handler and knife-hit effects). Mirrors FikaSync/MeleeHitApply; observers replay the same melee-hit packet.
+        // Glass only: a gun bump must not chip walls or leave knife decals.
         private static void TryBreakGlass(Collider hitCollider, Vector3 point, Vector3 normal, Vector3 barrelDir)
         {
             BallisticCollider ballisticCollider = hitCollider.GetComponent<BallisticCollider>();
@@ -478,7 +479,7 @@ namespace TarkovVR.Source.Player.Interactions
             GameWorld gameWorld = Singleton<GameWorld>.Instance;
             if (gameWorld == null)
                 return;
-            // Our copy of glass that's already gone (a fallen piece, a shot-out pane): only the copy goes
+            // The real glass is already gone (a fallen piece, a shot-out pane): only remove our copy
             if (!ballisticCollider.enabled || !hitCollider.enabled || !hitCollider.gameObject.activeInHierarchy)
             {
                 DropBrokenCopies(hitCollider);
@@ -505,9 +506,9 @@ namespace TarkovVR.Source.Player.Interactions
                 FikaSendGunSurfaceHit(point, normal, barrelDir, glassBreakDamage);
         }
 
-        // A piece still stuck in a broken window. Tarkov makes them at the break (WindowBreaker.UpdateToStuck): a pooled object
-        // under the window, a convex mesh + the window's glass BallisticCollider, a BrokenWindowPieceCollider trigger child (the
-        // player walking into it breaks it). A hit or a fall turns its BallisticCollider off.
+        // Is this a piece still stuck in a broken window? Tarkov creates them at the break (WindowBreaker.UpdateToStuck): a pooled
+        // object under the window with a convex mesh, the window's glass BallisticCollider and a BrokenWindowPieceCollider trigger
+        // child (walking into it breaks the piece). A hit or a fall turns its BallisticCollider off.
         private static bool IsLeftoverGlass(Collider collider)
         {
             if (collider.gameObject.layer != glassLayer || !IsWindowPiece(collider))
@@ -519,9 +520,9 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static bool IsWindowPiece(Collider collider) => collider.GetComponentInChildren<BrokenWindowPieceCollider>(true) != null;
 
-        // The real colliders are gone: the sandbox copies go too, or the gun keeps hitting a phantom window until you walk more
-        // than retainDistance away and back. A piece's hit knocks out the pieces around it as well, and pieces are pooled (other
-        // windows reuse them): those copies go, not blacklisted. A pane is blacklisted.
+        // The real colliders are gone, so remove their sandbox copies too, or the gun keeps hitting a phantom window until you walk
+        // more than WeaponPhysicsProxy.retainDistance away and back. Hitting a piece knocks out the pieces around it as well, and
+        // pieces are pooled (other windows reuse them), so their copies are dropped but not blacklisted. A pane is blacklisted.
         private static void DropBrokenCopies(Collider hitCollider)
         {
             WindowBreaker window = hitCollider.GetComponentInParent<WindowBreaker>();

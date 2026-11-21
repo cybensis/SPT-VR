@@ -14,9 +14,9 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Physical grab-and-drag for dead bodies (ragdolls): a free hand's palm on a body part + grip (either hand, one body at a time).
-    // Hold = drag; that hand's trigger opens the corpse loot grid (HandsInteractionController.TriggerInteract; triggerInteract off =
-    // a quick grip tap). No pointer / white dot.
+    // Physical grab-and-drag for dead bodies (ragdolls). Put a free hand's palm on a body part and hold the grip to drag it (either hand,
+    // one body at a time). That hand's trigger opens the corpse loot grid (HandsInteractionController.TriggerInteract); with
+    // triggerInteract off, a quick grip tap opens it instead. There is no pointer or white dot for bodies.
     //
     // A dead body is an EFT `Corpse` whose ragdoll is a set of `RigidbodySpawner` bone rigidbodies. Once it settles, EFT
     // freezes every bone kinematic, and after it leaves the camera view tears the rigidbodies down (keepRigidbody:false).
@@ -40,9 +40,6 @@ namespace TarkovVR.Source.Player.Interactions
         public static float bodyTapMaxMove = 0.06f;
 
         public static bool debugBodyGrab = false;
-
-        // Diagnostic: on releasing a downed teammate, log for ~25 frames the bone's world position, its local position and
-        // the player root. World moves with local constant = the parent/root is being moved; local moves = the bone is driven.
 
         // maxDepenetrationVelocity of the ragdoll bones while dragged (higher = snags on terrain less; too high pops a
         // deeply clipped body) and at rest (low = no ragdoll explosion when the body is shot later)
@@ -128,10 +125,10 @@ namespace TarkovVR.Source.Player.Interactions
         }
         private readonly List<ReleasedBody> releasedBodies = new List<ReleasedBody>();
 
-        // EFT's settle coroutine (CorpseRagdoll.WorkingCycle) calls TryPutToSleep on each bone every frame: a bone whose
-        // kinetic energy drops under EFTHardSettings.CorpseEnergyToSleep (0.05) is marked MustBeSleeping and Sleep()'d every
-        // frame after, and PhysX zeroes a body's velocity on sleep - so a held or falling body sinks ~g*dt a frame.
-        // The bones of every body we hold or are letting settle skip that call (BodyDragPatches). HollywoodFX sets
+        // EFT's settle coroutine (CorpseRagdoll.WorkingCycle) calls TryPutToSleep on each bone every frame. A bone whose kinetic
+        // energy drops under EFTHardSettings.CorpseEnergyToSleep (0.05) is marked MustBeSleeping and Sleep()'d every frame after that.
+        // PhysX zeroes a body's velocity when it sleeps, so a held or falling body would only sink about g*dt per frame.
+        // While true, the bones of every body we hold or are letting settle skip that call (BodyDragPatches). HollywoodFX sets
         // CorpseEnergyToSleep to -1, which hides the problem while it's installed.
         public static bool keepHeldBodiesAwake = true;
         internal static readonly HashSet<PlayerRigidbodySleepHierarchy> bonesKeptAwake = new HashSet<PlayerRigidbodySleepHierarchy>();
@@ -166,7 +163,8 @@ namespace TarkovVR.Source.Player.Interactions
 
         private int DeadBodyMask => 1 << DEAD_BODY_LAYER;
 
-        // A grip on a body that didn't take (a gate, or a press too long or moved for a tap): one line each, with the reason
+        // Logs one line, with the reason, for each grip on a body that didn't take (a gate blocked it, or the press was too long or moved
+        // too far for a tap)
         public static bool logBodyGrips = true;
 
         // The hand the body interaction belongs to (one at a time): false = the off hand, true = the dominant one
@@ -182,11 +180,11 @@ namespace TarkovVR.Source.Player.Interactions
             return hand != null ? hand.transform : null;
         }
 
-        // Called from Update, before the loot pointer: either free hand's palm on a body part + grip = drag, its trigger = loot
-        // (triggerInteract; else a quick grip tap)
+        // Called from Update, before the loot pointer. Either free hand's palm on a body part plus the grip drags it, and that hand's
+        // trigger loots it (with triggerInteract; otherwise a quick grip tap does).
         private void UpdateBodyGrab()
         {
-            // (a hand dragging the body is busy for its trigger, the other one may loot it)
+            // A hand dragging the body can't loot it with its trigger, but the other hand can
             if (TryTriggerBodyLoot(false) || TryTriggerBodyLoot(true))
                 return;
             if (bodyInteractionArmed)
@@ -238,7 +236,7 @@ namespace TarkovVR.Source.Player.Interactions
             bodyInteractionCorpse = null;
         }
 
-        // A press of that hand's grip with its palm on a body: armed (and the part under it grabbed). True = this press is the body's.
+        // A grip press with that hand's palm on a body arms the interaction and grabs the part under the palm. True = the body took this press.
         private bool TryArmBodyInteraction(bool dominant)
         {
             VRBoolean grip = BodyGrip(dominant);
@@ -275,17 +273,17 @@ namespace TarkovVR.Source.Player.Interactions
                 return "using an item";
             if (PhysicalDoors.HoldsDoor(dominant))
                 return "on a door";
-            // The gun in the left hand: the free hand is the right one, drawn by the other arm than these grabs are built on
+            // With the gun in the left hand, the free hand is the right one, but it is drawn by a different arm than these grabs are built on
             if (Handedness.GunInLeftHand)
                 return "the gun is in the left hand";
             if (dominant)
                 return DominantHandBusy();
             if (NearForegrip())
                 return "at the gun's foregrip";
-            // That press takes the gun into this hand (ChestHang)
+            // This press takes the gun into this hand instead (ChestHang)
             if (ChestHang.OffHandAtGunGrip)
                 return "at the gun's grip";
-            // ...or a gun on the body (BodyWeapons)
+            // Or it takes a gun off the body (BodyWeapons)
             if (BodyWeapons.OffHandAtBodyGun)
                 return "at a gun on the body";
             return null;
@@ -370,8 +368,8 @@ namespace TarkovVR.Source.Player.Interactions
             }
 
             // EFT builds corpses with keepRigidbody (Ragdoll.Bool_0) = false: once settled and out of the camera view, the
-            // settle coroutine destroys the joints + rigidbodies, which would kill the drag. true skips that teardown; left
-            // true on release.
+            // settle coroutine destroys the joints and rigidbodies, which would end the drag. Setting it true skips that teardown;
+            // it stays true after release.
             if (grabbedRagdoll != null)
                 grabbedRagdoll._keepRigidbody = true;
 
@@ -477,8 +475,8 @@ namespace TarkovVR.Source.Player.Interactions
             grabbedBodyRb.MoveRotation(Quaternion.RotateTowards(
                 grabbedBodyRb.rotation, targetRot, bodyDragMaxAngularSpeed * Time.fixedDeltaTime));
 
-            // FIKA: broadcast the pose of every bone (throttled). One pinned bone + local physics on the observer lets
-            // the dangling bones diverge and stretch. A grab is a corpse or a downed teammate, never both.
+            // FIKA: broadcast the pose of every bone (throttled). Sending only the pinned bone and leaving the rest to the observer's
+            // local physics lets the dangling bones drift apart and stretch. A grab is a corpse or a downed teammate, never both.
             if (InstalledMods.FIKAInstalled && Time.time - lastBodySyncTime >= bodySyncInterval)
             {
                 if (localDraggedCorpseNetId >= 0)
@@ -560,9 +558,9 @@ namespace TarkovVR.Source.Player.Interactions
                 VRInput.Haptic.Execute(0, 0.05f, 1, 0.3f, BodyHandSource(bodyGrabDominant));
             }
 
-            // Physics back on for the whole ragdoll so it falls, then the release-settle manager takes it (land -> rest ->
-            // freeze). Same path for corpses and downed teammates. Freezing a downed ragdoll kinematic on release does
-            // not stop its short jump: that comes from outside the ragdoll (something moves the body root).
+            // Turn physics back on for the whole ragdoll so it falls; then the release-settle manager takes it (land, rest,
+            // freeze). Same path for corpses and downed teammates. A downed ragdoll makes a short jump on release; freezing it
+            // kinematic doesn't stop that, because something outside the ragdoll moves the body root.
             ReactivateRagdollBones();
             RestoreRagdollCollision();
 
@@ -762,7 +760,7 @@ namespace TarkovVR.Source.Player.Interactions
             return false;
         }
 
-        //--- Corpse loot grid (the old grip-on-corpse interaction) --------------------
+        //--- Corpse loot grid --------------------------------------------------------
         // Opens the corpse's loot grid: the tap-to-loot path here, and ProcessInteractiveObjects
         private void OpenCorpseLoot(Corpse corpse)
         {

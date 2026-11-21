@@ -3,34 +3,31 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Body
 {
-    // Your body under your head. Tarkov's animation decides where the body's head is over its feet: forward over the gun in the rifle
-    // stance, further forward walking, lower and forward crouched, forward again as the spine bends with half your head's pitch
-    // (MovementPatches.GetBodyRotation), turned with the body's 28 deg stance offset. Vanilla's view is that head's, so the legs always
-    // sit right under it. Here the body's own eyes (UpperBodySolver.EyesOf: the head bone + the eye offset) are MEASURED every frame and
-    // kept under your real eyes: the legs are where the animation has them under that head, in every stance - no distances guessed.
-    // Around that point, lean room: inside it the body stays (lean out, peek, duck), past it the body takes only the overshoot, so your
-    // head is never further off the body's than the room. The room is measured along where you look, shrinks while the movement stick
-    // is pushed (the body walks under you) and, after you stop, grows back once the body has settled. The rig moves the other way by
-    // the same amount in the same frame (MoveBody): your view and hands never move for it. One step a frame, from Update (before the
-    // animator, the IK and the camera pin): IKManager.MatchLegsToArms, whose callers in the other hands states are no-ops after it.
+    // Keeps the body under your head. Tarkov's animation decides where the body's head sits over its feet, and that changes with the
+    // stance, walking, crouching, the spine pitch (half your head's, MovementPatches.GetBodyRotation) and the 28 deg stance turn. So the
+    // body's own eyes (UpperBodySolver.EyesOf: the head bone + the eye offset) are measured every frame and kept under your real eyes.
+    // Inside a lean room around that point the body stays put (lean, peek, duck); past it the body follows only by the overshoot. The
+    // room is measured along your look, shrinks while the movement stick is pushed, and grows back once the body settles after a stop.
+    // MoveBody moves the rig back by the same amount in the same frame, so your view and hands don't move.
+    // Stepped once per frame (frame-guarded) from Update, before the animator, the IK and the camera pin, by IKManager.MatchLegsToArms.
     internal static class BodyFollow
     {
-        // The measured offset of the body's eyes over its root, smoothed (the walk's bob and the breathing out, stance changes in)
+        // Smoothing of the measured offset of the body's eyes over its root: filters out the walk's bob and breathing, follows stance changes
         public static float stanceSmoothTime = 0.25f;   // s
-        public static float maxStanceOffset = 0.6f;     // m: a measure further off the root than this is skipped (a bad bone read)
-        public static float bodyBack = 0f;              // m the body stands further back than its eyes put it (- = forward)
-        // How far your eyes may lean off the body's before it follows: forward, back, sideways, along where you look
+        public static float maxStanceOffset = 0.6f;     // m, a measurement further off the root than this is skipped (bad bone read)
+        public static float bodyBack = 0f;              // m, extra distance the body stands behind its eyes (negative = forward)
+        // m, how far your eyes may lean off the body's before it follows: forward, back and sideways, relative to your look direction
         public static float leanRoomForward = 0.20f;
         public static float leanRoomBack = 0.20f;
         public static float leanRoomSide = 0.40f;
-        public static float movingRoomScale = 0.1f;     // the room while the movement stick is pushed, of the above
-        public static float roomBlendTime = 0.3f;       // s the room takes to shrink / grow back
-        public static float stopSettleTime = 0.3f;      // s after you stop before the room grows back (the body settles under you first)
-        public static float stickDeadZone = 0.15f;      // the movement stick past this = walking
-        public static float followTime = 0.08f;         // s the body takes to take up the overshoot (0 = at once: as shaky as your head)
-        public static bool blockedByWalls = false;      // the body's capsule swept along each move: a wall stops it, your head goes on
+        public static float movingRoomScale = 0.1f;     // lean room multiplier while the movement stick is pushed
+        public static float roomBlendTime = 0.3f;       // s, time for the room to shrink / grow back
+        public static float stopSettleTime = 0.3f;      // s after stopping before the room grows back (the body settles under you first)
+        public static float stickDeadZone = 0.15f;      // movement stick deflection above which you count as walking
+        public static float followTime = 0.08f;         // s, time for the body to take up the overshoot (0 = at once, as shaky as your head)
+        public static bool blockedByWalls = false;      // sweep the body's capsule along each move: a wall stops the body, your head goes on
         public static float wallSkin = 0.02f;           // m kept off a wall
-        public static bool debugLog = false;            // a [BodyFollow] line a second: the measured stance, your eyes off it, the room
+        public static bool debugLog = false;            // logs a [BodyFollow] line per second: measured stance, your eye offset, the room
 
         private static int steppedFrame = -1;
         private static EFT.Player stateFor;
@@ -70,8 +67,8 @@ namespace TarkovVR.Source.Player.Body
                 return;
             Quaternion bodyYaw = Quaternion.LookRotation(bodyForward.normalized, Vector3.up);
 
-            // Where the animation has the body's eyes over its root (last frame's pose: the bones are posed after Update). Held while
-            // prone: lying down the head is a metre ahead, and putting it under yours would drag the body that far back.
+            // Measure where the animation puts the body's eyes relative to its root. This reads last frame's pose, because the bones are
+            // posed after Update. Skipped while prone: lying down, the head is about a metre ahead of the root.
             Transform headBone = player.PlayerBones.Head.Original;
             bool prone = player.MovementContext != null && player.MovementContext.IsInPronePose;
             if (headBone != null && !prone)
@@ -91,7 +88,7 @@ namespace TarkovVR.Source.Player.Body
 
             bool walking = VRInput.LeftJoystick.axis.sqrMagnitude > stickDeadZone * stickDeadZone;
             standing = Mathf.MoveTowards(standing, walking ? 0f : 1f, deltaTime / Mathf.Max(walking ? roomBlendTime : stopSettleTime, 0.01f));
-            // (the room stays small until the body has settled after a stop: grown at once, it would leave the body where the walk had it)
+            // The room stays small until the body has settled after a stop. Grown at once, it would leave the body where the walk left it.
             float roomWanted = walking || standing < 1f ? movingRoomScale : 1f;
             roomScale = Mathf.MoveTowards(roomScale, roomWanted, deltaTime / Mathf.Max(roomBlendTime, 0.01f));
 
@@ -99,7 +96,7 @@ namespace TarkovVR.Source.Player.Body
             Vector3 bodyEyes = body.position + bodyYaw * new Vector3(stance.x, 0f, stance.y - bodyBack);
             Vector3 offset = Flat(head.position - bodyEyes);
 
-            // Along where you look (straight down, the top of the head points that way)
+            // Measured along your look direction; looking straight down, the top of the head points that way instead
             Vector3 lookForward = Flat(head.forward);
             if (lookForward.sqrMagnitude < 0.01f)
                 lookForward = Flat(head.up);
@@ -111,7 +108,7 @@ namespace TarkovVR.Source.Player.Body
             float across = Vector3.Dot(offset, lookRight);
             float roomAlong = Mathf.Max(0.01f, (along >= 0f ? leanRoomForward : leanRoomBack) * roomScale);
             float roomAcross = Mathf.Max(0.01f, leanRoomSide * roomScale);
-            // How far out of the room, 1 = on its edge: the overshoot is what's past the edge along the same line
+            // How far outside the room (1 = on its edge). The overshoot is the part of the offset past the edge, along the same line.
             float outside = Mathf.Sqrt(along * along / (roomAlong * roomAlong) + across * across / (roomAcross * roomAcross));
             Vector3 overshoot = outside > 1f ? offset * (1f - 1f / outside) : Vector3.zero;
             Vector3 move = followTime > 0f ? overshoot * (1f - Mathf.Exp(-deltaTime / followTime)) : overshoot;
@@ -132,8 +129,8 @@ namespace TarkovVR.Source.Player.Body
 
         private static Vector3 Flat(Vector3 vector) => new Vector3(vector.x, 0f, vector.z);
 
-        // The body moves, the rig the other way at once (not at the next camRoot pin / offsetter update): your head and hands stay where
-        // they are in the world this frame, whichever runs first
+        // Moves the body, and the rig the opposite way at once (not at the next camRoot pin / offsetter update), so your head and hands
+        // stay where they are in the world this frame, whichever runs first
         private static void MoveBody(Transform body, Vector3 move)
         {
             body.position += move;
@@ -145,8 +142,8 @@ namespace TarkovVR.Source.Player.Body
             offsetter.localPosition -= localMove;
         }
 
-        // How far the body's capsule gets along the move before a wall: raised by the step height, so floors, steps and kerbs don't stop
-        // it. The layers are the ones the character controller collides with.
+        // How far the body's capsule gets along the move before a wall. The capsule is raised by the step height, so floors, steps and
+        // kerbs don't stop it. The layers are the ones the character controller collides with.
         private static Vector3 SweptMove(EFT.Player player, Vector3 move)
         {
             ICharacterController controller = player.CharacterController;
@@ -178,7 +175,7 @@ namespace TarkovVR.Source.Player.Body
             for (int i = 0; i < count; i++)
             {
                 RaycastHit hit = sweepHits[i];
-                // (distance 0 = already touching at the start: not in the way of this move)
+                // Distance 0 means already touching at the start, which doesn't block this move
                 if (hit.distance <= 0f || hit.collider == null || (own != null && hit.collider.transform.IsChildOf(own)))
                     continue;
                 allowed = Mathf.Min(allowed, Mathf.Max(0f, hit.distance - wallSkin));

@@ -22,7 +22,7 @@ namespace TarkovVR
     // Soft: the FikaSync module only loads its plugin when FIKA is present; a hard dependency would break solo VR
     [BepInDependency("com.matsix.sptvr.fikasync", BepInDependency.DependencyFlags.SoftDependency)]
     // Soft: ORBIT (bot-AI mod) is referenced (publicized DLL) so dragged corpses can relocate their loot waypoints. The VR mod
-    // must load without it; the dependency only makes ORBIT load first so it's in the Chainloader registry when we look.
+    // must load without it; the dependency only makes ORBIT load first, so it is in the Chainloader registry when we look.
     [BepInDependency("com.chazut.orbit", BepInDependency.DependencyFlags.SoftDependency)]
     // Soft: FuckThisCulling (GPU occlusion culling) gets stereo support patches (ModSupport/FuckThisCulling) when installed
     [BepInDependency("com.rootdarkarchon.fuckthisculling", BepInDependency.DependencyFlags.SoftDependency)]
@@ -46,7 +46,7 @@ namespace TarkovVR
             Logger.LogInfo($"Plugin SPT-VR is loading!");
             MyLog = Logger;
 
-            // The VR libraries and data files from BepInEx/plugins/sptvr/VR, before anything starts VR
+            // Prepare the VR libraries and data files from BepInEx/plugins/sptvr/VR before anything starts VR
             try
             {
                 VRRuntimeFiles.Prepare();
@@ -56,7 +56,7 @@ namespace TarkovVR
                 Logger.LogError($"[VR files] preparing the VR files failed: {exception}");
             }
 
-            // Unity read the old manifests at engine start: starting VR against them could pair two copies of a plugin
+            // Unity read the old manifests when the engine started. Starting VR against them could pair two copies of a plugin.
             if (VRRuntimeFiles.RestartNeeded)
             {
                 Logger.LogError("VR not started: its plugin manifests in the game's data folder were just added or updated. Restart the game once.");
@@ -77,7 +77,7 @@ namespace TarkovVR
 
             // The desktop window: one eye, cropped to the window and stabilised (for recording)
             gameObject.AddComponent<TarkovVR.Source.Graphics.DesktopMirror>();
-            // VR Graphics "Disable Hideout Shadows"
+            // The VR > Graphics setting "Disable Hideout Shadows"
             gameObject.AddComponent<TarkovVR.Source.Graphics.HideoutShadows>();
             // Software foveated rendering on the headset camera (BepInEx config "Foveated Masking")
             TarkovVR.Source.Graphics.FoveatedMask.Init(Config);
@@ -94,7 +94,7 @@ namespace TarkovVR
 
         private bool InitializeVR()
         {
-            // Both paths create SteamVR's action objects (OpenXR's VRInput falls back to them); once
+            // Both paths need SteamVR's action objects (OpenXR's VRInput falls back to them), so they are created once here
             SteamVR_Actions.PreInitialize();
             if (VRSettings.GetUseOpenXR())
             {
@@ -107,8 +107,8 @@ namespace TarkovVR
             return StartOpenVR();
         }
 
-        // OpenXR never starts OpenVR. Without Unity.XR.OpenXR.dll the call itself throws (OpenXRBootstrap.Initialize can't be
-        // compiled), so it is caught here rather than inside it.
+        // This never starts OpenVR. Without Unity.XR.OpenXR.dll the call itself throws (OpenXRBootstrap.Initialize can't be
+        // compiled), so the exception is caught here rather than inside it.
         private static bool TryStartOpenXR()
         {
             try
@@ -143,7 +143,7 @@ namespace TarkovVR
                 XRGeneralSettings.AttemptInitializeXRSDKOnLoad();
                 XRGeneralSettings.AttemptStartXRSDKOnBeforeSplashScreen();
 
-                // SteamVR below connects without the XR plugin, so without this a missing display read as a successful start
+                // SteamVR.Initialize below connects even without the XR plugin, so without this check a missing display looks like a successful start
                 if (managerSettings.activeLoader == null)
                 {
                     Plugin.MyLog.LogError("[OpenVR] The OpenVR XR plugin didn't start (see the [Subsystems] lines above): no headset display.");
@@ -311,9 +311,9 @@ namespace TarkovVR
             InstalledMods.FIKAInstalled = ApplyModSupport("com.fika.core", "FIKA", "TarkovVR.ModSupport.FIKA");
             if (InstalledMods.FIKAInstalled)
             {
-                // The custom-packet sync (arm poses + body-drag) lives in the standalone SPT-VR-FikaSync.dll, which starts through its
-                // own plugin so flatscreen / headless peers register, relay and render the packets too (a peer without them fails on
-                // "Undefined packet"). We only give it the VR-side hooks for the body-drag steal arbitration.
+                // The custom-packet sync (arm poses, body drag) lives in the standalone SPT-VR-FikaSync.dll. It starts through its own
+                // plugin, so flatscreen and headless peers also register, relay and render the packets (a peer without them fails on
+                // "Undefined packet"). Here it only gets the VR-side hooks for deciding who keeps a body that two players drag.
                 try
                 {
                     BindFikaSyncHooks();
@@ -322,7 +322,7 @@ namespace TarkovVR
                 {
                     MyLog.LogError($"SPT-VR-FikaSync.dll missing or failed to bind ({exception.Message}). Install it next to SPT-VR.dll for co-op sync.");
                 }
-                // Its own call: an older module (before 2.2.0) has no door sync, and the rest still binds
+                // A separate call, so an older module (before 2.2.0) without door sync still binds the rest
                 try
                 {
                     BindFikaDoorHook();
@@ -359,9 +359,9 @@ namespace TarkovVR
             }
         }
 
-        // Another mod's VR support: found through BepInEx's registry by its plugin ID, wherever its DLL sits (each is a soft dependency
-        // above, so it's loaded and registered before us). Patches that fail (another version of the mod) are logged and the rest of
-        // our start carries on. True = installed.
+        // Applies the VR support patches for another mod. The mod is found in BepInEx's registry by its plugin ID, wherever its DLL is
+        // (each is a soft dependency above, so it is loaded and registered before us). Patches that fail (e.g. another version of the
+        // mod) are logged and startup carries on. Returns true if the mod is installed.
         private bool ApplyModSupport(string pluginId, string modName, string patchNamespace)
         {
             if (!BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue(pluginId, out PluginInfo modInfo))
@@ -381,20 +381,21 @@ namespace TarkovVR
             return true;
         }
 
-        // Binds the body-drag steal-arbitration hooks into the FikaSync companion module. Its own NoInlining method, only called when
-        // FIKA is detected: inlined into Awake, the SptVrFikaSync (SPT-VR-FikaSync.dll) references would bind that assembly at Awake's
-        // JIT and throw at startup when the companion DLL isn't installed (solo, no FIKA).
+        // Binds the body-drag hooks (who keeps a body that two players grab) into the FikaSync companion module. It is a separate
+        // NoInlining method, only called when FIKA is detected: inlined into Awake, its SptVrFikaSync (SPT-VR-FikaSync.dll) references
+        // would load that assembly when Awake is JIT-compiled and throw at startup when the companion DLL isn't installed (solo, no FIKA).
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void BindFikaSyncHooks()
         {
             SptVrFikaSync.FikaVrSync.getLocalDraggedCorpseNetId = () => Source.Player.Interactions.HandsInteractionController.localDraggedCorpseNetId;
             SptVrFikaSync.FikaVrSync.getLocalBodyGrabTime = () => Source.Player.Interactions.HandsInteractionController.bodyGrabTime;
             SptVrFikaSync.FikaVrSync.onYieldBodyDrag = () => VRGlobals.handsInteractionController?.RelinquishBodyDrag();
-            // Corpse loot-AI sync runs inside the companion (on the headless/host, where ORBIT lives; SPT-VR.dll does not). The VR mod
-            // only sends the grab/settle markers via FikaVrSync.SendCorpseLoot* from HandsInteractionController: no callback needed here.
+            // The corpse loot-AI sync runs inside the companion, on the headless client or host where ORBIT runs (SPT-VR.dll isn't there).
+            // The VR mod only sends the grab and settle markers (FikaVrSync.SendCorpseLoot* from HandsInteractionController), so no
+            // callback is needed here.
         }
 
-        // A door our hand moves (PhysicalDoors): another VR player's packets for it are left alone here
+        // Tells FikaSync which doors our hand is moving (PhysicalDoors), so other players' packets for such a door are ignored here
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void BindFikaDoorHook()
         {

@@ -4,17 +4,17 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Misc
 {
-    // Audio -> controller haptics, live: a read-only OnAudioFilterRead tap on the AudioSource playing the sound publishes
-    // per-buffer RMS + zero-crossing rate from the audio thread; a main-thread pump turns those into haptics (one level per
-    // ~20ms window, to each hand that feels it, through HapticMixer). Used for eating sounds and the gun's reload sounds
+    // Turns audio into controller haptics, live. A read-only OnAudioFilterRead tap on the AudioSource playing the sound publishes
+    // per-buffer RMS and zero-crossing rate from the audio thread. A main-thread pump turns those into haptics: one level per
+    // ~20 ms window, sent through HapticMixer to each hand that should feel it. Used for eating sounds and the gun's reload sounds
     // (VRReloadController.OnGunClipPlayed).
     //
-    // AudioClip.GetData envelopes don't work: EFT's foley is compressed/streaming (not DecompressOnLoad), so GetData is
-    // invalid. The filter tap hears the decoded stream, so compression doesn't matter.
+    // AudioClip.GetData can't be used: EFT's foley is compressed/streaming (not DecompressOnLoad), so GetData is invalid.
+    // The filter tap hears the decoded stream, so compression doesn't matter.
     //
-    // Pooled-source safety: BetterAudio sources are pooled and reused. The pump renders only while the tracked BetterSource
-    // reports Playing and its _lastPlayingClipName is our clip (BetterSource.Play sets both; OnStop nulls the clip), so a
-    // source re-grabbed for someone else's audio goes silent immediately.
+    // BetterAudio sources are pooled and reused. The pump renders only while the tracked BetterSource reports Playing and its
+    // _lastPlayingClipName is our clip (BetterSource.Play sets both; OnStop clears the clip name), so a source reused for someone
+    // else's audio goes silent immediately.
     public static class AudioHaptics
     {
         public static bool enabled = true;
@@ -22,11 +22,11 @@ namespace TarkovVR.Source.Misc
         public static float windowSec = 0.02f;     // one haptic pulse per window
         public static float minAmp = 0.04f;        // skip windows quieter than this
         public static float minFreq = 60f;         // LRA band the audio frequency maps into
-        public static float maxFreq = 200f;        // higher: a sustained full-strength buzz makes the controller audibly hum
+        public static float maxFreq = 200f;        // above this, a sustained full-strength buzz makes the controller hum audibly
         public static float peakDecay = 0.995f;    // auto-gain: running peak decay per window
-        public static float freqSmoothing = 0.35f; // per-window lerp toward the measured texture
-        // Onsets over sustain: a click / ratchet / slam lands as a short sharp hit, the steady part after it falls back. Crisper,
-        // and the controller hums less (the hum is the sustained part). sustainGain 1 + onsetBoost 0 = a flat envelope.
+        public static float freqSmoothing = 0.35f; // per-window lerp toward the measured frequency
+        // Emphasises onsets over sustain: a click, ratchet or slam lands as a short sharp hit and the steady part after it is weaker.
+        // This feels crisper and the controller hums less (the hum comes from the sustained part). sustainGain 1 + onsetBoost 0 = a flat envelope.
         public static float sustainGain = 0.55f;   // a sound's steady part comes through at this much...
         public static float onsetBoost = 1.6f;     // ...and its sudden rises this much harder
         public static float onsetFollow = 0.3f;    // per window, how fast the steady level catches up with the sound (0.3 = ~60 ms)
@@ -34,15 +34,15 @@ namespace TarkovVR.Source.Misc
         private static HapticAudioTap tap;          // the filter component (on the pooled source GO)
         private static BetterSource trackedBs;      // the BetterSource the clip was played on
         private static string expectedClipName;     // what should be playing for us to render
-        private static float leftGain, rightGain;   // how much each controller gets: the hand doing it 1, one feeling it through the thing it holds less
-        private static float leftPitch = 1f, rightPitch = 1f; // and how much lower (HapticMixer.throughPitch)
+        private static float leftGain, rightGain;   // per controller: 1 for the hand doing it, less for a hand feeling it through what it holds
+        private static float leftPitch = 1f, rightPitch = 1f; // per-controller pitch scale (HapticMixer.throughPitch)
         private static float clipStrength = 1f;      // the caller's scale on top of strength
         private static float clipIdleStop = 1f;      // the caller's idleStopSec
         private static Coroutine pump;
 
-        // Main thread, whenever a clip is audibly played for us: re-points the tap at the source actually used (the pool
-        // re-issues sources between clips), picks the hand(s), starts the pump.
-        // idleStop < 0 = idleStopSec; it must end before the clip's owner hands the source back to the pool (see DestroyTap).
+        // Called on the main thread whenever a clip is audibly played for us. Moves the tap onto the source actually used (the pool
+        // hands out different sources between clips), sets the hand gains and starts the pump.
+        // idleStop < 0 = idleStopSec. It must end before the clip's owner returns the source to the pool (see DestroyTap).
         public static void OnClipPlayed(BetterSource bs, AudioClip clip, float leftHandGain, float rightHandGain, float leftHandPitch = 1f, float rightHandPitch = 1f,
             float scale = 1f, float idleStop = -1f)
         {
@@ -74,10 +74,10 @@ namespace TarkovVR.Source.Misc
             trackedBs = null; expectedClipName = null;
         }
 
-        // Destroy the tap rather than disable it. An OnAudioFilterRead script inserts a custom DSP filter on the
-        // AudioSource's GameObject, and on a pooled source release/re-borrow toggles source1.enabled under the filter,
-        // after which the source can report Playing while producing silence (all volume/mute/active flags clean).
-        // Removing the component restores the vanilla DSP chain; OnClipPlayed re-adds it fresh per clip.
+        // Destroy the tap rather than disable it. An OnAudioFilterRead script inserts a custom DSP filter on the AudioSource's
+        // GameObject. When a pooled source is released and borrowed again, source1.enabled is toggled under the filter, and the
+        // source can then report Playing while producing silence (with all volume/mute/active flags clean).
+        // Removing the component restores the vanilla DSP chain; OnClipPlayed adds it again for the next clip.
         private static void DestroyTap()
         {
             if (tap != null)
@@ -88,8 +88,7 @@ namespace TarkovVR.Source.Misc
             tap = null;
         }
 
-        // Trace helper for the eating debug log: is one of our filter taps sitting on this
-        // source GameObject right now?
+        // Debug helper: is one of our filter taps on this source GameObject right now?
         public static string DescribeTap(GameObject go)
         {
             if (go == null) return "noGO";
@@ -145,8 +144,8 @@ namespace TarkovVR.Source.Misc
                 }
                 if (amplitude >= minAmp)
                 {
-                    // Held 1.5x the window so it bridges to the next one: reads as a continuous buzz, not ticks. Through the
-                    // mixer, so it plays alongside the knocks instead of cutting them off.
+                    // Each pulse lasts 1.5x the window so it overlaps the next one and feels like a continuous buzz, not ticks.
+                    // Sent through the mixer so it plays alongside other haptics (knocks) instead of cutting them off.
                     if (leftGain > 0f) HapticMixer.Stream(SteamVR_Input_Sources.LeftHand, amplitude * leftGain, freq * leftPitch, windowSec * 1.5f);
                     if (rightGain > 0f) HapticMixer.Stream(SteamVR_Input_Sources.RightHand, amplitude * rightGain, freq * rightPitch, windowSec * 1.5f);
                 }

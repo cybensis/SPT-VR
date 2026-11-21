@@ -7,24 +7,25 @@ using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Rig plumbing shared by every archetype: arm IK targets + the post-IK wrist
-    // pins, body-follow, palm collision probes, the interaction-zone math (+ debug
-    // viz spheres), trigger reads, haptic pulses, and the sound gate.
+    // Rig code shared by every food archetype: arm IK targets and the post-IK wrist pins, pinning the rig to the
+    // body, palm probe points, the interaction-zone math and its debug spheres, trigger reads, haptic pulses, and
+    // the sound gate.
     internal static partial class EatingInteractionController
     {
         //--- Arms / props -----------------------------------------------------------
         private static void DriveArms()
         {
-            // A pull-open latches one hand onto the held item (handLatched): that arm's IK aims at the latch
-            // transform (glued to the holding hand's rig target) instead of the controller. Both IKs stay
-            // enabled; the pin (Left/RightPinTarget) finishes the 1:1 glue.
+            // A pull-to-open latches one hand onto the held item (handLatched). That arm's IK then aims at the
+            // latch transform, which is attached to the holding hand's rig target, instead of the controller.
+            // Both IKs stay enabled; the wrist pin (Left/RightPinTarget) then puts the wrist exactly on the target.
             SetArmIk(VRGlobals.ikManager.rightArmIk, RightPinTarget());
             SetArmIk(VRGlobals.ikManager.leftArmIk, LeftPinTarget());
             DriveElbowBends();
         }
 
-        // Re-point the arms' elbow bend goals at the VR goals each frame (like gun/empty-hands): Meds spawns
-        // _elbowBends at its own goals (animation pose). The index->hand mapping flips with handedness.
+        // Points the arms' elbow bend goals at the VR goals each frame, as the gun and empty-hands states do.
+        // MedsController spawns _elbowBends aimed at its own goals in the animation pose. The index-to-hand
+        // mapping flips with handedness.
         private static void DriveElbowBends()
         {
             var p = VRGlobals.player;
@@ -56,8 +57,8 @@ namespace TarkovVR.Source.Player.Interactions
             if (!armIk.enabled) armIk.enabled = true;
         }
 
-        // Pin the rig root (camRoot) to the body anchor (the meds object, kept on the ribcage),
-        // like HandsPositioner does for empty hands: nothing else does it mid-eat.
+        // Pins the rig root (camRoot) to the body anchor (the meds object, kept on the ribcage), like
+        // HandsPositioner does for empty hands. Nothing else does this while eating.
         private static void PinRigToBody()
         {
             if (medsBody == null || VRGlobals.camRoot == null || VRGlobals.player == null) return;
@@ -67,14 +68,14 @@ namespace TarkovVR.Source.Player.Interactions
                 medsBody.position.z);
         }
 
-        // Hand-pin runs from the IK solver's OnPostUpdate: Player.LateUpdate is too early (FinalIK solves
-        // after it). Pins the rendered wrist (bone3) onto the rig target; a pull-latched hand pins to the
-        // latch (glued to the item) instead.
+        // The wrist pin runs from the IK solver's OnPostUpdate, because Player.LateUpdate is too early (FinalIK
+        // solves after it). It pins the rendered wrist (bone3) onto the rig target, or onto the latch on the item
+        // while that hand is latched.
         private static void PinLeftAfterIk() { if (active && !manualDone) PinBoneToTarget(VRGlobals.ikManager?.leftArmIk, LeftPinTarget()); }
         private static void PinRightAfterIk() { if (active && !manualDone) PinBoneToTarget(VRGlobals.ikManager?.rightArmIk, RightPinTarget()); }
 
-        // Where each hand's IK target + wrist pin should aim right now: the pull latch while
-        // that hand is latched onto the held item, else its normal rig target.
+        // Where each hand's IK target and wrist pin aim right now: the pull latch while that hand is
+        // latched onto the held item, otherwise its normal rig target.
         private static Transform LeftPinTarget() => handLatched && !latchedHandIsDominant && pullLatch != null ? pullLatch.transform : LeftHand();
         private static Transform RightPinTarget() => handLatched && latchedHandIsDominant && pullLatch != null ? pullLatch.transform : RightHand();
 
@@ -107,23 +108,23 @@ namespace TarkovVR.Source.Player.Interactions
         private static Transform RightHand() => VRGlobals.vrPlayer?.RightHand != null ? VRGlobals.vrPlayer.RightHand.transform : null;
         private static Transform LeftHand() => VRGlobals.vrPlayer?.LeftHand != null ? VRGlobals.vrPlayer.LeftHand.transform : null;
 
-        // Resolve a hand role to its transform. RightHand is always the dominant hand and LeftHand the off
+        // Resolves a hand role to its transform. RightHand is always the dominant hand and LeftHand the off
         // hand (the SteamVR pose listeners swap in left-handed mode), so no handedness branch is needed.
         private static Transform HandT(Hand hand) => hand == Hand.Dominant ? RightHand() : LeftHand();
         private static Hand Other(Hand hand) => hand == Hand.Dominant ? Hand.Off : Hand.Dominant;
 
         //--- Palm collision points ---------------------------------------------------
-        // The palm point every probe/anchor uses (palmCollisionPoints): the fingertip-leaf centroid of the
-        // rendered hand, in the wrist (bone3) frame. bone3 is pinned 1:1 onto the rig transform each frame
-        // (PinBoneToTarget), so a wrist-local offset is a rig-local offset. It is world-delta math inside the
-        // rigid hand subtree, so it stays valid whatever the wrist's stale world pose is: safe from both the
-        // Update (Tick) and LateUpdate (LateZeroProps/viz) callers.
+        // The palm point every probe and anchor uses: the centroid of the rendered hand's fingertip leaves, in
+        // the wrist (bone3) frame. bone3 is pinned exactly onto the rig transform each frame (PinBoneToTarget), so
+        // a wrist-local offset is also a rig-local offset. It only uses world deltas inside the rigid hand
+        // subtree, so it is valid even when the wrist's world pose is stale. That makes it safe to call from both
+        // Update (Tick) and LateUpdate (LateZeroProps, the debug spheres).
         private static bool palmAnchorsResolved;
         private static Transform palmWristDom, palmWristOff;     // bone3 per arm
-        private static Transform[] palmLeavesDom, palmLeavesOff; // near fingertip leaves
+        private static Transform[] palmLeavesDom, palmLeavesOff; // fingertip leaves near the wrist
 
         // Dominant always maps to the right arm: the handedness swap happens at the SteamVR pose listeners,
-        // and the pins aim rightArmIk/leftArmIk at RightHand/LeftHand unconditionally (Right/LeftPinTarget).
+        // and the pins always aim rightArmIk/leftArmIk at RightHand/LeftHand (Right/LeftPinTarget).
         private static void ResolvePalmAnchors()
         {
             palmAnchorsResolved = true;
@@ -134,8 +135,8 @@ namespace TarkovVR.Source.Player.Interactions
                 + (palmLeavesOff != null ? palmLeavesOff.Length : 0) + " leaves.");
         }
 
-        // Same filtering as ResolveFingerAnchor: the wrist subtree is the hand, minus our own Eat* holders;
-        // leaves farther than hand distance from the wrist are attach/marker dummies, not fingers.
+        // Same filtering as ResolveFingerAnchor: the wrist subtree is the hand, minus our own Eat* holders.
+        // Leaves farther from the wrist than a hand's length are attach or marker dummies, not fingers.
         private static void ResolvePalmLeaves(LimbIK armIk, out Transform wrist, out Transform[] leaves)
         {
             wrist = armIk?.solver?.bone3?.transform;
@@ -148,7 +149,7 @@ namespace TarkovVR.Source.Player.Interactions
                 for (int i = 0; i < t.childCount; i++)
                 {
                     Transform c = t.GetChild(i);
-                    if (c.name.StartsWith("Eat", StringComparison.Ordinal)) continue; // our holders/latch
+                    if (c.name.StartsWith("Eat", StringComparison.Ordinal)) continue; // our holders and latch
                     if (c.childCount == 0)
                     {
                         if ((c.position - wristPos).magnitude < 0.18f) kept.Add(c);
@@ -160,8 +161,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (kept.Count > 0) leaves = kept.ToArray();
         }
 
-        // A hand's palm offset in its rig transform's local frame. Zero (= the wrist origin) when
-        // palmCollisionPoints is off; the static fallback if the skeleton is missing.
+        // A hand's palm offset in its rig transform's local frame, or palmFallbackLocal if the skeleton is missing.
         private static Vector3 PalmOffsetLocal(Hand hand)
         {
             if (!palmAnchorsResolved) ResolvePalmAnchors();
@@ -178,12 +178,12 @@ namespace TarkovVR.Source.Player.Interactions
             return Quaternion.Inverse(wrist.rotation) * (sum / n - wrist.position);
         }
 
-        // The world point a hand reaches WITH. Call only with a live hand (HandT != null).
+        // The world point a hand reaches with. Call only when the hand exists (HandT != null).
         private static Vector3 ProbePoint(Hand hand) => HandT(hand).TransformPoint(PalmOffsetLocal(hand));
 
         // A reach gesture fires when the acting hand's palm probe is within <radius> of the anchor hand's
-        // palm + local offset. The offset is in the anchor rig transform's local frame, so it rides the held
-        // item (e.g. up a bottle's axis to its cap); zero = the holding palm itself.
+        // palm plus a local offset. The offset is in the anchor rig transform's local frame, so it moves with the
+        // held item (e.g. up a bottle's axis to its cap); zero = the holding palm itself.
         private static bool ZoneReached(Hand acting, Hand anchor, Vector3 offset, float radius)
         {
             Transform a = HandT(acting), b = HandT(anchor);
@@ -191,10 +191,10 @@ namespace TarkovVR.Source.Player.Interactions
             return Vector3.Distance(ProbePoint(acting), b.TransformPoint(PalmOffsetLocal(anchor) + offset)) < radius;
         }
 
-        // Eats where the eating hand is the hand holding the item (drinks, wrapper bars, timed wrapper eats, a
-        // CanSpoon's can-at-mouth drink) probe the mouth with the open zone's item point (palm +
-        // openZoneOffset: the cap/lid/bar top) instead of palm + eatZoneOffset. Foods where a piece is carried
-        // in the free hand, and sausage (skipOpen, no open zone), keep the palm probe. false = palm everywhere.
+        // When the eating hand is the hand holding the item (drinks, wrapper bars, timed wrapper eats, a CanSpoon's
+        // can-at-mouth drink), the mouth is probed with the open zone's point on the item (palm + openZoneOffset:
+        // the cap, lid or bar top) instead of palm + eatZoneOffset. Foods where a piece is carried in the free
+        // hand, and sausage (skipOpen, no open zone), use eatZoneOffset.
 
         private static Vector3 EatProbeOffset(Hand eatHand)
         {
@@ -204,10 +204,10 @@ namespace TarkovVR.Source.Player.Interactions
             return eatZoneOffset;
         }
 
-        // The eat gesture: the eating hand's palm probe (+ EatProbeOffset) is near the mouth (head +
-        // mouthLocalOffset: the camera is at the eyes) and roughly in front of the face (the forward gate
-        // rejects behind-the-head positions). radiusScale widens the boundary for hysteresis (the drink hold
-        // passes drinkZoneExitScale while held so the clock can't flicker at the edge).
+        // The eat gesture: the eating hand's palm probe (plus EatProbeOffset) is near the mouth (head +
+        // mouthLocalOffset, since the camera is at the eyes) and roughly in front of the face (the forward check
+        // rejects positions behind the head). radiusScale widens the zone for hysteresis: the drink hold passes
+        // drinkZoneExitScale while drinking so the drink timer can't flicker on and off at the edge.
         private static bool EatZoneReached(Hand eatHand, float radiusScale = 1f)
         {
             Transform head = GetHead();
@@ -225,12 +225,12 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //--- Zone debug visualization -------------------------------------------------
-        // Toggle debugZones in UnityExplorer while eating. Translucent spheres show each zone as the trigger
-        // math sees it (same palm anchor + offset + radius) and turn green while that zone's trigger condition
-        // is satisfied (same ZoneReached/EatZoneReached the gestures use). Opaque dots mark each sphere's
-        // center; bright green dots are the palm probe points. Only the zones the current phase can trigger
-        // are drawn: blue=open, yellow=take, red=mouth. A Bag's shake gate draws as the take sphere at its
-        // real radius (shakeNearDistance, hand-to-hand).
+        // Set debugZones (e.g. in UnityExplorer) while eating. Translucent spheres show each zone exactly as the
+        // trigger checks see it (same palm anchor, offset and radius) and turn green while that zone's condition
+        // is met (the same ZoneReached/EatZoneReached the gestures use). Opaque dots mark each sphere's center;
+        // bright green dots are the palm probe points. Only the zones the current phase can trigger are drawn:
+        // blue = open, yellow = take, red = mouth. A Bag's shake check is drawn as the take sphere at its real
+        // hand-to-hand radius (shakeNearDistance).
         public static bool debugZones = false;
 
         private static GameObject zoneOpenViz, zoneTakeViz, zoneEatViz;
@@ -248,23 +248,23 @@ namespace TarkovVR.Source.Player.Interactions
             Transform head = GetHead();
             Transform openAnchor = HandT(Other(s.openHand)); // the held item rides this hand
             bool shakeTake = s.takeKind == TakeKind.Shake;
-            // The shake gate is palm-to-palm at shakeNearDistance: zone on the pouring (off)
-            // palm, probed by the bag (dominant) palm — mirror of DetectShake.
+            // The shake check is palm-to-palm within shakeNearDistance: the zone sits on the receiving (off) palm and
+            // is probed by the palm holding the bag (dominant), matching DetectShake.
             Hand takeProbeHand = shakeTake ? Hand.Dominant : s.takeHand;
             Hand takeAnchorHand = shakeTake ? Hand.Off : Other(s.takeHand);
             Transform takeAnchor = HandT(takeAnchorHand);
             float takeRadius = shakeTake ? shakeNearDistance : scoopDistance;
             Vector3 takeOffset = shakeTake ? Vector3.zero : takeZoneOffset;
 
-            // Which zones can fire right now (mirror of StepGesture's routing). Drinks keep
-            // the open zone live in Ready — that's the recap/done trigger.
+            // Which zones can fire right now (matches StepGesture's routing). Drinks keep the open zone active
+            // in Ready, because it is the recap trigger.
             bool showOpen = phase == Phase.Closed || (s.timedSip && phase == Phase.Ready);
             bool showTake = phase == Phase.Ready && !s.timedSip && s.hasTakeStep;
-            // mouthDrink: a CanSpoon's can-at-the-mouth drink is live from Ready too.
+            // mouthDrink: a CanSpoon's can-at-the-mouth drink is also active from Ready.
             bool showEat = phase == Phase.Holding
                 || (phase == Phase.Ready && (s.timedSip || !s.hasTakeStep || (def != null && def.mouthDrink)));
 
-            // Centers + lit states, all through the live trigger math.
+            // Centers and lit states, computed with the same checks the triggers use.
             Vector3 openC = openAnchor != null ? openAnchor.TransformPoint(PalmOffsetLocal(Other(s.openHand)) + openZoneOffset) : Vector3.zero;
             Vector3 takeC = takeAnchor != null ? takeAnchor.TransformPoint(PalmOffsetLocal(takeAnchorHand) + takeOffset) : Vector3.zero;
             Vector3 eatC = head != null ? head.TransformPoint(mouthLocalOffset) : Vector3.zero;
@@ -286,8 +286,8 @@ namespace TarkovVR.Source.Player.Interactions
             SetZoneViz(ref zoneTakeDot, "VRZoneTakeDot", showTake && takeAnchor != null, takeC, 0.01f, new Color(1f, 0.85f, 0.2f, 0.95f));
             SetZoneViz(ref zoneEatDot, "VRZoneEatDot", showEat && head != null, eatC, 0.01f, new Color(1f, 0.25f, 0.25f, 0.95f));
 
-            // Probe points (what must enter a sphere): the acting PALM for open/take, the
-            // eat palm + eatZoneOffset for the mouth.
+            // Probe points (what must enter a sphere): the acting palm for open and take, and the
+            // eating palm plus EatProbeOffset for the mouth.
             Hand probeHand = showTake ? takeProbeHand : s.openHand;
             Transform probeT = HandT(probeHand);
             SetZoneViz(ref probeHandViz, "VRZoneProbeHand", (showOpen || showTake) && probeT != null,
@@ -297,12 +297,11 @@ namespace TarkovVR.Source.Player.Interactions
                 eatHand != null ? eatHand.TransformPoint(PalmOffsetLocal(s.eatHand) + EatProbeOffset(s.eatHand)) : Vector3.zero, 0.015f, new Color(0.2f, 1f, 0.3f, 0.9f));
         }
 
-        // The zone shell's color: its base hue, or solid-ish green while the trigger
-        // condition is satisfied.
+        // The zone sphere's color: its base color, or a stronger green while the trigger condition is met.
         private static Color ZoneColor(Color baseC, bool lit) => lit ? new Color(0.3f, 1f, 0.4f, 0.45f) : baseC;
 
-        // Create/position one debug sphere. scale = diameter (the spheres are unit-sized).
-        // Color is re-applied every call (the lit state changes frame to frame).
+        // Creates or positions one debug sphere. Its scale is the diameter (the primitive is unit-sized).
+        // The color is set on every call because the lit state changes from frame to frame.
         private static void SetZoneViz(ref GameObject go, string name, bool show, Vector3 position, float radius, Color color)
         {
             if (!show) { if (go != null) go.SetActive(false); return; }
@@ -310,7 +309,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 go.name = name;
-                UnityEngine.Object.Destroy(go.GetComponent<Collider>()); // visual only — no physics
+                UnityEngine.Object.Destroy(go.GetComponent<Collider>()); // visual only, no physics
                 Renderer partRenderer = go.GetComponent<Renderer>();
                 partRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 partRenderer.receiveShadows = false;
@@ -341,18 +340,17 @@ namespace TarkovVR.Source.Player.Interactions
             probeHandViz = probeEatViz = null;
         }
 
-        // The PHYSICAL controller for a hand role: dominant = the right hand in normal
-        // mode, the off hand the other one; left-handed mode swaps. The ONE role->physical
-        // mapping shared by the trigger reads and haptics below.
+        // The physical controller for a hand role: dominant is the right controller in normal mode and the
+        // left one in left-handed mode. The trigger reads and haptics below all use this one mapping.
         private static SteamVR_Input_Sources HandSource(bool dominant)
         {
             bool useLeft = dominant ? VRSettings.GetLeftHandedMode() : !VRSettings.GetLeftHandedMode();
             return useLeft ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
         }
 
-        // Trigger rising-edge for the opening hand. dominant=true => the dominant (can-opening)
-        // hand's trigger; false => the off hand's (wrapper/bag/pack opening). Tracks each hand's
-        // previous axis separately so the two edges don't interfere.
+        // Trigger press edge for a hand role. dominant = true reads the dominant hand (which opens cans);
+        // false reads the off hand (which opens wrappers, bags and packs). Each hand's previous axis is kept
+        // separately so the two edges don't interfere.
         private static bool TriggerEdgeImpl(bool dominant)
         {
             float axis = TriggerAxisImpl(dominant);
@@ -367,8 +365,8 @@ namespace TarkovVR.Source.Player.Interactions
             return co;
         }
 
-        // Raw trigger axis for a hand role (the open squeeze/latch scrubs off this);
-        // doesn't touch the prev-axis edge state (TriggerEdgeImpl keeps working independently).
+        // Raw trigger axis for a hand role (the open squeeze and latch use it). It doesn't touch the
+        // previous-axis state, so TriggerEdgeImpl is unaffected.
         private static float TriggerAxisImpl(bool dominant)
         {
             SteamVR_Input_Sources src = HandSource(dominant);
@@ -380,17 +378,16 @@ namespace TarkovVR.Source.Player.Interactions
         // Haptic click on the dominant controller.
         private static void Pulse() => PulseHand(true);
 
-        // Haptic on a specific hand role (the pull-open's acting hand is the OFF hand for
-        // wrapper/bag/pack/most drinks).
+        // Haptic click on a given hand role (the hand that opens is the off hand for wrappers, bags,
+        // packs and most drinks).
         private static void PulseHand(bool dominant)
         {
             VRInput.Haptic.Execute(0f, 0.06f, 1f, 0.4f, HandSource(dominant));
         }
 
-        // Does this controller's sound bank actually have an element for the event name?
-        // OnSound resolves AdditionalSounds by EventName == name or "Snd"+name (decompiled
-        // SoundEventHandler) — a name with no element is a SILENT no-op, which matters for
-        // the gulp fallback (it must not claim the throttle for a sound that can't play).
+        // Whether this controller's sound bank has an element for the event name. SoundEventHandler matches
+        // AdditionalSounds by EventName == name or "Snd" + name, and a name with no element silently does
+        // nothing. The gulp fallback needs this so it doesn't take the throttle for a sound that can't play.
         private static bool HasSoundElement(string name)
         {
             if (soundPlayer == null || string.IsNullOrEmpty(name)) return false;
@@ -404,7 +401,7 @@ namespace TarkovVR.Source.Player.Interactions
             return false;
         }
 
-        // Play one of the eat's own sound events on demand (frozen-animation safe).
+        // Plays one of the eat's own sound events on demand (works while the animation is frozen).
         private static void PlaySound(string name)
         {
             if (soundPlayer == null || string.IsNullOrEmpty(name)) return;
@@ -414,18 +411,17 @@ namespace TarkovVR.Source.Player.Interactions
             finally { playingManualSound = false; }
         }
 
-        // Suppress the eat's animation-driven sounds on OUR controller's player (they
-        // would otherwise all fire in a burst at the finish). Our own PlaySound calls
-        // pass through via playingManualSound.
+        // Mutes the eat's animation-driven sounds on our controller's sound player (they would otherwise all
+        // play at once at the finish). Our own PlaySound calls pass through via playingManualSound.
         public static bool AllowSound(BaseSoundPlayer sp, string name)
         {
             if (!active || sp != soundPlayer) return true;
-            if (playingManualSound) return true; // our own PlaySound, never gate it
+            if (playingManualSound) return true; // our own PlaySound, never muted
             if (playingOpen)
             {
-                // Let the open segment's own clip sounds play, except names the pull milestones already fired
-                // this open: the pull-settle replays the clip's tail for real, and an openSound authored in
-                // that tail would sound twice. (Non-pull opens have pullSoundsFired == 0: nothing is gated.)
+                // Let the open's own clip sounds play, except names the pull milestones already played during this
+                // open. The settle after the pull plays the clip's tail for real, so an openSound in that tail would
+                // play twice. Opens without a pull have pullSoundsFired == 0, so nothing is muted.
                 string[] fired = def?.openSounds;
                 if (fired != null)
                     for (int i = 0; i < pullSoundsFired && i < fired.Length; i++)
@@ -434,28 +430,28 @@ namespace TarkovVR.Source.Player.Interactions
             }
             if (drinkingHeld)
             {
-                // The gulp loop plays its own Drink sounds, but the animator restarts faster
-                // than the clip — throttle so each gulp finishes before the next fires.
+                // The gulp loop plays its own Drink sounds, but the animator restarts faster than the clip,
+                // so throttle them and let each gulp finish before the next one plays.
                 if (Time.time < nextDrinkSound) return false;
                 nextDrinkSound = Time.time + drinkGulpInterval;
-                // An animation gulp is audible — push the manual fallback past the next
-                // interval so it only fires when the events actually go quiet.
+                // An animation gulp played, so push the manual fallback past the next interval. It only plays
+                // when the animation events go quiet.
                 nextGulpFallback = Time.time + drinkGulpInterval + GulpFallbackGrace;
-                UpdateSnackSegments(); // segmented snacks shed a piece per audible bite
+                UpdateSnackSegments(); // segmented snacks lose one piece per audible bite
                 return true;
             }
-            return false; // everything else is the animation bursting (manual sounds returned above)
+            return false; // everything else is animation sound that would pile up (our own sounds returned above)
         }
 
-        // Replaces BaseSoundPlayer.PlayClip for our controller's player (prefix, returns true = handled): plays
-        // the clip head-locked 2D. PlayClip's stereo flag (IsFirstPerson(PointOfView)) only skips occlusion and
-        // sets _forceStereo; the pooled Weaponry source keeps the preset's 3D blend, positioned on the
-        // controller's weapon transform, which VR reparents away from the camera (clips come out quiet,
-        // mislocated, muffled or silent). EnableStereo (blend 0) + the stereo PlayClipInternal path removes the
-        // position; the pool's Release/Clear restores the source for other users.
+        // Replaces BaseSoundPlayer.PlayClip for our controller's sound player (prefix; true = handled) and plays
+        // the clip head-locked in 2D. PlayClip's stereo flag (IsFirstPerson(PointOfView)) only skips occlusion and
+        // sets _forceStereo. The pooled Weaponry source keeps the preset's 3D blend at the controller's weapon
+        // transform, which VR reparents away from the camera, so clips come out quiet, misplaced, muffled or
+        // silent. EnableStereo (blend 0) plus the stereo PlayClipInternal path removes the positioning; the
+        // pool's Release/Clear restores the source for its next user.
         public static bool PlayClipHeadLocked(BaseSoundPlayer sp, AudioClip clip, int rolloff, float volume)
         {
-            if (!active || sp == null || sp != soundPlayer || clip == null) return false; // not ours — original runs
+            if (!active || sp == null || sp != soundPlayer || clip == null) return false; // not ours: the original runs
             try
             {
                 int priority = sp.PriorityCalculator.CalculatePriority(0f, rolloff * rolloff);
@@ -471,17 +467,17 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Postfix from BaseSoundPlayer.PlayClip (AudioToHaptics patch): sounds played while opening the item
-        // (the pull/squeeze scrub + the settle; not the draw, gulps, bites or holster) stream to the
-        // controllers as haptics, through the OnAudioFilterRead tap on the BetterSource the clip went out on.
+        // Called from the BaseSoundPlayer.PlayClip postfix (AudioToHaptics). Sounds played while opening the item
+        // (the squeeze and pull scrub, and the settle; not the draw, gulps, bites or put-away) are streamed to the
+        // controllers as haptics, through the OnAudioFilterRead tap on the BetterSource that played the clip.
         public static void OnEatAudio(BaseSoundPlayer sp, AudioClip clip, float volume)
         {
             if (!active || manualDone || sp == null || sp != soundPlayer) return;
             if (phase != Phase.Closed || (!pullingOpen && !playingOpen)) return; // opening only
             try
             {
-                // The OPENING hand's controller (same role->physical mapping as PulseHand) full; the other hand holds the
-                // item being opened and feels it through it.
+                // The opening hand's controller (same role-to-controller mapping as PulseHand) gets full strength. The
+                // other hand holds the item being opened and feels it through the item, weaker and lower.
                 bool dominantActs = style == null || style.openHand == Hand.Dominant;
                 bool openerIsLeft = HandSource(dominantActs) == SteamVR_Input_Sources.LeftHand;
                 float holderGain = TarkovVR.Source.Misc.HapticMixer.throughGain;

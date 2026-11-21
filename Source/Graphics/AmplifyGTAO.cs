@@ -56,20 +56,17 @@ namespace TarkovVR.Source.Graphics
                     return;
                 }
 
-                // List all asset names in the bundle
                 string[] assetNames = amplifyAOBundle.GetAllAssetNames();
                 foreach (string name in assetNames)
                 {
                     Plugin.MyLog.LogInfo($"Asset in bundle: {name}");
                 }
 
-                // Load all shaders and log their actual names
                 Shader[] allShaders = amplifyAOBundle.LoadAllAssets<Shader>();
                 foreach (Shader s in allShaders)
                 {
                     Plugin.MyLog.LogInfo($"Shader found: {s.name}");
 
-                    // Assign based on actual shader name
                     if (s.name == "Hidden/Amplify Occlusion/Occlusion")
                         occlusionShader = s;
                     else if (s.name == "Hidden/Amplify Occlusion/Blur")
@@ -97,33 +94,6 @@ namespace TarkovVR.Source.Graphics
                 ESSAOMode.ColoredHighestQuality => SampleCountLevel.VeryHigh,
                 _ => SampleCountLevel.Low
             };
-            /*
-            if (aoEffect != null)
-            {
-                aoEffect.SampleCount = sampleCountLevel;
-                aoEffect.Radius = 0.8f;
-                aoEffect.Bias = 0.1f;
-                aoEffect.Thickness = 0.35f;
-                aoEffect.Intensity = 0.5f;
-                aoEffect.PowerExponent = 1.0f;
-                aoEffect.Downsample = false;
-                aoEffect.CacheAware = true;
-                aoEffect.BlurEnabled = true;
-                aoEffect.BlurRadius = 2;
-                aoEffect.BlurSharpness = 20;
-                aoEffect.BlurPasses = 2;
-                aoEffect.FilterEnabled = false;
-                aoEffect.FilterBlending = 0.15f;
-                aoEffect.FilterDownsample = false;
-                aoEffect.FadeEnabled = true;
-                aoEffect.FadeStart = 20f;
-                aoEffect.FadeLength = 50f;
-                aoEffect.FadeToIntensity = 0f;
-                aoEffect.Tint = new Color32(12, 12, 12, 255);
-                aoEffect.ApplyMethod = AmplifyOcclusionEffect.ApplicationMethod.PostEffect;
-                aoEffect.PerPixelNormals = AmplifyOcclusionEffect.PerPixelNormalSource.Camera;
-            }
-            */
             if (aoEffect != null)
             {
                 aoEffect.SampleCount = sampleCountLevel;

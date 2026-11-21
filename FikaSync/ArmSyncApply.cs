@@ -8,15 +8,15 @@ using UnityEngine;
 
 namespace SptVrFikaSync
 {
-    // Receive + render the VR hands/weapon for remote players, in the ObservedPlayer.LateUpdate postfix
-    // (after FIKA's visual pass). Dispatch by held controller:
-    //   - Firearm, sprinting   -> skip (FIKA's vanilla run animation plays)
-    //   - Firearm / Knife / Grenade -> override the weapon pose; right hand IKs to the item, left hand to the
-    //                             foregrip marker if gripping else to its synced free pose
-    //   - Empty                -> drive both arm IKs to the controller hand poses
-    //   - Meds (eating)        -> handled by EatingSyncApply (arms + food props)
-    //   - anything else        -> vanilla
-    // Runs on any peer with this module (incl. flatscreen), so they all see the VR arms/weapon.
+    // Receives and renders the VR hands and weapon of remote players, in an ObservedPlayer.LateUpdate postfix
+    // (after FIKA's visual pass). What it does depends on the held controller:
+    //   - Firearm while sprinting   -> skip (FIKA's vanilla run animation plays)
+    //   - Firearm / Knife / Grenade -> override the weapon pose; the right hand IKs to the item, the left hand to the
+    //                                  foregrip marker while gripping, else to its synced free pose
+    //   - Empty                     -> drive both arm IKs to the synced controller poses
+    //   - Meds (eating)             -> handled by EatingSyncApply (arms + food props)
+    //   - anything else             -> vanilla
+    // Runs on any peer with this module (flatscreen included), so they all see the VR arms and weapon.
     [HarmonyPatch]
     internal static class ArmSyncApply
     {
@@ -25,28 +25,28 @@ namespace SptVrFikaSync
         public static bool driveHandRotation = true;      // false = position-only (palm keeps anim rot)
         public static Vector3 leftHandRotOffsetEuler = Vector3.zero;
         public static Vector3 rightHandRotOffsetEuler = Vector3.zero;
-        // Exponential smoothing of the body-local poses, to hide the ~20 Hz packet stepping. 0 = off. Only the hand/weapon offset
-        // from the body is smoothed: ~1/rate s of latency, no body lag.
+        // Exponential smoothing of the body-local poses, to hide the ~20 Hz packet stepping. 0 = off. Only the hand and weapon
+        // offset from the body is smoothed, so it adds about 1/rate s of latency to the hands and none to the body.
         public static float smoothRate = 18f;
         public static float staleTimeout = 0.4f;          // stop driving arms if no packet for this long
         public static bool debugWeaponSync = false;       // log the weapon-root / marker hierarchy once
         // Cosmetic forward nudge (metres) of the observed weapon pose, along the observed body's facing flattened to horizontal.
         // The sender's gun is body-anchored close to the chest and can look shoved into the torso on an observer. The grip markers
-        // ride the gun, so the welded hands + arms follow. Observer-side only (doesn't touch hitreg/aim). 0 = off.
+        // ride the gun, so the welded hands and arms follow. Observer-side only (doesn't touch hitreg or aim). 0 = off.
         public static float weaponForwardOffset = 0.15f;
-        // Straightens the held arm whatever the aim: pushes the gun out along the held (right) shoulder->gun line toward the arm's
-        // own full length, by this fraction (weaponForwardOffset only opens the elbow when aimed roughly forward). A gun already
-        // at/past full reach is left alone. The observed shoulder sits at the anatomical spot, not head-tracked like the local
-        // rig, which is why the same gun pose looks tucked here. 0 = off.
+        // Fraction to push the gun out along the right shoulder->gun line toward the arm's full length. This straightens the held
+        // arm at any aim (weaponForwardOffset only helps when aiming roughly forward). A gun already at full reach is left alone.
+        // The observed shoulder sits at the anatomical spot, not head-tracked like the local rig, so the same gun pose looks
+        // tucked in here. 0 = off.
         public static float weaponExtendFactor = 0f;
-        // Elbow bend direction. Without a pole the observed arm keeps the idle animation's elbow bend (elbows jut forward wherever
-        // the hand goes). Like the local rig's _elbowBends, each arm's IK bend goal is aimed at a world pole below + out from the
-        // body; not the auto-"Arm" modifier, which reads EFT's skeleton wrong. Offsets are body-local (X out, Y down, Z back).
-        // useElbowPole=false -> leave EFT's animation bend.
-        // The gun model on the synced WeaponRoot. The third-person pass (PlayerBones.ShiftWeaponRoot) pulls Weapon_root_anim - the
-        // gun model and its hand markers - toward the body's own weapon bone (Weapon_Root_Third), so moving WeaponRoot alone left the
-        // gun that far off the VR player's pose (off the hands placed from it, the gun in the left hand). The VR player's own game
-        // keeps it on WeaponRoot (SPT-VR's GunInteractionController zeroes GunBaseTransform). false = Tarkov's third-person pull.
+        // Elbow bend direction (the useElbowPole fields below). Without a pole the observed arm keeps the idle animation's elbow
+        // bend, so the elbows jut forward wherever the hand goes. Like the local rig's _elbowBends, each arm's IK bend goal is aimed
+        // at a world pole below and out from the body. FinalIK's automatic "Arm" bend modifier is not used: it reads EFT's skeleton
+        // wrong. Offsets are body-local (X out, Y down, Z back). useElbowPole = false leaves EFT's animation bend.
+        // gunOnWeaponRoot keeps the gun model on the synced WeaponRoot. The third-person pass (PlayerBones.ShiftWeaponRoot) pulls
+        // Weapon_root_anim (the gun model and its hand markers) toward the body's own weapon bone (Weapon_Root_Third), so moving
+        // WeaponRoot alone leaves the gun off the VR player's pose. The VR player's own game keeps it on WeaponRoot
+        // (SPT-VR's GunInteractionController zeroes GunBaseTransform). false = Tarkov's third-person pull.
         public static bool gunOnWeaponRoot = true;
         public static bool useElbowPole = true;
         public static float elbowPoleWeight = 1f;
@@ -129,16 +129,16 @@ namespace SptVrFikaSync
                         return;
                     if (!weaponRemote.TryGetValue(__instance.NetId, out RemoteWeapon w))
                         return;
-                    // On a mounted gun the hands item is that gun, held by Tarkov's own pose (the VR player sends nothing then): the
-                    // last pose received would put it in their hand. A pose gone quiet isn't driven either.
+                    // On a mounted gun the hands item is that gun, posed by Tarkov (the VR player sends nothing then), so the last
+                    // received pose would put it in their hand. A stale pose isn't driven either.
                     bool onMountedGun = __instance.MovementContext != null && __instance.MovementContext.StationaryWeapon != null;
                     if (onMountedGun || Time.time - w.recvTime > staleTimeout)
                     {
                         displayedWeapon.Remove(__instance.NetId);
                         return;
                     }
-                    // A gun's held hand drops IK weight during reload (preserve it); a knife/grenade is always held in that
-                    // hand, so force the weight (the grenade pin-pull throw-ready state drops it otherwise).
+                    // EFT drops a gun's held-hand IK weight during reload, so keep EFT's weight for guns. A knife or grenade is
+                    // always in that hand, so force the weight (the grenade's pin-pulled throw-ready state drops it otherwise).
                     DriveRemoteWeapon(__instance, hc.WeaponRoot, w, forceHeldHandWeight: !(hc is Player.FirearmController));
                     return;
                 }
@@ -209,7 +209,7 @@ namespace SptVrFikaSync
             Vector3 gunPos = frame.TransformPoint(w.pos) + fwdOffset;
             gunPos = ExtendWeaponReach(limbs, gunPos);
             wr.SetPositionAndRotation(gunPos, frame.rotation * w.rot);
-            // Before the markers are read below: they ride Weapon_root_anim
+            // Must run before the markers are read below, because they ride Weapon_root_anim.
             if (gunOnWeaponRoot && p.HandsController is Player.FirearmController firearm && firearm.GunBaseTransform != null)
             {
                 firearm.GunBaseTransform.localPosition = Vector3.zero;
@@ -221,8 +221,8 @@ namespace SptVrFikaSync
 
             SetElbowPoles(p, limbs);
 
-            // Right hand: always on the gun/item. For a knife/grenade force the IK weight, so the hand can't go stuck when EFT drops
-            // the weight (e.g. grenade pin-pull).
+            // Right hand: always on the gun or item. For a knife or grenade, force the IK weight so the hand doesn't get stuck when
+            // EFT drops the weight (e.g. grenade pin-pull).
             if (forceHeldHandWeight && limbs[1] != null && limbs[1].solver != null)
             {
                 limbs[1].solver.IKPositionWeight = 1f;

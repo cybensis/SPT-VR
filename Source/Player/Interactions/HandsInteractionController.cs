@@ -16,10 +16,8 @@ using TarkovVR.ModSupport.FIKA;
 using EFT.InventoryLogic;
 using System.Collections.Generic;
 using System.Collections;
-//using LiteNetLib.Utils;
 using Diz.LanguageExtensions;
 using Diz.Utils;
-//using LiteNetLib;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -105,16 +103,13 @@ namespace TarkovVR.Source.Player.Interactions
                 AddRightHandLaser();
             InitializeInteractions();
         }
-        // left hand laser pos -0.4 -0.05 0 and rot 9.1637 266.6361 0 then add cube child with local scale 0.002 0.002 0.5 then go to mesh renderer->material and set the color to 0.1912 0.1924 0.1896 1
         private void AddLeftHandLaser()
         {
             GameObject laserHolder = new GameObject("LaserHolder");
             laserHolder.transform.parent = VRGlobals.vrPlayer.LeftHand.transform;
             laser = GameObject.CreatePrimitive(PrimitiveType.Cube);
             laser.transform.parent = laserHolder.transform;
-            //-0.3037 0.0415 0.0112
             laserHolder.transform.localPosition = new Vector3(-0.4f, -0.05f, 0f);
-            //351 273.6908 0
             laserHolder.transform.localRotation = Quaternion.Euler(9, 266, 0);
             laser.transform.localPosition = Vector3.zero;
             laser.transform.localRotation = Quaternion.identity;
@@ -138,7 +133,6 @@ namespace TarkovVR.Source.Player.Interactions
             grenadeLaser.transform.localPosition = Vector3.zero;
             grenadeLaser.transform.localRotation = Quaternion.identity;
             grenadeLaser.transform.localScale = new Vector3(0.002f, 0.002f, 0.5f);
-            // Set the material to the Standard shader with transparency
             grenadeLaser.transform.GetComponent<Renderer>().material = new Material(Shader.Find("Unlit/Texture"));
             grenadeLaser.transform.GetComponent<Renderer>().material.color = new Color(0.139f, 0.402f, 0.418f, 1);
 
@@ -153,44 +147,40 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        //Used for the backpack - This completely bypasses the pickup animation and puts the loot directly in your bag
+        // Used for the backpack stow: skips the pickup animation and puts the loot straight into the inventory
         private void DirectItemTransfer(EFT.Player owner, IItemOperationResult possibleAction, Item rootItem, IPlayer lootItemLastOwner)
         {
             isItemInitialized = false;
-            // Handle magazine check if needed
             Magazine magazineItemClass = rootItem as Magazine;
             if (magazineItemClass != null && possibleAction is MoveResult && lootItemLastOwner != null && lootItemLastOwner.ProfileId != owner.ProfileId)
             {
                 owner.InventoryController.StrictCheckMagazine(magazineItemClass, false, 0, false, true);
             }
 
-            // Execute the network transaction directly
             owner.InventoryController.RunNetworkTransaction(possibleAction, result => {
-                // Update interaction if successful
                 if (result.Succeed)
                 {
                     owner.UpdateInteractionCast();
                 }
 
-                // Handle pickup state cleanup
                 var pickupState = owner.CurrentState as PickUpState;
                 pickupState?.Pickup(false, null);
             });
         }
 
-        // Seconds between releasing the VR hold and running the stow pickup (StowHeldItemToInventory). On release the item
-        // goes back onto FIKA's own loot sync; other clients must receive that before the pickup lands there, or the
-        // world item never gets RemoveLootItem/DestroyLoot on them.
+        // Seconds between releasing the held item and running the stow pickup (StowHeldItemToInventory). On release the item
+        // goes back onto FIKA's own loot sync. Other clients must receive that before the pickup, or they never run
+        // RemoveLootItem/DestroyLoot on the world item.
         public static float stowReleaseDelay = 0.2f;
 
         /// <summary>
-        /// Quick-stow / equip the held loot item into the player's equipment (the behind-the-back backpack gesture and
+        /// Stows or equips the held loot item into the player's equipment (the behind-the-back backpack gesture and
         /// the use/eat auto-stow). Returns false if the item fits nowhere (the caller keeps holding or drops it).
-        /// FIKA: the world LootItem disappears on other clients via LootItem.RemoveLootItem -> GameWorld.DestroyLoot,
-        /// fired when the item leaves its GClass3390 loose-loot address. While VR-held the item is on the mod's own
-        /// loot sync there (LootSyncSmoother, FIKA's ApplyNetPacket short-circuited) and a pickup applied in that state
-        /// never fires it. So release first (ForceDropHeldItem), then pick up a beat later (StowAfterRelease).
-        /// Fit is checked while still in hand so an item with nowhere to go is never dropped.
+        /// With FIKA, the world LootItem disappears on other clients through LootItem.RemoveLootItem -> GameWorld.DestroyLoot,
+        /// which fires when the item leaves its GClass3390 loose-loot address. While held in VR, the item is on the mod's own
+        /// loot sync on those clients (LootSyncSmoother; FIKA's ApplyNetPacket is skipped), and a pickup applied in that state
+        /// never fires it. So the item is released first (ForceDropHeldItem) and picked up a moment later (StowAfterRelease).
+        /// The fit is checked while the item is still in hand, so an item with nowhere to go is never dropped.
         /// </summary>
         private bool StowHeldItemToInventory()
         {
@@ -208,7 +198,7 @@ namespace TarkovVR.Source.Player.Interactions
                     EMoveItemOrder.PickUp,
                     simulate: true);
 
-                // Won't fit / can't equip — leave it in hand for the caller to decide.
+                // Won't fit or can't be equipped: leave it in hand for the caller to decide.
                 if (!probe.Succeeded || !item.ItemOwner.CanExecute(probe.Value))
                     return false;
             }
@@ -218,26 +208,26 @@ namespace TarkovVR.Source.Player.Interactions
             }
 
             IPlayer lastOwner = item.LastOwner;
-            ForceDropHeldItem();                                 // back onto FIKA's native loot path first
-            StartCoroutine(StowAfterRelease(item, lastOwner));   // pick it up after the reconcile gap
+            ForceDropHeldItem();                                 // back onto FIKA's own loot sync first
+            StartCoroutine(StowAfterRelease(item, lastOwner));   // pick it up after stowReleaseDelay
             return true;
         }
 
         /// <summary>
-        /// Waits out the reconcile gap, then picks the (now normal world) item into the inventory. Bails if the item
-        /// was taken, destroyed or grabbed by another player during the wait.
+        /// Waits stowReleaseDelay, then picks the item (now a normal world item) into the inventory. Gives up if the item
+        /// was taken, destroyed or grabbed by another player meanwhile.
         /// </summary>
         private IEnumerator StowAfterRelease(LootItem item, IPlayer lastOwner)
         {
             yield return new WaitForSeconds(stowReleaseDelay);
-            // Co-op client: the host refuses a pickup sent while it still runs a move of yours (a draw we skipped, say)
+            // As a co-op client, wait for the host: it refuses a pickup sent while it still runs one of our moves (e.g. a draw we skipped)
             float hostWaitSince = Time.time;
             while (CoopHost.HoldsBack(hostWaitSince))
                 yield return null;
 
             if (item == null || item.Item == null)
                 yield break;
-            // Another player grabbed it in the gap (FIKA steal) — leave it to them.
+            // Another player grabbed it meanwhile: leave it to them.
             if (InstalledMods.FIKAInstalled && FIKASupport.IsRemotelyHeldRaw(item))
                 yield break;
 
@@ -268,10 +258,10 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         /// <summary>
-        /// Native gaze "Take" reroute (UIPatches.RerouteHeldItemTake patches GetActionsClass.smethod_10): if rootItem is
-        /// the VR-held loot item, stow it through StowHeldItemToInventory's release-then-pickup so it replicates in
-        /// FIKA co-op (the plain native Take runs while the item is still on the mod's held sync, which doesn't).
-        /// Returns true if we took the Take (the caller skips the native pickup animation and transaction).
+        /// Reroutes the native gaze "Take" (UIPatches.RerouteHeldItemTake patches GetActionsClass.smethod_10). If rootItem is
+        /// the held loot item, it is stowed through StowHeldItemToInventory's release-then-pickup so it replicates in FIKA
+        /// co-op; the native Take would run while the item is still on the mod's held-item sync, which doesn't replicate.
+        /// Returns true if we handled it (the caller skips the native pickup animation and transaction).
         /// </summary>
         public bool TryStowHeldItem(Item rootItem)
         {
@@ -283,31 +273,31 @@ namespace TarkovVR.Source.Player.Interactions
 
         public void Update()
         {
-            // A deferred use/eat item (hidden while eating) must be resolved even when the bail below skips the update
-            // (the use ended while sprinting or in a menu)
+            // A deferred use/eat item (hidden while eating) must be resolved even when the early return below skips the
+            // update (the use ended while sprinting or in a menu)
             if (VRGlobals.inGame && pendingUseLoot != null)
                 UpdatePendingUseLoot();
 
-            // The interact presses (the trigger), before everything that can bail or take the trigger
+            // Track the interact presses (the trigger) before anything that can return early or take the trigger
             if (VRGlobals.inGame && VRGlobals.vrPlayer != null)
                 UpdateInteractTriggers();
 
-            // A mounted gun: a hand on its handle, or on the gun, owns the hands (MountedGun)
+            // A hand on a mounted gun or its handle gives MountedGun control of the hands
             if (VRGlobals.inGame && !VRGlobals.menuOpen && VRGlobals.vrPlayer != null && MountedGun.Tick(isDraggingBody))
             {
                 ClearDots();
                 return;
             }
 
-            // Chest sling / support-hold input must run before the bail below: the bail skips the update while
-            // isSupporting, which is exactly when the dominant hand comes off a gun the left still holds (the SupportOnly
-            // machine lives there too). Runs while sprinting; menus skip (an open hand in the inventory must not sling).
-            // Ownership states here are one frame stale.
+            // Chest sling and support-hold input must run before the early return below. That return skips the update while
+            // isSupporting, which is exactly when the dominant hand comes off a gun the off hand still holds (ChestHang's
+            // SupportOnly state). Runs while sprinting but not in menus (an open hand in the inventory must not sling the gun).
+            // The ownership states read here are one frame old.
             if (VRGlobals.inGame && !VRGlobals.menuOpen && primaryHandGrip != null && VRGlobals.vrPlayer != null)
             {
-                // The grenade on the chest: before the guns on the body and the sling (a grab there takes the press from them)
+                // The chest grenade goes before the body guns and the sling, because a grab there takes the press from them
                 GrenadeSlot.UpdateInput();
-                // Guns on the body: a grip at one takes it (before the sling's regrab, which yields that press)
+                // Body guns: a grip at one takes it. Runs before the sling's regrab, which leaves that press to it.
                 BodyWeapons.UpdateInput(primaryHandGrip.state, primaryHandGrip.stateDown, rightHandState.inBackHolster, rightHandState.inSidearmHolster);
                 // The holster zones only own the grip where they still swap weapons themselves
                 bool hangGripOwnedElsewhere =
@@ -316,30 +306,30 @@ namespace TarkovVR.Source.Player.Interactions
                     || (VRGlobals.vrPlayer.radialMenu && VRGlobals.vrPlayer.radialMenu.active)
                     || (WeaponPatches.currentGunInteractController != null
                         && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1);
-                // The grip of the hand holding the gun (the left one while the gun is in the left hand: Handedness.GunInLeftHand)
-                // A press check's gesture (thumb on A/B/the stick, finger on the trigger, one hand on a pistol) holds the gun like the grip:
-                // letting go of the grip for it doesn't sling it (VRReloadController.PressCheck)
+                // The grip of the hand holding the gun (the left one when Handedness.GunInLeftHand). A press check's gesture (thumb
+                // on A/B/the stick, finger on the trigger, one hand on a pistol) also holds the gun, so releasing the grip for it
+                // doesn't sling the gun (VRReloadController.PressCheck).
                 bool gunHandHolds = Handedness.GunHandGrip.state
                     || (!ChestHang.Detached && !VRGlobals.vrPlayer.isSupporting && VRReloadController.PressCheckHoldsGun);
                 ChestHang.UpdateInput(gunHandHolds, hangGripOwnedElsewhere, VRGlobals.vrPlayer.isSupporting);
-                // A gun's body spot placed by hand (the trigger held on it)
+                // Placing a gun's body spot by hand (the trigger held on it)
                 GunSpots.Tick();
             }
 
-            // Magazines by hand: also before the bail (it cancels a held magazine itself on menus)
+            // Magazines by hand: also before the early return (it cancels a held magazine itself on menus)
             if (VRGlobals.inGame && VRGlobals.vrPlayer != null)
                 VRReloadController.Tick();
 
-            // Doors by hand: before the bail too (a held door lets go itself on menus and sprint), and before the loot pointer, the
-            // body grab and the corpse tap, which leave a grip it took alone
+            // Doors by hand also run before the early return (a held door lets go by itself on menus and sprint), and before the
+            // loot pointer, the body grab and the corpse tap, which ignore a grip the doors took
             UpdatePhysicalDoors();
 
             if (!VRGlobals.inGame || VRGlobals.vrPlayer.isSupporting ||
                 (VRGlobals.player && VRGlobals.player.IsSprintEnabled) || VRGlobals.menuOpen)
             {
-                // Don't leave stale loot dots floating when we bail (sprint/support/menu).
+                // Don't leave stale loot dots floating while sprinting, supporting or in a menu.
                 ClearDots();
-                // Don't keep a body welded to the hand through a sprint/support/menu bail.
+                // Don't keep a body attached to the hand through any of those either.
                 if (isDraggingBody) ReleaseBody();
                 return;
             }
@@ -348,18 +338,9 @@ namespace TarkovVR.Source.Player.Interactions
 
             float secondaryHandTriggerAxis = Handedness.OffHandTrigger.GetAxis(SteamVR_Input_Sources.Any);
 
-            // Handle laser pointer (only update when state changes)
-            /*
-            bool shouldShowLaser = secondaryHandTriggerAxis > 0.5f && !VRGlobals.vrPlayer.isSupporting;
-            if (useLeftHandForRaycast != shouldShowLaser)
-            {
-                useLeftHandForRaycast = shouldShowLaser;
-                laser.SetActive(shouldShowLaser);
-            }
-            */
-
-            // Body grab/drag: a free hand on a dead-body part with the grip held latches that ragdoll bone to the hand; a quick
-            // grip tap opens the corpse loot grid instead. Runs first so the loot pointer sees the armed state this frame.
+            // Body grab and drag: a free hand on a dead-body part with the grip held attaches that ragdoll bone to the hand. With
+            // triggerInteract off, a quick grip tap opens the corpse loot grid instead. Runs first so the loot pointer sees the
+            // armed state this frame.
             UpdateBodyGrab();
 
             ProcessInputStates();
@@ -368,7 +349,7 @@ namespace TarkovVR.Source.Player.Interactions
             // the palm. Owns all loose-item grabbing (a point-blank item is the near end of the cone). No-op while
             // holding, summoning, or when disabled.
             UpdateLootPointer();
-            // The free hand taking hold of the held item too, or letting go of it (HandsInteractionController.TwoHanded)
+            // The free hand also taking hold of the held item, or letting go of it (HandsInteractionController.TwoHanded)
             UpdateSecondHand();
 
             // Drop check runs after ProcessInputStates so backpack pickup (stateUp) is handled first
@@ -396,7 +377,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private void LateUpdate()
         {
-            // A second hand on the held item: still holding it, its arm still on its grip
+            // A second hand on the held item: keep it holding, with its arm on its grip
             KeepSecondHand();
             // While an item flies to the palm the summon drives its position; once it arrives the held-item upkeep
             // takes over (same cached fields)
@@ -413,24 +394,24 @@ namespace TarkovVR.Source.Player.Interactions
                 FIKASupport.SyncHeldLootItem(heldItem);
             }
 
-            // The right hand holding the gun alone with the gun in the left hand: the left's foregrip grip as EFT animated it, before
-            // the left hand opens below (HandMirror mirrors it onto the right)
+            // With the gun in the left hand and the right hand holding it alone: capture the left hand's foregrip pose as EFT animated
+            // it, before the left hand is opened below (HandMirror mirrors it onto the right)
             TarkovVR.Source.Player.Body.HandMirror.CaptureSupportGrip();
             // Relax the free off hand open (more when a loot dot is in view). Self-gates; must run after EFT's hand
             // animation so it offsets the final pose.
             UpdateLeftHandFingers();
-            // The gun hand's finger off the trigger lies straight along the gun; the mag release press below starts from it
+            // The gun hand's index finger, when off the trigger, lies straight along the gun. The mag release press below starts from that pose.
             UpdateTriggerDiscipline();
 
-            // Holding a magazine: the reload animation's finger pose on top
+            // Holding a magazine: apply the reload animation's finger pose on top
             VRReloadController.ApplyHeldFingerPose();
             // Pulling the charging handle: a handle on the bolt brings the carrier back, then the chambered round rides the bolt
             VRReloadController.ApplyHandleCarrier();
             VRReloadController.ApplyChamberView();
-            // The knob the hand took folding out (the MDR's paddles), and a press check's slide
+            // The knob the hand holds, folded out (the MDR's paddles), and a press check's slide
             VRReloadController.ApplyKnobFold();
             VRReloadController.ApplyPressCheck();
-            // A bolt-action's bolt left open or being worked: its bones after the animator
+            // A bolt-action's bolt, left open or being worked: its bones are set after the animator
             VRReloadController.ApplyBolt();
             // The MDR's deflector held open or being worked
             VRReloadController.ApplyDeflector();
@@ -438,14 +419,14 @@ namespace TarkovVR.Source.Player.Interactions
             // A magazine picked up off the ground: its ground item stays hidden while our model of it is held
             VRReloadController.KeepGroundMagazineHidden();
 
-            // The gun in the left hand: the gun grip as EFT animated it on the right hand, before that hand's own update (HandMirror)
+            // With the gun in the left hand: capture the gun grip as EFT animated it on the right hand, before that hand's own update (HandMirror)
             TarkovVR.Source.Player.Body.HandMirror.CaptureGunHandGrip();
             // The same open-hand pose for the right hand while it's off the gun (ChestHang sling / support-only): the
             // animator still curls it in the grip pose otherwise.
             UpdateRightHandFingers();
             // A press check: the gun hand's fingers hooked over the back of the slide (VRReloadController.PressCheck places the hand)
             UpdatePressCheckHook();
-            // That hand on the charging handle: the rack clip's finger pose on top
+            // The gun hand on the charging handle: the rack clip's finger pose on top
             VRReloadController.ApplyGunHandFingerPose();
             // The gun in the left hand: both hands' fingers swapped onto their mirror images
             TarkovVR.Source.Player.Body.HandMirror.ApplyRealLeftHanded();
@@ -485,7 +466,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (rightHandState.inBackHolster)
             {
-                // Guns on the body: the shoulder gun is taken off the back itself (BodyWeapons), no swap on letting go
+                // With body guns (BodyWeapons) the shoulder gun is taken off the back directly, so there is no swap on release
                 if (primaryHandGrip.stateUp && !BodyWeapons.ReplacesBackZone)
                 {
                     selectWeaponHandler.TriggerSwapOtherPrimary();
@@ -494,14 +475,14 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (rightHandState.inSidearmHolster)
             {
-                // Guns on the body take the pistol off the holster itself; with no holster Tarkov draws no pistol there to take
+                // BodyWeapons takes the pistol off the holster directly. Without a holster Tarkov draws no pistol there to take.
                 if (primaryHandGrip.stateDown && !BodyWeapons.ReplacesHipZone)
                 {
                     selectWeaponHandler.TriggerSwapSidearm();
                 }
             }
 
-            // Loot in this hand let go of over the off-hand shoulder: into the inventory, like the off hand's (before the drop check)
+            // Loot this hand releases over the off-hand shoulder goes into the inventory, like the off hand's (checked before the drop)
             if (rightHandState.inBackpack && HoldsLoot(true) && primaryHandGrip.stateUp)
                 StowHeldItemToInventory();
         }
@@ -523,7 +504,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 if (secondaryHandGrip.stateUp)
                 {
-                    // Behind-the-back quick-stow / equip (releases the VR hold before the network transaction, for FIKA)
+                    // Behind-the-back quick stow or equip (releases the held item before the network transaction, for FIKA)
                     StowHeldItemToInventory();
                 }
             }
@@ -590,10 +571,10 @@ namespace TarkovVR.Source.Player.Interactions
             if (rightHandState.inInteractiveCollider)
                 ProcessInteractiveObjects(true);
         }
-        // The hand holding the gun and the other one, as Handedness has them: the left-handed setting, or the gun in the left hand
-        // (the rig's hands, which leftHandState / rightHandState are read from, follow the controllers the same way). Every frame:
-        // the gun changes hands mid-play, and by the setting alone the off-hand grip would be the gun's own grip, always held
-        // (the scope zone never clears and blocks the foregrip grab).
+        // The gun hand and the off hand, as Handedness defines them: from the left-handed setting, or the gun being in the left hand
+        // (the rig's hands, which leftHandState / rightHandState are read from, follow the controllers the same way). Updated every
+        // frame because the gun can change hands mid-play. Going by the setting alone, the off-hand grip would be the gun's own
+        // grip, always held, so the scope zone would never clear and would block the foregrip grab.
         private void UpdateInputReferences()
         {
             primaryHandGrip = Handedness.GunHandGrip;
@@ -653,8 +634,8 @@ namespace TarkovVR.Source.Player.Interactions
                             VRInput.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, primaryInputSource);
                         break;
 
-                    // Point-blank world interactables for the dominant hand (mirrors the left): used by the right-hand
-                    // loot pointer / door / container / corpse-tap interactions while the hand is off the gun.
+                    // World interactables within reach of the dominant hand (mirrors the left): used by the right hand's loot
+                    // pointer, door, container and corpse interactions while the hand is off the gun.
                     case InteractableType.LootItem:
                         rightHandState.inInteractiveCollider = true;
                         rightHandState.lootItem = cachedInteractable.Component as LootItem;
@@ -746,7 +727,6 @@ namespace TarkovVR.Source.Player.Interactions
                             leftHandState.inRigCollider = true;
                             if (!previousState.inRigCollider)
                             {
-                                //VRInput.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, secondaryInputSource);
                                 hasEnteredRigCollider = true;
                             }
                             break;
@@ -854,14 +834,14 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (triggerInteract)
             {
-                // That hand's trigger, the hand empty (HandsInteractionController.TriggerInteract)
+                // The press is that hand's trigger, with the hand empty (HandsInteractionController.TriggerInteract)
                 if (!TakeInteractPress(dominant, atContainer ? "a container" : "a door"))
                     return;
             }
             else
             {
-                // That hand's grip, nothing held in either hand; the dominant hand only while it's free (off the gun, outside holster
-                // zones / the slung-gun regrab)
+                // The press is that hand's grip, with nothing held in either hand. The dominant hand counts only while it's free (off
+                // the gun, outside the holster zones and the slung gun's regrab zone).
                 if (heldItem != null || !(dominant ? primaryHandGrip : secondaryHandGrip).stateDown)
                     return;
                 if (dominant && !DominantHandFree())
@@ -884,7 +864,7 @@ namespace TarkovVR.Source.Player.Interactions
                     VRGlobals.player.TryInteractionCallback(container);
                 });
             }
-            // Doors by hand take their own grip (PhysicalDoors); the press opens / closes the doors it doesn't move
+            // Doors by hand (PhysicalDoors) handle their own grip. Here the press opens or closes the doors PhysicalDoors doesn't move.
             else
             {
                 var door = state.door;
@@ -912,7 +892,7 @@ namespace TarkovVR.Source.Player.Interactions
             cachedRigidbody.detectCollisions = true;
             cachedRigidbody.useGravity = false;
 
-            // Both hands on it: turned about the anchor's grip toward the second hand (HandsInteractionController.TwoHanded)
+            // With both hands on it, the item turns about the first hand's grip toward the second hand (HandsInteractionController.TwoHanded)
             bool twoHanded = TryTwoHandedPose(out Vector3 naturalPosition, out Quaternion twoHandedRotation);
             if (twoHanded)
                 heldItem.transform.rotation = twoHandedRotation;
@@ -1317,11 +1297,10 @@ namespace TarkovVR.Source.Player.Interactions
                 ForceDropHeldItem();
         }
 
-        //--- Deferred use/eat release (default) --------------------------------------
-        // With a "use loose loot" mod the item is eaten in place: stowing it into a backpack mid-eat changes its address
-        // and stops the eat. So the held item is hidden for the use and its fate decided when the use ends: fully
-        // consumed -> gone; cancelled / a sip of a multi-use drink -> stow if it fits, else drop it back into the world.
-        // false = stow/drop the moment the use starts (ReleaseHeldForUse).
+        //--- Deferred use/eat release ------------------------------------------------
+        // With a "use loose loot" mod the item is eaten in place, and stowing it into a backpack mid-eat changes its address
+        // and stops the eat. So the held item is hidden during the use and handled when the use ends: fully consumed, it is
+        // gone; cancelled or only sipped (a multi-use drink), it is stowed if it fits, else dropped back into the world.
 
         private LootItem pendingUseLoot;        // hidden held item awaiting the use/eat outcome
         private Transform pendingUseLootParent; // its original world parent (for the drop-back)
@@ -1384,8 +1363,8 @@ namespace TarkovVR.Source.Player.Interactions
 
             // Consumed (the game removed it, or it was eaten to empty): the eat's own cleanup removes it. DiscardFood
             // (ConsumeFoodWhenSettled) takes the food off its GClass3390 loose-loot address, which fires
-            // LootItem.RemoveLootItem -> GameWorld.DestroyLoot and destroys the world object. Don't destroy it here:
-            // that handler would then run on a dead object and throw. Just drop our reference.
+            // LootItem.RemoveLootItem -> GameWorld.DestroyLoot and destroys the world object. Don't destroy it here, or
+            // that handler would run on a dead object and throw. Just drop our reference.
             if (item == null || item.Item == null || item._item == null || IsFoodEmptied(item.Item))
             {
                 EatingInteractionController.LogStep("[ManualEat] Deferred use: item consumed — removal left to the eat's discard.");
@@ -1445,7 +1424,7 @@ namespace TarkovVR.Source.Player.Interactions
             cachedGrabOffset = cachedHand.InverseTransformPoint(heldItem.transform.position);
             cachedGrabRotation = Quaternion.Inverse(cachedHand.rotation) * heldItem.transform.rotation;
 
-            // Parent to hand — transform hierarchy handles inherited motion with perfect timing
+            // Parent to the hand, so the transform hierarchy moves the item with the hand without a frame of lag
             cachedOriginalParent = heldItem.transform.parent;
             heldItem.transform.SetParent(cachedHand, worldPositionStays: true);
 

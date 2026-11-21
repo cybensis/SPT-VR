@@ -5,42 +5,43 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // The hand holding a loot item closes on it, the item kept the way it was grabbed. On the grab the item comes up against the palm
-    // (TryGraspRestPosition), or between the index and the thumb for a small one (a pinch). Each finger then curls from its rest pose
-    // with coupled joints until any part of it touches the item, and its middle and tip joints wrap on until they touch too; the thumb
-    // is led to the surface nearest its tip. Against the item's shape (GraspShape): its parts' boxes at once, their convex hulls as
-    // they arrive. Solved once per grab and again when the item moves in the hand or a hull arrives, eased in.
-    // Index controllers: each finger closes onto it unless the real one is lifted off the controller, never past the item.
-    // Runs inside each hand's finger pass, on the pose that pass just wrote, and keeps its RecoverAnimated bookkeeping.
+    // Closes the fingers of a hand holding a loot item onto it, with the item kept in the pose it was grabbed in. On the grab the item is
+    // moved against the palm (TryGraspRestPosition), or between the index and the thumb if it is small (a pinch). Each finger then curls
+    // from its rest pose with coupled joints until any part of it touches the item, and its middle and tip joints keep wrapping until they
+    // touch too; the thumb is moved to the surface nearest its tip. The item's shape (GraspShape) starts as its parts' boxes and becomes
+    // their convex hulls as those arrive. The grip is solved once per grab, and again (eased in) when the item moves in the hand or a hull
+    // arrives. On Index controllers each finger closes onto the item unless the real finger is lifted off the controller, never past it.
+    // Runs inside each hand's finger pass, on the pose that pass just wrote, and keeps that pass's RecoverAnimated bookkeeping up to date.
     internal partial class HandsInteractionController
     {
-        public static bool graspDebug = false;                  // a line per grab: the shape, the grip, the solve time, each finger's contact
+        public static bool graspDebug = false;                  // logs a line per grab: the shape, the grip, the solve time, each finger's contact
         public static float graspCloseTime = 0.12f;             // s the fingers take to close on it
         public static float graspOpenTime = 0.1f;               // s to open again on letting go
         public static float graspRetargetTime = 0.06f;          // s a re-solved grip eases over (a hull arriving, the item knocked in the hand)
-        public static float graspMaxCurlDeg = 95f;              // the knuckle's bend at a full fist (the middle joint the same, the tip 0.7 of it)
+        public static float graspMaxCurlDeg = 95f;              // the knuckle's bend in a full fist (the middle joint the same, the tip 0.7 of it)
         public static float graspNoContactCurlDeg = 70f;        // a finger that never reaches the item stops here (relaxed, not a fist)
         public static float graspOpenDeg = 10f;                 // how far a finger may open past its rest pose for an item already against it
         public static float graspWrapDeg = 60f;                 // how much further the middle and tip joints may wrap past the coupled curl
         public static float graspSweepStepDeg = 5f;
         public static float[] graspFingerRadius = { 0.0095f, 0.0085f, 0.0075f };    // m: half a finger's thickness, base, middle, tip
         public static float graspThumbPad = 0.008f;             // m the thumb's tip stays off the surface
-        public static float graspThumbMaxBendDeg = 55f;         // per joint, off its rest pose
+        public static float graspThumbMaxBendDeg = 55f;         // per joint, from its rest pose
         public static float graspThumbReach = 0.08f;            // m: a thumb tip further than this from the item stays as it is
-        public static float graspPalmAlong = 0.6f;              // the palm's contact point: from the palm bone (the wrist end) toward the knuckles
+        public static float graspPalmAlong = 0.6f;              // 0..1, the palm's contact point between the palm bone (the wrist end) and the knuckles
         public static float graspPalmSkin = 0.016f;             // m from the bones to the palm's skin
         public static float graspPalmHalfWidth = 0.03f;         // m: the palm's patch an item can't be inside of, across...
         public static float graspPalmHalfLength = 0.035f;       // ...and along (wrist to knuckles)
         public static float pinchMaxLength = 0.075f;            // m: an item this short and...
         public static float pinchMaxWidth = 0.03f;              // ...this narrow is pinched between the index and the thumb
-        public static float pinchIndexCurlDeg = 35f;            // the index's curl the pinch point is read at
-        public static float pinchOtherCurlDeg = 55f;            // the fingers that don't pinch, relaxed
-        // Index controllers: a finger resting on the controller is holding it, so it closes onto the item; only one lifted off opens.
-        // Curl (0 open .. 1 closed) from fully open to fully on the item, fingers and thumb (it rests higher, on the stick).
+        public static float pinchIndexCurlDeg = 35f;            // the index curl at which the pinch point is measured
+        public static float pinchOtherCurlDeg = 55f;            // the curl of the fingers that don't pinch (relaxed)
+        // On Index controllers a finger resting on the controller counts as holding, so it closes onto the item; only a lifted one opens.
+        // These are the real curls (0 open .. 1 closed) at which a finger is fully open and fully on the item, for the fingers and for
+        // the thumb (which rests higher, on the stick).
         public static float graspFingerOpenCurl = 0.15f, graspFingerClosedCurl = 0.5f;
         public static float graspThumbOpenCurl = 0.3f, graspThumbClosedCurl = 0.65f;
 
-        private static readonly float[] coupledCurl = { 1f, 1f, 0.7f };   // knuckle : middle : tip, a finger closing on its own
+        private static readonly float[] coupledCurl = { 1f, 1f, 0.7f };   // knuckle : middle : tip, for a finger closing freely
 
         private sealed class GraspHand
         {
@@ -94,7 +95,7 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The grab
 
-        // sharedShape: the other hand's, when this one takes hold of an item that hand already holds (it stays that hand's to dispose)
+        // sharedShape: the other hand's shape, when this hand takes hold of an item the other hand already holds (the other hand disposes it)
         private void BeginGrasp(GraspHand hand, Component item, GraspShape sharedShape = null)
         {
             hand.Clear();
@@ -122,10 +123,10 @@ namespace TarkovVR.Source.Player.Interactions
             hand.pinch = hand.shape != null && hand.shape.FitsAPinch(pinchMaxLength, pinchMaxWidth);
         }
 
-        // BeginSummon: where the item comes to rest in the hand. Kept the way it's turned; brought in until its nearest point is on the
-        // palm's contact point (the index's pad for a pinch), then out along the palm's normal until no point of the palm (a patch the
-        // palm's size, just under its skin) is inside it. Only the palm's patch: a long item held at an angle has ends well behind the
-        // palm's plane, which must not push it off the hand. From the parts' boxes, and the hulls of readable meshes (built at the grab).
+        // For BeginSummon: where the item comes to rest in the hand. Its rotation is kept. It is moved until its nearest point is on the
+        // palm's contact point (the index's pad for a pinch), then out along the palm's normal until no point of a palm-sized patch just
+        // under the skin is inside it. Only that patch is tested: a long item held at an angle has ends well behind the palm's plane,
+        // which must not push it off the hand. Uses the parts' boxes and the hulls of readable meshes (built at the grab).
         private bool TryGraspRestPosition(LootItem item, bool dominant, out Vector3 itemTarget)
         {
             itemTarget = item.transform.position;
@@ -137,15 +138,16 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // How far (world) the item would move to sit in this hand's grasp - its nearest point onto the palm's contact point, then out until
-        // the palm's patch isn't inside it. A second hand taking a held item moves by minus this instead (HandsInteractionController.TwoHanded).
+        // How far (in world space) the item would move to sit in this hand's grasp: its nearest point onto the palm's contact point, then out
+        // until the palm's patch isn't inside it. When a second hand takes a held item, that hand moves by minus this instead of the item
+        // (HandsInteractionController.TwoHanded).
         private bool TryGraspItemShift(bool dominant, GraspShape shape, bool pinch, Vector3 itemPosition, Quaternion itemRotation, out Vector3 shift)
         {
             shift = Vector3.zero;
             if (!TryGetGraspContact(dominant, pinch, out Vector3 contact, out Vector3 normal, out Vector3 along))
                 return false;
             Vector3 movedTo = itemPosition;
-            // (a palm inside it: its nearest way out comes to the palm)
+            // This also works with the palm inside the item: the nearest way out is moved onto the palm
             if (shape.NearestSurface(contact, movedTo, itemRotation, out Vector3 surface, out _, out _))
                 movedTo += contact - surface;
             Vector3 across = Vector3.Cross(normal, along);
@@ -170,8 +172,8 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // The palm's contact point, the way out of the palm there (the way the fingers close) and the way along it toward the knuckles,
-        // or the index's pad for a pinch (along = toward its tip)
+        // Gets the palm's contact point, the palm's outward normal there (the direction the fingers close) and the direction along the palm
+        // toward the knuckles. For a pinch, the index's pad instead (along = toward its tip).
         private bool TryGetGraspContact(bool dominant, bool pinch, out Vector3 contact, out Vector3 normal, out Vector3 along)
         {
             contact = normal = along = Vector3.zero;
@@ -210,7 +212,7 @@ namespace TarkovVR.Source.Player.Interactions
             along = along.sqrMagnitude > 1e-8f ? along.normalized : Vector3.Cross(normal, Vector3.up).normalized;
             if (!pinch || index == null || index.Length < 3 || index[2] == null)
                 return true;
-            // The index's pad with the finger part curled: where a pinched item sits, facing the way that fingertip closes
+            // The index's pad with the finger partly curled: where a pinched item sits, facing the way that fingertip closes
             int jointCount = Mathf.Min(index.Length, 3);
             var rest = new Quaternion[jointCount];
             for (int joint = 0; joint < jointCount; joint++)
@@ -234,7 +236,7 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Every frame, from the finger passes
 
-        // After a hand's pass has written its pose (weight = that pass's own blend). dominant = the pass for the dominant hand.
+        // Runs after a hand's finger pass has written its pose (weight = that pass's own blend). dominant = this is the dominant hand's pass.
         private void ApplyGrasp(bool dominant, Transform[][] fingers, bool[] thumbs, float curlSign, float weight)
         {
             GraspHand hand = graspHands[dominant ? 1 : 0];
@@ -255,14 +257,14 @@ namespace TarkovVR.Source.Player.Interactions
             bool keyHere = false;
             if (holding == null && PhysicalDoors.KeyGraspTarget(dominant, out Component key))
             {
-                // It rides the palm bone itself (PhysicalDoors.SpawnKey)
+                // The key is parented to the palm bone itself (PhysicalDoors.SpawnKey)
                 holding = key;
                 holdingRig = key.transform.parent;
                 keyHere = true;
             }
             bool holdingHere = holding != null;
-            // A hold that didn't come through BeginSummon, or the second hand on it (HandsInteractionController.TwoHanded). A door's
-            // shape isn't shared: either hand may let go first.
+            // A hold that didn't start in BeginSummon, or a second hand on the item (HandsInteractionController.TwoHanded). A door's
+            // shape isn't shared, because either hand may let go first.
             if (holdingHere && hand.item != holding)
             {
                 GraspHand otherHand = graspHands[dominant ? 0 : 1];
@@ -313,7 +315,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Index controllers: how far a finger closes onto the item, by how curled the real one is (resting on the controller = on it)
+        // On Index controllers: how far a finger closes onto the item, from how curled the real finger is (resting on the controller = fully on it)
         private static float GraspCurlAmount(float[] curls, bool[] thumbs, int finger)
         {
             if (curls == null || curls.Length < 5)
@@ -324,15 +326,15 @@ namespace TarkovVR.Source.Player.Interactions
                 : Mathf.InverseLerp(graspFingerOpenCurl, graspFingerClosedCurl, curl);
         }
 
-        // Re-solved when the item sits differently in the palm (a summon landing, the hand pushed against a wall), or a hull arrived
+        // Re-solves the grip when the item sits differently in the palm (a summon landing, the hand pushed against a wall) or a hull has arrived
         private void UpdateGraspSolve(GraspHand hand, bool dominant, Transform[][] fingers, bool[] thumbs, float curlSign)
         {
             Transform palm = FingersPalm(fingers);
             if (palm == null)
                 return;
             hand.palm = palm;
-            // The item in the frame of what this hand's arm reaches for (its rig hand, the second hand's grip on the item, the latch on a
-            // door): where the summon will put it, or where it is
+            // The item in the frame of what this hand's arm reaches for (its rig hand, the second hand's grip on the item, or the latch on a
+            // door): where the summon will put it, or where it is now
             Transform rig = hand.rig;
             if (rig == null || hand.item == null)
                 return;
@@ -350,7 +352,7 @@ namespace TarkovVR.Source.Player.Interactions
                 itemInRigPosition = rigInverse * (item.position - rig.position);
                 itemInRigRotation = rigInverse * item.rotation;
             }
-            // ...and in the palm's: through the arm IK's last result, or taking the palm to be on the rig hand (the IK's target)
+            // ...and in the palm's frame: through the arm IK's last result, or, if none was captured, assuming the palm is on the rig hand (the IK's target)
             bool captured = hand.rigInPalmTime >= 0f && Time.time - hand.rigInPalmTime < 0.5f;
             Vector3 itemInPalmPosition = captured ? hand.rigInPalmPosition + hand.rigInPalmRotation * itemInRigPosition : itemInRigPosition;
             Quaternion itemInPalmRotation = captured ? hand.rigInPalmRotation * itemInRigRotation : itemInRigRotation;
@@ -383,7 +385,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // The solve: every joint's pose on the item, from the pose the pass gave this frame (which the bones are put back to after)
+        // The solve: every joint's pose on the item, starting from the pose the finger pass gave this frame (the bones are put back to it afterwards)
 
         private string SolveGrasp(GraspHand hand, Transform[][] fingers, bool[] thumbs, float curlSign, Vector3 itemPosition, Quaternion itemRotation)
         {
@@ -431,8 +433,8 @@ namespace TarkovVR.Source.Player.Interactions
             return contacts.ToString().TrimEnd();
         }
 
-        // The finger curls as one (coupledCurl) until any of it touches, then its middle and tip joints wrap on until they touch too.
-        // Never reaching the item: it stops at graspNoContactCurlDeg.
+        // The finger curls as one (coupledCurl) until any part of it touches, then its middle and tip joints keep wrapping until they touch
+        // too. A finger that never reaches the item stops at graspNoContactCurlDeg.
         private float SolveFinger(GraspHand hand, Transform[] joints, int jointCount, Quaternion[] start, float curlSign, float limit, Vector3 itemPosition, Quaternion itemRotation, out bool touched)
         {
             float curl = Sweep(-graspOpenDeg, limit, amount =>
@@ -459,7 +461,7 @@ namespace TarkovVR.Source.Player.Interactions
             return curl;
         }
 
-        // The thumb led to the surface nearest its tip, tip joint first (ThumbOntoCase's CCD), each joint held within
+        // Moves the thumb's tip to the surface nearest it by CCD, tip joint first (as in ThumbOntoCase), each joint kept within
         // graspThumbMaxBendDeg of its rest pose
         private bool SolveThumb(GraspHand hand, Transform[] joints, int jointCount, Quaternion[] start, Vector3 itemPosition, Quaternion itemRotation)
         {
@@ -496,8 +498,8 @@ namespace TarkovVR.Source.Player.Interactions
                 joints[joint].localRotation = start[joint] * Quaternion.AngleAxis(curl * coupledCurl[joint] * curlSign, curlAxis);
         }
 
-        // Any of the finger from fromSegment out touches the item: two spheres a segment (its middle and its end), a segment's own start
-        // being the joint that bends it, which doesn't move
+        // Whether any part of the finger from fromSegment outward touches the item. Two spheres per segment (its middle and its end);
+        // a segment's start is the joint that bends it, which doesn't move.
         private static bool FingerTouches(GraspShape shape, Transform[] joints, int jointCount, int fromSegment, Vector3 itemPosition, Quaternion itemRotation)
         {
             for (int segment = fromSegment; segment < jointCount; segment++)
@@ -511,7 +513,7 @@ namespace TarkovVR.Source.Player.Interactions
             return false;
         }
 
-        // The furthest amount in [from, to] with nothing touching: stepped, then halved down to a tenth of a step where it starts touching
+        // The furthest amount in [from, to] with nothing touching: found in steps, then refined by halving where it starts touching
         private static float Sweep(float from, float to, Func<float, bool> touches, out bool touched)
         {
             touched = true;
@@ -542,8 +544,8 @@ namespace TarkovVR.Source.Player.Interactions
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // The rig hand in the palm's frame, as the arm IK leaves it: the IK solves after the Player's LateUpdate (EatingInteractionController's
-        // pins hook the same place), so in our pass the palm can still be where the animator put it
+        // Captures the rig hand in the palm's frame as the arm IK leaves it. The IK solves after the Player's LateUpdate (EatingInteractionController's
+        // pins hook the same place), so during our finger pass the palm can still be where the animator put it.
         private void EnsureGraspIkHooks()
         {
             LimbIK left = VRGlobals.ikManager != null ? VRGlobals.ikManager.leftArmIk : null;
@@ -583,7 +585,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // The palm bone a hand's fingers hang from (PhysicalDoors' key rides it)
+        // The palm bone a hand's fingers hang from (PhysicalDoors parents the key to it)
         internal Transform PalmBone(bool dominant)
         {
             if (dominant)
@@ -611,7 +613,7 @@ namespace TarkovVR.Source.Player.Interactions
         // The rig has no fingertip bone: about 2.5 cm past the last joint, along the finger (GetHandTouchPoints, TryGetPinch)
         private static Vector3 FingerTip(Transform lastJoint) => lastJoint.TransformPoint(-0.025f, 0f, 0f);
 
-        // Which way a point on the finger moves as this joint curls (its flexion axis is curlAxis, closing with curlSign): out of the palm
+        // The direction a point on the finger moves as this joint curls (flexion axis curlAxis, closing with curlSign); it points out of the palm
         private static Vector3 ClosingDirection(Transform joint, Vector3 point, float curlSign)
         {
             Vector3 swing = Vector3.Cross(joint.rotation * curlAxis, point - joint.position) * Mathf.Sign(curlSign);

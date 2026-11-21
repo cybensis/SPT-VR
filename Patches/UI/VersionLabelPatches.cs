@@ -4,9 +4,9 @@ using UnityEngine.UI;
 
 namespace TarkovVR.Patches.UI
 {
-    // The version watermark ("FIKA x | SPT x - build | PvE", PreloaderUI's corner label) floats ~3 m wide in front of the player in
-    // VR, and as a visible UI-layer graphic it keeps uiCam drawing every frame (UiCameraGate). Hidden: its text component off (not
-    // the object - the wrist notifier is parented next to it). Every corner-label refresh re-hides it.
+    // Hides the version watermark ("FIKA x | SPT x - build | PvE", PreloaderUI's corner label). In VR it floats ~3 m wide in front of
+    // the player, and as a visible UI-layer graphic it keeps uiCam drawing every frame (UiCameraGate). Only its text component is
+    // turned off, not the object, because the wrist notifier is parented next to it. Every corner-label refresh hides it again.
     [HarmonyPatch]
     internal class VersionLabelPatches
     {
