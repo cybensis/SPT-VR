@@ -585,28 +585,6 @@ namespace TarkovVR.Source.Player.Interactions
             ResetBodyGrabState();
         }
 
-        // Diagnostic (debugDownedRelease): logs bone world/local + root each frame after a downed release
-        private System.Collections.IEnumerator LogDownedRelease(CorpseRagdoll ragdoll, Transform playerRoot)
-        {
-            RigidbodySpawner[] bones = ragdoll != null ? ragdoll._rigidbodySpawners : null;
-            Transform bone = (bones != null && bones.Length > 0 && bones[0] != null) ? bones[0].transform : null;
-            Rigidbody body = (bones != null && bones.Length > 0 && bones[0] != null) ? bones[0].Rigidbody : null;
-            if (bone == null)
-            {
-                Plugin.MyLog.LogWarning("[DownedRelease] no bone to track");
-                yield break;
-            }
-            for (int f = 0; f < 25; f++)
-            {
-                bool kin = body != null && body.isKinematic;
-                Vector3 w = bone.position;
-                Vector3 l = bone.localPosition;
-                Vector3 root = playerRoot != null ? playerRoot.position : Vector3.zero;
-                Plugin.MyLog.LogWarning($"[DownedRelease] f{f} kin={kin} boneWorld={w.ToString("F3")} boneLocal={l.ToString("F3")} root={root.ToString("F3")}");
-                yield return null;
-            }
-        }
-
         //--- Release-settle manager --------------------------------------------------
         private void AddReleasedBody(CorpseRagdoll ragdoll, Corpse corpse)
         {

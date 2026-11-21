@@ -21,10 +21,6 @@ namespace TarkovVR.Patches.Core.VR
         public static bool throwInProgress = false;
         public static BaseGrenadeHandsController activeGrenadeController = null;
         private static BaseGrenadeHandsController thrownBy;
-        private static float lastNormalizedTime = 0f;
-        private static float freezeStartTime = 0f;
-        private static bool isFrozen = false;
-        private static readonly float freezeDuration = 0.5f; // Or use Random.Range(2f, 3f) when setting
 
         // true: the grenade leaves the hand at the release and its use ends that same frame, doing what the throw clip's end does
         // (FireEnd -> OnDropFinishedAction: the hands go back to what they held before) without the clip. false: the clip plays on from
@@ -68,7 +64,6 @@ namespace TarkovVR.Patches.Core.VR
 
             if (!player.IsYourPlayer)
                 return;
-            GrenadeHold.NoteSpawn(__instance);
 
             WeaponPatches.grenadeEquipped = true;
             WeaponPatches.pinPulled = false;
@@ -184,25 +179,10 @@ namespace TarkovVR.Patches.Core.VR
             thrownNow.OnDropFinishedAction();
         }
 
-        // The grenade's own animators while its clip is frozen: their speed is restored if the throw ends before the freeze does (the
-        // hands object goes back to Tarkov's pool with them)
-        private static Animator[] frozenAnimators;
-
         private static void EndThrow()
         {
-            if (isFrozen && frozenAnimators != null)
-            {
-                foreach (Animator animator in frozenAnimators)
-                {
-                    if (animator != null && animator.speed == 0f)
-                        animator.speed = 1f;
-                }
-            }
-            frozenAnimators = null;
             throwInProgress = false;
             activeGrenadeController = null;
-            isFrozen = false;
-            lastNormalizedTime = 0f;
         }
 
         // GrenadeHold: is this grenade's own throw playing (its animator ours to freeze)

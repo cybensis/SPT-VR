@@ -227,10 +227,12 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
             int playerId = VRGlobals.player.GetInstanceID();
+            // A new player = a new raid: the once-per-door grab log lines start over
             if (playerId != censusPlayerId)
             {
                 ResetAll();
                 censusPlayerId = playerId;
+                loggedDoors.Clear();
             }
 
             keyHands = hands;
@@ -1401,29 +1403,6 @@ namespace TarkovVR.Source.Player.Interactions
                 + $"({door.GetType().Name} {door.Id}): {door.DoorState}, angle {door.CurrentAngle:0.#} (shut {door.CloseAngle:0.#}, open {door.OpenAngle:0.#}), "
                 + $"handle {handle}{(hold.turnByTwist ? " (by twist)" : "")}, lock handle {(door.LockHandle != null ? door.LockHandle.name : "none")}, "
                 + $"key {(string.IsNullOrEmpty(door.KeyId) ? "none" : "yes")}");
-        }
-
-        private static void LogCensus()
-        {
-            Door[] doors = Object.FindObjectsOfType<Door>();
-            int supported = 0, turnable = 0, stiff = 0, locked = 0, keycard = 0;
-            foreach (Door door in doors)
-            {
-                if (!Supports(door))
-                    continue;
-                supported++;
-                if (TurnOf(door._handle, out _, out _))
-                    turnable++;
-                else if (door._handle != null)
-                    stiff++;
-                if (door.DoorState == EDoorState.Locked)
-                    locked++;
-                if (door is KeycardDoor)
-                    keycard++;
-            }
-            Plugin.MyLog.LogInfo($"[Doors] {doors.Length} doors, {supported} by hand: {turnable} with a turnable handle, {stiff} with a handle that "
-                + $"doesn't turn, {supported - turnable - stiff} without one; {locked} locked, {keycard} keycard");
-            loggedDoors.Clear();
         }
     }
 }

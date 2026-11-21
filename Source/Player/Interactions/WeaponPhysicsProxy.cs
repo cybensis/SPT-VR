@@ -66,7 +66,6 @@ namespace TarkovVR.Source.Player.Interactions
         // --- private physics sandbox ---
         private Scene sandbox;
         private PhysicsScene sandboxPhysics;
-        private int worldMask;
         private int queryMask;
         private int staticCopyLayer;                 // a layer apart from the proxy's, so door bodies can leave the static copies alone
         private bool separateStaticLayer;
@@ -138,7 +137,6 @@ namespace TarkovVR.Source.Player.Interactions
         {
             GameObject proxyObject = new GameObject("WeaponPhysicsProxy");
             var proxy = proxyObject.AddComponent<WeaponPhysicsProxy>();
-            proxy.worldMask = worldMask;
             int doorLayer = LayerMask.NameToLayer("DoorLowPolyCollider");
             // + the movement layer (tree trunks: CollisionWorld) and the doors' own colliders
             proxy.queryMask = CollisionWorld.Mask(worldMask) | (doorLayer >= 0 ? 1 << doorLayer : 0);

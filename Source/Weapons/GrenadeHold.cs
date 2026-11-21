@@ -1,4 +1,3 @@
-using EFT;
 using EFT.InputSystem;
 using RootMotion.FinalIK;
 using TarkovVR.ModSupport;
@@ -82,13 +81,6 @@ namespace TarkovVR.Source.Weapons
         private static bool ringInReach;
         private static bool hooked;
 
-        // Debug log: one line at its spawn (was its object ever in the VR hold / on the slot) and one 0.3 s into the hold (where it
-        // sits in the palm)
-        private static GrenadeHandsController notedSpawnFor;
-        private static string spawnSetup;
-        private static float begunAt;
-        private static bool poseLogged;
-
         // The off hand on the ring or gripping the pin: its fingers (VRReloadController.OffHandPose) and its arm (ArmLatch) are ours. The
         // ring just hanging on the finger (trigger open) leaves the hand its own.
         private static bool OffHandHoldsRing => controller != null && (ringLatched || (pinInHand && offTriggerDown && pinFinger == HookJoint()));
@@ -158,8 +150,6 @@ namespace TarkovVR.Source.Weapons
             if (grenade == null || grenade._player == null || !grenade._player.IsYourPlayer)
                 return;
             controller = grenade;
-            begunAt = Time.time;
-            poseLogged = false;
             heldSeen = GrenadeSlot.TakenByHold(grenade.Item);
             if (GrenadeRings.TryFind(grenade.WeaponRoot, out pin, out ring, out ringData))
             {
@@ -773,54 +763,6 @@ namespace TarkovVR.Source.Weapons
                 // Pushed back in: on its seat through Tarkov's pin-back clip (its pin comes from the clip's own hand)
                 SeatPin(0f);
             }
-        }
-
-        // VRGrenadeController's Spawn prefix, before it sets the hold up: what the in-hand object had been before (once per controller,
-        // that prefix calls itself)
-        internal static void NoteSpawn(GrenadeHandsController grenade)
-        {
-        }
-
-        // Where it sits in the holding palm, and the hold's own transforms
-        private static void LogHoldPose()
-        {
-            Transform holder = VRGlobals.weaponHolder != null ? VRGlobals.weaponHolder.transform : null;
-            Transform weaponRoot = controller.WeaponRoot;
-            Transform body = controller._grenadeTransform;
-            LimbIK arm = VRGlobals.ikManager != null ? (Handedness.GunInLeftHand ? VRGlobals.ikManager.leftArmIk : VRGlobals.ikManager.rightArmIk) : null;
-            Transform palm = arm != null && arm.solver != null && arm.solver.bone3 != null ? arm.solver.bone3.transform : null;
-            string inPalm = palm != null && body != null
-                ? $"body at {(palm.InverseTransformPoint(body.position) * 100f).ToString("F1")} cm in the palm, turned {(Quaternion.Inverse(palm.rotation) * body.rotation).eulerAngles.ToString("F0")}"
-                : "no palm/body";
-            string marker = holder != null && holder.parent != null && VRGlobals.player != null && VRGlobals.player._markers.Length > 1
-                ? $"{Vector3.Distance(VRGlobals.player._markers[1].position, holder.parent.position) * 100f:0.0} cm"
-                : "?";
-            // The mirrored left hold: the left hand's target against the grip marker, the rendered palm against that target and the
-            // controller's rig hand
-            string leftHold = "";
-            if (MirroredInLeftHand && palm != null && VRGlobals.player != null && VRGlobals.player._markers.Length > 1 && VRGlobals.vrPlayer != null)
-            {
-                Transform gripMarker = VRGlobals.player._markers[1];
-                Vector3 target = RealLeftHandedPatches.GrenadeLeftTarget;
-                leftHold = $"; LEFT mirrored: target {Vector3.Distance(target, gripMarker.position) * 100f:0.0} cm off the grip marker (EFT's right target "
-                    + $"{RealLeftHandedPatches.GrenadeIkGap * 100f:0.0} cm off it, right weight {RealLeftHandedPatches.GrenadeRightWeight:0.00}), palm "
-                    + $"{Vector3.Distance(palm.position, target) * 100f:0.0} cm and {Quaternion.Angle(palm.rotation, RealLeftHandedPatches.GrenadeLeftTargetRotation):0} deg off "
-                    + $"that target (its turn off the matrix vs off Transform.rotation: {RealLeftHandedPatches.GrenadeRotationGap:0} deg apart), "
-                    + $"{Vector3.Distance(palm.position, VRGlobals.vrPlayer.RightHand.transform.position) * 100f:0.0} cm off the controller's rig hand, "
-                    + $"grip marker {Vector3.Distance(gripMarker.position, mirroredPositioner.position) * 100f:0.0} cm off the positioner";
-            }
-            // Either hand: the grenade and the palm in the holding controller's rig hand (the left's should be the right's with x negated)
-            if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.RightHand != null && body != null && palm != null)
-            {
-                Transform rigHand = VRGlobals.vrPlayer.RightHand.transform;
-                leftHold += $"; in the rig hand: body {(rigHand.InverseTransformPoint(body.position) * 100f).ToString("F1")} cm, palm "
-                    + $"{(rigHand.InverseTransformPoint(palm.position) * 100f).ToString("F1")} cm";
-            }
-            Plugin.MyLog.LogInfo($"[GrenadeHold] {controller.Item.LocalizedShortName()} 0.3 s in hand ({(notedSpawnFor == controller ? spawnSetup : "spawn not seen")}): {inPalm}{leftHold}; "
-                + $"holder {(holder != null ? holder.localPosition.ToString("F3") + " " + holder.localEulerAngles.ToString("F0") : "none")}, "
-                + $"Weapon_root {(weaponRoot != null ? weaponRoot.localPosition.ToString("F3") + " " + weaponRoot.localEulerAngles.ToString("F0") + " under " + weaponRoot.parent?.name : "none")}, "
-                + $"hands root {(VRGlobals.oldWeaponHolder != null ? VRGlobals.oldWeaponHolder.transform.localEulerAngles.ToString("F0") : "none")}, "
-                + $"grip marker {marker} off the hand, operation {controller.CurrentOperation?.GetType().Name}, arm IK {(arm != null ? arm.enabled.ToString() : "none")}");
         }
 
         private static void Haptic(Valve.VR.SteamVR_Input_Sources source, float amplitude, float duration)

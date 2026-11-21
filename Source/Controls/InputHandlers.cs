@@ -108,7 +108,6 @@ namespace TarkovVR.Source.Controls
             }
 
             // Default (Index, Oculus, etc.): joystick axis
-            private bool _isVaulting = false;
             private float _timeHeld = 0f;
             private const float TIME_HELD_FOR_VAULT = 0.3f;
 
@@ -122,14 +121,12 @@ namespace TarkovVR.Source.Controls
                     if (_timeHeld >= TIME_HELD_FOR_VAULT)
                     {
                         command = ECommand.Vaulting;
-                        _isVaulting = true;
                     }
                 }
                 else
                 {
                     if (VRGlobals.player && VRGlobals.player.IsVaultingPressed)
                     {
-                        _isVaulting = false;
                         command = ECommand.VaultingEnd;
                     }
                     else if (_timeHeld > 0.05f && _timeHeld < TIME_HELD_FOR_VAULT)

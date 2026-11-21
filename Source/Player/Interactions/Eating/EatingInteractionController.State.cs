@@ -1,5 +1,4 @@
-﻿using TarkovVR.Source.Settings;
-using UnityEngine;
+﻿using UnityEngine;
 using static EFT.Player;
 
 namespace TarkovVR.Source.Player.Interactions

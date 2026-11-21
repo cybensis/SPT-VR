@@ -191,17 +191,10 @@ namespace TarkovVR.Patches.Core.Player
             const float ShoulderHeight = -0.18f;
             const float ShoulderDepth = -0.10f;
             const float NeckLength = 0.15f;
-            const float STANDING_BASELINE = 1.7f;
-            const float SITTING_BASELINE = 1.25f;
-
-            // Height-based scaling
-            float baselineHeight = VRSettings.GetSeatedMode() ? SITTING_BASELINE : STANDING_BASELINE;
-            float heightRatio = VRGlobals.vrPlayer.initPos.y / baselineHeight;
 
             // State-based offsets
             bool isSprinting = __instance.Player.IsSprintEnabled;
             bool isAiming = VRGlobals.firearmController?.IsAiming ?? false;
-            bool isUsingItem = VRGlobals.usingItem;
 
             bool sprintAnimEnabled = isSprinting && !VRSettings.GetDisableRunAnim();
             if (sprintAnimEnabled) return true;
@@ -209,7 +202,6 @@ namespace TarkovVR.Patches.Core.Player
             float aimOffset = isAiming ? -0.02f : 0.02f;
             // isSprinting here always means the run anim is disabled (anim-enabled sprints returned above)
             float sprintOffset = isSprinting ? sprintShoulderForward : 0f;
-            float usingItemOffset = isUsingItem ? -0.10f : 0f;
 
             // Calculate neck base position
             Vector3 headPos = VRGlobals.VRCam.transform.position;
@@ -253,10 +245,10 @@ namespace TarkovVR.Patches.Core.Player
 
             // Calculate shoulder offsets
             float leftLateral = -ShoulderWidth - sprintOffset;
-            float leftDepth = ShoulderDepth + sprintOffset; //+ usingItemOffset;
+            float leftDepth = ShoulderDepth + sprintOffset;
 
             float rightLateral = ShoulderWidth + sprintOffset;
-            float rightDepth = ShoulderDepth + aimOffset + sprintOffset; //+ usingItemOffset;
+            float rightDepth = ShoulderDepth + aimOffset + sprintOffset;
 
             Vector3 leftOffset = right * leftLateral + Vector3.up * ShoulderHeight + forward * leftDepth;
             Vector3 rightOffset = right * rightLateral + Vector3.up * ShoulderHeight + forward * rightDepth;

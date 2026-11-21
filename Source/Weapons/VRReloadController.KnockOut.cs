@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using Diz.LanguageExtensions;
-using EFT;
 using EFT.InventoryLogic;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
@@ -29,8 +28,6 @@ namespace TarkovVR.Source.Weapons
         private static float knockCatchLastTime = -1f;
         private static GameObject knockBodyFor;
         private static MeshFilter knockBody;                // the held magazine's body (its biggest mesh)
-        private static bool knockTouching;                  // touching the catch since last frame (the too-slow line once per touch)
-        private static float knockTouchFastest;
         private static GameObject knockZoneViz;
 
         // Every Tick, after the grabs: the held new magazine against the gun's catch
@@ -43,21 +40,18 @@ namespace TarkovVR.Source.Weapons
                 if (!HoldingMagazine || HoldingGunMagazine || magazineInGunHand || onRail || HoldingPalmedMagazine
                     || HoldingSeatedMagazine || heldProp == null)
                 {
-                    ForgetKnockTouch();
                     knockCatchLastTime = -1f;
                     return;
                 }
                 if (!CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
                     || weapon.MalfState.State == Weapon.EMalfunctionState.Feed || weapon.GetCurrentMagazine() == null)
                 {
-                    ForgetKnockTouch();
                     knockCatchLastTime = -1f;
                     return;
                 }
                 RockIn rockIn = RockInOf(firearmController);
                 if (rockIn == null || rockIn.pivot != Vector3.zero || !TryGetKnockCatch(firearmController, weapon, magazineSlot, out Vector3 catchPoint))
                 {
-                    ForgetKnockTouch();
                     knockCatchLastTime = -1f;
                     return;
                 }
@@ -76,32 +70,17 @@ namespace TarkovVR.Source.Weapons
 
                 float distance = DistanceToHeldBody(catchPoint);
                 if (distance > knockContactRadius)
-                {
-                    ForgetKnockTouch();
                     return;
-                }
                 Vector3 forward = -firearmController.WeaponRoot.up;
                 float push = Vector3.Dot(HandWorldVelocity(gunHand: false) - gunVelocity, forward);
                 if (push < knockSpeed)
-                {
-                    knockTouching = true;
-                    knockTouchFastest = Mathf.Max(knockTouchFastest, push);
                     return;
-                }
-                knockTouching = false;
                 KnockOut(firearmController, weapon, magazineSlot, rockIn, catchPoint, forward, push, gunVelocity, distance);
             }
             finally
             {
                 SetZoneViz(ref knockZoneViz, showZone, zoneAt, knockContactRadius, new Color(1f, 0.5f, 0f, 0.35f));
             }
-        }
-
-        // A touch that ended without a knock: how fast it got, to tune knockSpeed by
-        private static void ForgetKnockTouch()
-        {
-            knockTouching = false;
-            knockTouchFastest = 0f;
         }
 
         private static void KnockOut(FirearmController firearmController, Weapon weapon, Slot magazineSlot, RockIn rockIn, Vector3 catchPoint,

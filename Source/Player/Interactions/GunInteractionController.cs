@@ -17,8 +17,6 @@ public class GunInteractionController : MonoBehaviour
     public Transform magazine;
     private static LayerMask WEAPON_COLLIDER_LAYER = 28;
     private Transform internalMag;
-    private Transform chargingHandle;
-    private Transform bolt;
     private Transform fireModeSwitch;
     private List<Transform> tacDevices;
     private List<Transform> interactables;
@@ -102,9 +100,6 @@ public class GunInteractionController : MonoBehaviour
         //    transform.localEulerAngles = new Vector3(340, 40, 0);
         //else
         //    transform.localEulerAngles = new Vector3(340, 340, 0);
-        prevRot = Vector3.zero;
-        prevPos = Vector3.zero;
-        prevForward = Vector3.zero;
         
         Transform rightHandsPositioner = transform.Find("RightHandPositioner");
         if (rightHandsPositioner && rightHandsPositioner.GetComponent<HandsPositioner>())
@@ -172,10 +167,6 @@ public class GunInteractionController : MonoBehaviour
             else
                 VRGlobals.blockRightJoystick = false;
         }
-
-        prevRot = Vector3.zero;
-        prevPos = Vector3.zero;
-        prevForward = Vector3.zero;
     }
     public void SetHighlightComponent(HighLightMesh meshHighlighter) {
         this.meshHighlighter = meshHighlighter;
@@ -186,9 +177,6 @@ public class GunInteractionController : MonoBehaviour
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    private Vector3 prevRot;
-    private Vector3 prevPos;
-    private Vector3 prevForward;
     public int framesAfterEnabled = 0;
 
 
@@ -238,11 +226,6 @@ public class GunInteractionController : MonoBehaviour
             transform.localEulerAngles = new Vector3(340, 340, 0);
         }
         */
-        // Cache previous values
-        prevRot = cameraEulerAngles;
-        prevForward = cameraForward;
-        prevPos = cameraPosition;
-
         if (menuOpen && highlightingMesh)
         {
             DisableHighlighting();
@@ -707,13 +690,6 @@ public class GunInteractionController : MonoBehaviour
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public void SetChargingHandleOrBolt(Transform chargeOrBoltTransform, bool isBolt) {
-        //if (chargingHandle || bolt)
-           // return;
-        if (isBolt)
-            bolt = chargeOrBoltTransform;
-        else
-            chargingHandle = chargeOrBoltTransform;
-
         CreateInteractableMarker(chargeOrBoltTransform, "boltMarker");
         boltIndex = interactables.Count - 1;
         GetMesh(chargeOrBoltTransform);

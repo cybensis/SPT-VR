@@ -16,7 +16,6 @@ namespace TarkovVR.Patches.Upscalers
         //-----------------------------------------------------------------------------------------------------------------------------------------------
         public static StereoFSR3Wrapper _stereoFSR3Wrapper;
         private static StereoFSR2Wrapper _stereoFSR2Wrapper;
-        private static Rect _lastRect;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "TryRenderFSR3", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(CommandBuffer) })]
         private static bool FixFSR3Render(SSAAImpl __instance, RenderTexture source, RenderTexture destination, CommandBuffer externalCommandBuffer, ref bool __result, bool __runOriginal)

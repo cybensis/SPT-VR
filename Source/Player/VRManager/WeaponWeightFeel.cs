@@ -307,12 +307,6 @@ namespace TarkovVR.Source.Player.VRManager
             return (torque - along) / across + along / aboutBore;
         }
 
-        private static float InertiaAbout(Vector3 axis, Vector3 bore, float across, float aboutBore)
-        {
-            float alongBore = Vector3.Dot(axis, bore);
-            return across * (1f - alongBore * alongBore) + aboutBore * alongBore * alongBore;
-        }
-
         // A rotation as its axis times its angle, rad (the shortest way round)
         private static Vector3 RotationVector(Quaternion rotation)
         {

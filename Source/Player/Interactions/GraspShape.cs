@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using EFT.Interactive;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;

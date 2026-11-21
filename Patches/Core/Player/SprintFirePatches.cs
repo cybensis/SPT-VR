@@ -1,6 +1,5 @@
 using HarmonyLib;
 using TarkovVR.Source.Settings;
-using UnityEngine;
 
 namespace TarkovVR.Patches.Core.Player
 {

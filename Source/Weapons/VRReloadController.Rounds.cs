@@ -533,7 +533,6 @@ namespace TarkovVR.Source.Weapons
 
         // One hand's finger pose (pose-order eulers) as the other hand's. Worked out each call (HandMirror's rest poses come from the
         // body's hands mesh, which a change of clothes can swap); null until that mesh is found.
-        private static readonly Vector3[] mirroredRoundPinch = new Vector3[16];
         private static readonly Vector3[] mirroredRoundHold = new Vector3[16];
         private static readonly Quaternion[] mirrorFromScratch = new Quaternion[16];
         private static readonly Quaternion[] mirrorToScratch = new Quaternion[16];

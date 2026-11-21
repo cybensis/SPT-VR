@@ -19,10 +19,6 @@ namespace TarkovVR.Source.Player.VRManager
         // The laser and the menu input (VRUIInteracter) on their own object, on the controller the "Laser Pointer In Left Hand" setting
         // picks. Not on RightHand: the raid rig reuses that as its gun hand. Placed with RightHand's offsets.
         public GameObject LaserHand = null;
-        private float x = 42;
-        private float y = 355;
-        private float z = 0;
-        private Vector3 pos;
         public VRVibration hapticAction;
 
         public void Awake()

@@ -1,4 +1,3 @@
-using EFT;
 using HarmonyLib;
 using TarkovVR.Source.Player.Body;
 

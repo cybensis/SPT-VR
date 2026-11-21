@@ -82,12 +82,6 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
-        // The mirrored grenade's last left-hand target (GrenadeHold's hold line): how far EFT's right target was off the grip marker, the
-        // right arm's weight then, the target itself
-        internal static float GrenadeIkGap, GrenadeRightWeight, GrenadeRotationGap;
-        internal static Vector3 GrenadeLeftTarget;
-        internal static Quaternion GrenadeLeftTargetRotation = Quaternion.identity;
-
         [HarmonyPostfix]
         [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(EFT.Player), nameof(EFT.Player.IkProcess))]
@@ -139,8 +133,6 @@ namespace TarkovVR.Patches.Core.Player
                 Transform gripMarker = __instance._markers != null && __instance._markers.Length > 1 ? __instance._markers[1] : null;
                 Vector3 grip = gripMarker != null ? gripMarker.position : gripPosition;
                 Quaternion gripTurn = gripMarker != null ? gripMarker.rotation : gripRotation;
-                GrenadeIkGap = Vector3.Distance(gripPosition, grip);
-                GrenadeRightWeight = right.IKPositionWeight;
                 // The palm off the grip marker's own matrix (a mirrored frame: the -1 is in it), which is right wherever the scale's
                 // sign lands; the rotation-based mirror is only the fallback
                 if (gripMarker == null || !HandMirror.TryOtherPalmFromMirroredFrame(gripMarker.localToWorldMatrix, rightToLeft: true, out leftRotation))
@@ -148,11 +140,7 @@ namespace TarkovVR.Patches.Core.Player
                     if (!HandMirror.TryMirrorPalm(gripTurn, mirrorNormal, rightToLeft: true, out leftRotation))
                         return;
                 }
-                GrenadeRotationGap = HandMirror.TryMirrorPalm(gripTurn, mirrorNormal, rightToLeft: true, out Quaternion byRotation)
-                    ? Quaternion.Angle(byRotation, leftRotation) : -1f;
                 leftPosition = grip;
-                GrenadeLeftTarget = leftPosition;
-                GrenadeLeftTargetRotation = leftRotation;
             }
             else
             {

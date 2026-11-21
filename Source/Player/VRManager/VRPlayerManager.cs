@@ -6,7 +6,6 @@ using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
-using TarkovVR.Source.XR;
 using UnityEngine;
 using Valve.VR;
 
@@ -108,7 +107,6 @@ namespace TarkovVR.Source.Player.VRManager
         private Transform cachedAmmoFireModeUi;
         private bool lastInteractMenuOpen = false; 
 
-        private Vector3 lastHeadPosition;
 
 
         public void SetAmmoFireModeUi(Transform uiObject, bool isAmmoCount)
@@ -153,8 +151,6 @@ namespace TarkovVR.Source.Player.VRManager
         {
             SpawnHands();
             VRGlobals.VRCam = Camera.main;
-            if (VRGlobals.VRCam != null)
-                lastHeadPosition = VRGlobals.VRCam.transform.position;
             x.x = 0.075f;
             if (RightHand)
             {

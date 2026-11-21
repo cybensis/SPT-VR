@@ -242,7 +242,6 @@ namespace TarkovVR.Patches.Core.Player
 
 
 
-        private static bool compassEquipped = false;
         //This method will set the compass position to the right hand
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "PropUpdate")]
@@ -271,7 +270,6 @@ namespace TarkovVR.Patches.Core.Player
                 return;
 
             if (InitVRPatches.leftPalm && __instance._player._compassArrow) {
-                compassEquipped = active;
                 __instance._player._compassArrow.transform.parent.SetParent(InitVRPatches.leftPalm, false);
                 //__instance.WaitFrames(5, delegate {
                 //    __instance._player._compassArrow.transform.parent.localPosition = new Vector3(0.1851f, -0.4271f, -0.0684f);
@@ -289,7 +287,6 @@ namespace TarkovVR.Patches.Core.Player
 
             if (InitVRPatches.leftPalm && __instance._player._compassArrow)
             {
-                compassEquipped = active;
                 __instance._player._compassArrow.transform.parent.SetParent(InitVRPatches.leftPalm, false);
                 //__instance.WaitFrames(5, delegate { 
                 //    __instance._player._compassArrow.transform.parent.localPosition = new Vector3(0.1851f, -0.4271f, -0.0684f);

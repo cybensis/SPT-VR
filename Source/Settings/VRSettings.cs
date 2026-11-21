@@ -44,10 +44,6 @@ namespace TarkovVR.Source.Settings
             IncreaseLighting = 2
         }
 
-        // Vive Wand controller scales
-        private static readonly float[] ViveWandVaultTimeValues = [0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f];
-        private static readonly float[] ViveWandCrouchThresholdValues = [0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f];
-        
         public class ModSettings
         {
             public float rotationSensitivity { get; set; }
@@ -194,71 +190,14 @@ namespace TarkovVR.Source.Settings
         private static SettingsScreen settingsUi;
         public static GameObject vrSettingsObject;
 
-        //private static SettingSelectSlider leftStickDriftSlider;
-        //private static SettingSelectSlider rightStickDriftSlider;
-        // Movement Settings
-        private static SettingSelectSlider sensitivitySlider;
+        // The menu rows read back after they're built (the rest only need building: AddToggle / AddDropDown / AddSlider)
         private static SettingDropDown movementMethod;
         private static SettingDropDown rotationMethod;
         private static SettingDropDown snapTurnAmountDropDown;
-        // Weapon handling settings
-        private static SettingToggle leftHandedMode;
-        private static SettingToggle swapSticksToggle;
-        private static SettingToggle aimSmoothingToggle;
-        private static SettingToggle weaponWeightToggle;
-        private static SettingToggle virtualStockToggle;
-        private static SettingToggle chestSlingToggle;
-        private static SettingToggle gunGripToggleToggle;
-        private static SettingToggle physicalDoorsToggle;
-        private static SettingToggle disableDoorContextMenuToggle;
         private static SettingToggle resetGunSpotsToggle;
-        private static SettingToggle manualReloadToggle;
-        private static SettingToggle weaponInertiaToggle;
-        private static SettingToggle walkEffectorToggle;
-        private static SettingSelectSlider aimSmoothingSlider;
-        private static SettingSelectSlider scopeSmoothingSlider;
-        private static SettingSelectSlider aimSteadySlider;
-        private static SettingToggle scopeSmoothingToggle;
-        private static SettingSelectSlider rightHandVerticalAngleSlider;
-        private static SettingSelectSlider rightHandHorizontalAngleSlider;
-        private static SettingSelectSlider leftHandHorizontalAngleSlider;
-        private static SettingSelectSlider leftHandVerticalAngleSlider;
-        private static SettingSelectSlider handPosOffsetSlider;
-        private static SettingSelectSlider variableZoomSensitivitySlider;
-
-        // Vive controller settings
-        private static SettingSelectSlider viveWandCrouchThresholdSlider;
-        private static SettingSelectSlider viveWandVaultHoldTimeSlider;
-
-        private static SettingToggle nativeAAToggle;
         private static SettingDropDown shadowOptsToggle;
-        private static SettingToggle disableFogToggle;
         private static SettingDropDown opticResolutionDropDown;
-        private static SettingSelectSlider lodBiasSlider;
-        private static SettingSelectSlider cullDistanceSlider;
-
-        // Other settings
-        private static SettingToggle hideArmsToggle;
-        private static SettingToggle hideLegsToggle;
-        private static SettingToggle desktopViewRightEyeToggle;
-        private static SettingToggle desktopViewPlainMirrorToggle;
-        private static SettingToggle hideoutShadowsOffToggle;
         private static SettingToggle foveatedToggle;
-        private static SettingSelectSlider foveatedRadiusSlider;
-        private static SettingSelectSlider desktopViewFieldOfViewSlider;
-        private static SettingSelectSlider desktopViewSmoothingSlider;
-        private static SettingSelectSlider desktopViewVerticalFieldOfViewSlider;
-        private static SettingSelectSlider desktopViewTiltDownSlider;
-        private static SettingToggle manualEatingToggle;
-        private static SettingToggle disableMouseInput;
-        private static SettingToggle disableCorpseContextMenuToggle;
-        private static SettingToggle disableRunAnimationToggle;
-        private static SettingToggle stepToSprintToggle;
-        private static SettingToggle seatedModeToggle;
-        private static SettingToggle useVRKeyboardToggle;
-        private static SettingToggle heldItemWeightToggle;
-
-
 
         private static ModSettings settings;
         private static readonly string SettingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\sptvr\\ModSettings.json");
@@ -447,23 +386,23 @@ namespace TarkovVR.Source.Settings
                 ChangeRotationType);
             snapTurnAmountDropDown = AddDropDown(movement, "Snap Turn Angle", SNAP_TURN_ANGLES, SNAP_TURN_ANGLES[SnapTurnIndex(settings.snapTurnAmount)],
                 ChangeSnapAmount, shownWhen: () => settings.rotationType == RotationMode.Snap, tooltip: "Degrees per snap");
-            sensitivitySlider = AddSlider(movement, "Rotation Sensitivity", 0.5f, 20f, () => settings.rotationSensitivity,
+            AddSlider(movement, "Rotation Sensitivity", 0.5f, 20f, () => settings.rotationSensitivity,
                 (v) => settings.rotationSensitivity = v, (v) => Remap(v, 0.5f, 20f, 0f, 10f).ToString("0"));
-            swapSticksToggle = AddToggle(movement, "Swap Sticks", settings.swapSticks, SetSwapSticks,
+            AddToggle(movement, "Swap Sticks", settings.swapSticks, SetSwapSticks,
                 tooltip: "Move with the right stick, turn with the left");
-            disableRunAnimationToggle = AddToggle(movement, "Disable Run Animation", settings.disableRunAnimation, SetDisableRunAnim,
+            AddToggle(movement, "Disable Run Animation", settings.disableRunAnimation, SetDisableRunAnim,
                 tooltip: "The gun stays in your hands while sprinting, so you can fire on the run");
-            stepToSprintToggle = AddToggle(movement, "Step Or Lean Forward To Sprint", settings.stepToSprint, SetStepToSprint,
+            AddToggle(movement, "Step Or Lean Forward To Sprint", settings.stepToSprint, SetStepToSprint,
                 tooltip: "A quick step or lean forward starts a sprint, a step back stops it");
-            seatedModeToggle = AddToggle(movement, "Seated Mode (Reset Your Height After)", settings.seatedMode, SetSeatedMode);
+            AddToggle(movement, "Seated Mode (Reset Your Height After)", settings.seatedMode, SetSeatedMode);
 
             // Vive wands only: their trackpads crouch and jump
             if (VRGlobals.vrControllerType == "vive")
             {
-                viveWandCrouchThresholdSlider = AddSlider(movement, "Crouch / Prone Trackpad Threshold", 0.2f, 0.95f,
+                AddSlider(movement, "Crouch / Prone Trackpad Threshold", 0.2f, 0.95f,
                     () => settings.viveWandCrouchTrackpadThreshold, (v) => settings.viveWandCrouchTrackpadThreshold = v,
                     (v) => Remap(v, 0.2f, 0.95f, 0f, 10f).ToString("0"));
-                viveWandVaultHoldTimeSlider = AddSlider(movement, "Vault / Jump Hold Time", 0.05f, 1.5f,
+                AddSlider(movement, "Vault / Jump Hold Time", 0.05f, 1.5f,
                     () => settings.viveWandVaultHoldTime, (v) => settings.viveWandVaultHoldTime = v, (v) => v.ToString("0.0") + "s");
             }
         }
@@ -471,34 +410,34 @@ namespace TarkovVR.Source.Settings
         private static void AddWeaponRows()
         {
             int weapons = (int)Category.Weapons;
-            aimSmoothingToggle = AddToggle(weapons, "Weapon Smoothing", settings.weaponAimSmoothing, ToggleSmoothingSensitivity,
+            AddToggle(weapons, "Weapon Smoothing", settings.weaponAimSmoothing, ToggleSmoothingSensitivity,
                 tooltip: "Smooths out hand shake on the gun's aim");
             // smoothingSensitivity is the slerp factor (smoothingFactor): lower = heavier smoothing
-            aimSmoothingSlider = AddSlider(weapons, "Weapon Smoothing Amount (Lower = Smoother)", 0f, 50f, () => settings.smoothingSensitivity,
+            AddSlider(weapons, "Weapon Smoothing Amount (Lower = Smoother)", 0f, 50f, () => settings.smoothingSensitivity,
                 (v) => settings.smoothingSensitivity = v, (v) => Remap(v, 0f, 50f, 0f, 10f).ToString("0"), shownWhen: () => settings.weaponAimSmoothing);
-            scopeSmoothingToggle = AddToggle(weapons, "Aim Steadying", settings.scopeAimSmoothing, ToggleScopeSmoothingSensitivity,
+            AddToggle(weapons, "Aim Steadying", settings.scopeAimSmoothing, ToggleScopeSmoothingSensitivity,
                 tooltip: "While aiming down sights, smooths out hand shake while your hand is nearly still but not while it moves. Stronger the more the scope zooms, and much stronger while you hold your breath (it fades as your lungs run out)");
-            aimSteadySlider = AddSlider(weapons, "Aim Steadying Strength", 0f, 2f, () => settings.aimSteadyStrength,
+            AddSlider(weapons, "Aim Steadying Strength", 0f, 2f, () => settings.aimSteadyStrength,
                 (v) => settings.aimSteadyStrength = v, (v) => Remap(v, 0f, 2f, 0f, 10f).ToString("0"),
                 shownWhen: () => settings.scopeAimSmoothing && AimSteady.enabled);
-            scopeSmoothingSlider = AddSlider(weapons, "Hold Breath Sensitivity", 0f, 20f, () => settings.scopeSmoothingSensitivity,
+            AddSlider(weapons, "Hold Breath Sensitivity", 0f, 20f, () => settings.scopeSmoothingSensitivity,
                 (v) => settings.scopeSmoothingSensitivity = v, (v) => Remap(v, 0f, 20f, 0f, 10f).ToString("0"),
                 shownWhen: () => settings.scopeAimSmoothing && !AimSteady.enabled);
-            variableZoomSensitivitySlider = AddSlider(weapons, "Variable Zoom Sensitivity", 0f, 2f, () => settings.variableZoomSensitivity,
+            AddSlider(weapons, "Variable Zoom Sensitivity", 0f, 2f, () => settings.variableZoomSensitivity,
                 (v) => settings.variableZoomSensitivity = v, (v) => Remap(v, 0f, 2f, 0f, 10f).ToString("0"),
                 tooltip: "How fast the stick zooms a variable scope");
-            weaponWeightToggle = AddToggle(weapons, "Weapon Weight", settings.weaponWeight, SetWeaponWeightOn,
+            AddToggle(weapons, "Weapon Weight", settings.weaponWeight, SetWeaponWeightOn,
                 tooltip: "Heavier guns swing and settle with their weight");
-            virtualStockToggle = AddToggle(weapons, "Virtual Gunstock (Shouldering)", settings.virtualStock, SetVirtualStockOn,
+            AddToggle(weapons, "Virtual Gunstock (Shouldering)", settings.virtualStock, SetVirtualStockOn,
                 tooltip: "Bring a stocked gun to your shoulder to steady the aim");
-            chestSlingToggle = AddToggle(weapons, "Chest Sling", settings.chestSling, SetChestSlingOn,
+            AddToggle(weapons, "Chest Sling", settings.chestSling, SetChestSlingOn,
                 tooltip: "Open your gun hand to let go of the gun: it stays on the foregrip hand, or hangs on your chest. Off = it stays in your hand");
-            gunGripToggleToggle = AddToggle(weapons, "Toggle Gun Grip", settings.gunGripToggle, SetGunGripToggleOn,
+            AddToggle(weapons, "Toggle Gun Grip", settings.gunGripToggle, SetGunGripToggleOn,
                 tooltip: "Guns only (grip, foregrip, mounted guns): press the grip to take hold, press it again to let go, instead of holding it down. The pistol press check needs the grip held, so it's off in this mode");
-            manualReloadToggle = AddToggle(weapons, "Manual Reload", settings.manualReload, SetManualReloadOn,
+            AddToggle(weapons, "Manual Reload", settings.manualReload, SetManualReloadOn,
                 tooltip: "B drops the magazine instead of running the game's reload; hold B to pull it out with the other hand");
-            weaponInertiaToggle = AddToggle(weapons, "EFT Weapon Inertia", settings.weaponInertia, SetWeaponInertiaOn);
-            walkEffectorToggle = AddToggle(weapons, "EFT Walk Bobbing", settings.walkEffector, SetWalkEffectorOn);
+            AddToggle(weapons, "EFT Weapon Inertia", settings.weaponInertia, SetWeaponInertiaOn);
+            AddToggle(weapons, "EFT Walk Bobbing", settings.walkEffector, SetWalkEffectorOn);
             // A button, not a setting: ResetGunSpots turns it back off
             resetGunSpotsToggle = AddToggle(weapons, "Reset Placed Gun Spots", false, ResetGunSpots,
                 tooltip: "Puts the gun and grenade spots you placed by hand back where they start");
@@ -507,37 +446,37 @@ namespace TarkovVR.Source.Settings
         private static void AddHandsAndBodyRows()
         {
             int hands = (int)Category.HandsAndBody;
-            leftHandedMode = AddToggle(hands, "Laser Pointer In Left Hand", settings.leftHandedMode, SetLeftHandedMode);
+            AddToggle(hands, "Laser Pointer In Left Hand", settings.leftHandedMode, SetLeftHandedMode);
             // The vertical offsets pivot around 50 in CalculateRightHandPosOffset (>= 50 positive, < 50 negative): 50 stays the centre
-            rightHandVerticalAngleSlider = AddSlider(hands, "Right Hand Angle (Up / Down)", -30f, 130f, () => settings.rightHandVerticalAngle,
+            AddSlider(hands, "Right Hand Angle (Up / Down)", -30f, 130f, () => settings.rightHandVerticalAngle,
                 (v) => settings.rightHandVerticalAngle = v, (v) => Remap(v, -30f, 130f, -1f, 1f).ToString("0.0"));
-            rightHandHorizontalAngleSlider = AddSlider(hands, "Right Hand Angle (Left / Right)", -90f, 90f, () => settings.rightHandHorizontalAngle,
+            AddSlider(hands, "Right Hand Angle (Left / Right)", -90f, 90f, () => settings.rightHandHorizontalAngle,
                 (v) => settings.rightHandHorizontalAngle = v, (v) => Remap(v, -90f, 90f, -1f, 1f).ToString("0.0"));
-            leftHandVerticalAngleSlider = AddSlider(hands, "Left Hand Angle (Up / Down)", -30f, 130f, () => settings.leftHandVerticalAngle,
+            AddSlider(hands, "Left Hand Angle (Up / Down)", -30f, 130f, () => settings.leftHandVerticalAngle,
                 (v) => settings.leftHandVerticalAngle = v, (v) => Remap(v, -30f, 130f, -1f, 1f).ToString("0.0"));
-            leftHandHorizontalAngleSlider = AddSlider(hands, "Left Hand Angle (Left / Right)", -90f, 90f, () => settings.leftHandHorizontalAngle,
+            AddSlider(hands, "Left Hand Angle (Left / Right)", -90f, 90f, () => settings.leftHandHorizontalAngle,
                 (v) => settings.leftHandHorizontalAngle = v, (v) => Remap(v, -90f, 90f, -1f, 1f).ToString("0.0"));
-            handPosOffsetSlider = AddSlider(hands, "Hand Height Offset", -0.25f, 0.25f, () => settings.handPosOffset,
+            AddSlider(hands, "Hand Height Offset", -0.25f, 0.25f, () => settings.handPosOffset,
                 (v) => settings.handPosOffset = v, (v) => Remap(v, -0.25f, 0.25f, -1f, 1f).ToString("0.0"));
-            hideArmsToggle = AddToggle(hands, "Hide Arms", settings.hideArms, SetHideArms, tooltip: "Shows only your hands");
-            hideLegsToggle = AddToggle(hands, "Hide Legs", settings.hideLegs, SetHideLegs);
+            AddToggle(hands, "Hide Arms", settings.hideArms, SetHideArms, tooltip: "Shows only your hands");
+            AddToggle(hands, "Hide Legs", settings.hideLegs, SetHideLegs);
         }
 
         private static void AddInteractionRows()
         {
             int interaction = (int)Category.Interaction;
-            physicalDoorsToggle = AddToggle(interaction, "Physical Doors", settings.physicalDoors, SetPhysicalDoorsOn,
+            AddToggle(interaction, "Physical Doors", settings.physicalDoors, SetPhysicalDoorsOn,
                 tooltip: "Grip a door's handle, turn it and swing the door by hand. Off = a grip opens and closes them");
             // HidesMenu needs Physical Doors on
-            disableDoorContextMenuToggle = AddToggle(interaction, "Disable Door Context Menu", settings.disableDoorContextMenu, SetDisableDoorContextMenu,
+            AddToggle(interaction, "Disable Door Context Menu", settings.disableDoorContextMenu, SetDisableDoorContextMenu,
                 shownWhen: () => settings.physicalDoors, tooltip: "No look-at menu on the doors you can open by hand (keycard doors keep it)");
-            disableCorpseContextMenuToggle = AddToggle(interaction, "Disable Corpse Context Menu", settings.disableCorpseContextMenu,
+            AddToggle(interaction, "Disable Corpse Context Menu", settings.disableCorpseContextMenu,
                 SetDisableCorpseContextMenu);
-            manualEatingToggle = AddToggle(interaction, "Manual Eating", settings.manualEating, SetManualEating,
+            AddToggle(interaction, "Manual Eating", settings.manualEating, SetManualEating,
                 tooltip: "Open, eat and drink food with your hands");
-            heldItemWeightToggle = AddToggle(interaction, "Held Item Adds To Carry Weight", settings.heldItemWeight, SetHeldItemWeight);
-            useVRKeyboardToggle = AddToggle(interaction, "Use In-Game VR Keyboard", settings.useVRKeyboard, SetUseVRKeyboard);
-            disableMouseInput = AddToggle(interaction, "Disable Mouse Input", settings.disableMouseInput, SetDisableMouseInput);
+            AddToggle(interaction, "Held Item Adds To Carry Weight", settings.heldItemWeight, SetHeldItemWeight);
+            AddToggle(interaction, "Use In-Game VR Keyboard", settings.useVRKeyboard, SetUseVRKeyboard);
+            AddToggle(interaction, "Disable Mouse Input", settings.disableMouseInput, SetDisableMouseInput);
         }
 
         private static void AddGraphicsRows()
@@ -546,24 +485,24 @@ namespace TarkovVR.Source.Settings
             opticResolutionDropDown = AddDropDown(graphics, "Scope Render Resolution", OPTIC_RESOLUTIONS, OpticResLabel(settings.opticRenderResolution),
                 ChangeOpticResolution, tooltip: "Lower = faster scopes, a blurrier picture through them");
             // Render at native and use FSR/DLSS purely as anti-aliasing: needs an FSR/DLSS mode picked so the upscaler runs
-            nativeAAToggle = AddToggle(graphics, "Native AA (Max Quality, No Upscale)", settings.nativeAA, SetNativeAA,
+            AddToggle(graphics, "Native AA (Max Quality, No Upscale)", settings.nativeAA, SetNativeAA,
                 tooltip: "Full resolution, FSR/DLSS used only as anti-aliasing. Needs an FSR/DLSS mode picked in Graphics");
             shadowOptsToggle = AddDropDown(graphics, "Shadows", SHADOW_OPTIONS, SHADOW_OPTIONS[Mathf.Clamp((int)settings.shadowOpt, 0, 2)], ChangeShadowOpts);
             // The hideout's ~100 shadowed lights are most of its frame time
-            hideoutShadowsOffToggle = AddToggle(graphics, "Disable Hideout Shadows (Saves FPS)", settings.hideoutShadowsOff, SetHideoutShadowsOff);
+            AddToggle(graphics, "Disable Hideout Shadows (Saves FPS)", settings.hideoutShadowsOff, SetHideoutShadowsOff);
             // FoveatedMask's values are BepInEx config entries (SixBench A/Bs them), not ModSettings; its debug options stay in F12
             foveatedToggle = AddToggle(graphics, "Foveated Rendering", TarkovVR.Source.Graphics.FoveatedMask.IsEnabled,
                 TarkovVR.Source.Graphics.FoveatedMask.SetEnabled, tooltip: "Less detail toward the edges of each lens, for GPU time");
-            foveatedRadiusSlider = AddSlider(graphics, "Foveated Inner Radius", 0.2f, 1.2f, () => TarkovVR.Source.Graphics.FoveatedMask.InnerRadius,
+            AddSlider(graphics, "Foveated Inner Radius", 0.2f, 1.2f, () => TarkovVR.Source.Graphics.FoveatedMask.InnerRadius,
                 (value) => TarkovVR.Source.Graphics.FoveatedMask.InnerRadius = value, (v) => v.ToString("0.00"),
                 shownWhen: () => TarkovVR.Source.Graphics.FoveatedMask.IsEnabled, tooltip: "How much of the middle of each lens keeps full detail");
-            lodBiasSlider = AddSlider(graphics, "LOD Bias (FPS Hit)", 0.5f, 2f, () => settings.lodBias,
+            AddSlider(graphics, "LOD Bias (FPS Hit)", 0.5f, 2f, () => settings.lodBias,
                 (v) => settings.lodBias = v, (v) => v.ToString("0.00"), tooltip: "Higher = full-detail models further away");
             // Scales Rendering's per-layer clutter cull table; structural layers stay uncapped. Read every frame: applies live.
-            cullDistanceSlider = AddSlider(graphics, "Clutter Draw Distance (FPS Hit)", 0.5f, 3f, () => settings.cullDistance,
+            AddSlider(graphics, "Clutter Draw Distance (FPS Hit)", 0.5f, 3f, () => settings.cullDistance,
                 (value) => settings.cullDistance = value, (v) => v.ToString("0.00"),
                 tooltip: "How far loot, casings, bodies, bushes, rain and grass are drawn");
-            disableFogToggle = AddToggle(graphics, "Disable Fog (Worse Aliasing)", settings.disablePrismFog, SetDisableFog);
+            AddToggle(graphics, "Disable Fog (Worse Aliasing)", settings.disablePrismFog, SetDisableFog);
         }
 
         private static void AddDesktopViewRows()
@@ -571,20 +510,20 @@ namespace TarkovVR.Source.Settings
             int desktop = (int)Category.DesktopView;
             // The plain mirror has no window camera: none of the view's own settings below apply to it
             Func<bool> steadiedView = () => !settings.desktopViewPlainMirror;
-            desktopViewPlainMirrorToggle = AddToggle(desktop, "Plain Mirror (Saves CPU)", settings.desktopViewPlainMirror, SetDesktopViewPlainMirror,
+            AddToggle(desktop, "Plain Mirror (Saves CPU)", settings.desktopViewPlainMirror, SetDesktopViewPlainMirror,
                 tooltip: "The headset's eye image as it is: no steadied view, field of view, tilt or smoothing");
-            desktopViewRightEyeToggle = AddToggle(desktop, "Show The Right Eye", settings.desktopViewRightEye, SetDesktopViewRightEye,
+            AddToggle(desktop, "Show The Right Eye", settings.desktopViewRightEye, SetDesktopViewRightEye,
                 tooltip: "Off = the left eye");
-            desktopViewFieldOfViewSlider = AddSlider(desktop, "Field Of View", 50f, 110f, () => settings.desktopViewFieldOfView,
+            AddSlider(desktop, "Field Of View", 50f, 110f, () => settings.desktopViewFieldOfView,
                 (v) => settings.desktopViewFieldOfView = v, (v) => v.ToString("0"), shownWhen: steadiedView, tooltip: "Degrees across the window");
             // 0 = from the window's shape; anything else squashes the picture to fit
-            desktopViewVerticalFieldOfViewSlider = AddSlider(desktop, "Vertical Field Of View", 0f, 100f, () => settings.desktopViewVerticalFieldOfView,
+            AddSlider(desktop, "Vertical Field Of View", 0f, 100f, () => settings.desktopViewVerticalFieldOfView,
                 (v) => settings.desktopViewVerticalFieldOfView = v, (v) => v < 1f ? "Auto" : v.ToString("0"), shownWhen: steadiedView,
                 tooltip: "Auto = from the window's shape; anything else squashes the picture to fit");
-            desktopViewTiltDownSlider = AddSlider(desktop, "Tilt Down", -20f, 30f, () => settings.desktopViewTiltDown,
+            AddSlider(desktop, "Tilt Down", -20f, 30f, () => settings.desktopViewTiltDown,
                 (v) => settings.desktopViewTiltDown = v, (v) => v.ToString("0"), shownWhen: steadiedView,
                 tooltip: "Degrees the window looks below where your head looks");
-            desktopViewSmoothingSlider = AddSlider(desktop, "Smoothing (0 = Off)", 0f, 0.5f, () => settings.desktopViewSmoothing,
+            AddSlider(desktop, "Smoothing (0 = Off)", 0f, 0.5f, () => settings.desktopViewSmoothing,
                 (v) => settings.desktopViewSmoothing = v, (v) => Remap(v, 0f, 0.5f, 0f, 10f).ToString("0.0"), shownWhen: steadiedView,
                 tooltip: "How long the window's view takes to catch up with a head turn");
         }

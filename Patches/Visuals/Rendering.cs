@@ -100,9 +100,6 @@ namespace TarkovVR.Patches.Visuals
         // the Y-flipped one while FlippedV. Its destination is the eye image every frame, and a headset camera drawing into the eye
         // image after this one (uiCam) turns the image over once more. So: into the eye image, flipped only when another headset
         // camera draws after it this frame (uiCam can be skipped: UiCameraGate); into a texture of its own, always flipped.
-        // false = FlippedV = true always.
-        private static string lastFlipDestination;
-        private static int flipDestinationLogs;
         private static readonly List<XRDisplaySubsystem> xrDisplays = new List<XRDisplaySubsystem>();
         private static Camera[] cameraList = new Camera[16];
 
@@ -606,7 +603,6 @@ namespace TarkovVR.Patches.Visuals
         public static float cullDistanceMultiplier = 1f;   // scales the whole table; <1 = more aggressive (set from the slider)
 
         private static float[] _cullDistances;             // cached scaled array (rebuilt on multiplier change)
-        private static float[] _zeroDistances;             // all-0 = far clip everywhere (restore on disable)
         private static float _builtMultiplier = float.NaN;
         private static bool _cullApplied = false;
 

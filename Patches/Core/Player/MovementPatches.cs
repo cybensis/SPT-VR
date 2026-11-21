@@ -12,7 +12,6 @@ namespace TarkovVR.Patches.Core.Player
     {
 
         private static float lastYRot = 0f;
-        private static bool leftJoystickLastUsed = false;
 
         // --- Proper analog movement direction (see AnalogMovementDirection below) -----------------------------------
         // ON = body physically travels in the exact analog stick heading (full 360°). OFF = vanilla EFT behaviour,
@@ -142,7 +141,6 @@ namespace TarkovVR.Patches.Core.Player
             float headY = (dotProduct < 0) ? (VRGlobals.VRCam.transform.eulerAngles.y - 180) : VRGlobals.VRCam.transform.eulerAngles.y;
 
             float headPitch = VRGlobals.VRCam.transform.eulerAngles.x;
-            float pitchThreshold = 50f;
 
             // Normalize pitch to -180 to 180 range
             if (headPitch > 180) headPitch -= 360;
@@ -176,7 +174,6 @@ namespace TarkovVR.Patches.Core.Player
                 headPitch = 0;
             deltaRotation = new Vector2(deltaRotation.x + lastYRot, headPitch);
 
-            leftJoystickLastUsed = leftJoystickUsed;
 
             if (yAxis > xAxis)
                 VRGlobals.player.MovementContext._relativeSpeed = yAxis;

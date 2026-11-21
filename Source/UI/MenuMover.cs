@@ -5,7 +5,6 @@ namespace TarkovVR.Source.UI
 {
     internal class MenuMover : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
-        private Vector3 offset;
         private Camera mainCamera;
         public GameObject commonUI;
         public GameObject menuUI;
@@ -20,8 +19,6 @@ namespace TarkovVR.Source.UI
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            Vector3 screenPoint = mainCamera.WorldToScreenPoint(transform.position);
-            offset = transform.position - mainCamera.ScreenToWorldPoint(new Vector3(eventData.position.x, eventData.position.y, screenPoint.z));
             menuCollider.enabled = false;
         }
 

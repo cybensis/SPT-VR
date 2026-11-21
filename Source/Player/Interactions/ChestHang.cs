@@ -1,5 +1,4 @@
 using Comfort.Common;
-using EFT;
 using EFT.InventoryLogic;
 using EFT.UI;
 using TarkovVR.Patches.Core.Player;
