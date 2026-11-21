@@ -179,10 +179,6 @@ namespace TarkovVR.Patches.Visuals
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         private static int scaledWidth;
         private static int scaledHeight;
-        public static bool IsInjectingFog = false;
-        // Unity's own occlusion culling on the headset camera: off, each eye culled from its own spot made objects flash in one
-        // eye. true only for the cost probe's measuring step.
-        public static bool vrOcclusionCulling = false;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
         private static bool ProcessImageRendering(SSAAPropagator __instance, RenderTexture source, RenderTexture destination)
@@ -209,7 +205,8 @@ namespace TarkovVR.Patches.Visuals
                 scaledHeight = nativeHeight;
             }
 
-            VRGlobals.VRCam.useOcclusionCulling = vrOcclusionCulling;
+            // Unity's own occlusion culling stays off: it culls from one point, so objects flash in and out in one eye
+            VRGlobals.VRCam.useOcclusionCulling = false;
             // Re-applied every frame: the camera is reconfigured across raids, so a one-time set silently reverts.
             // The array is cached, so no per-frame GC.
             ApplyCullDistances(VRGlobals.VRCam);

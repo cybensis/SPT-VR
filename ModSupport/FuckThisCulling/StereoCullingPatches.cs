@@ -45,8 +45,8 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
         private static int EyeIndex(Camera camera) => camera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0;
         private static Matrix4x4 ReferenceProjection(Camera camera) => camera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
 
-        // The drawn eye whose last test is older (a turn with no free slot is lost, so it stays with that eye; an eye not drawn - the
-        // cost probe's left-only step - never gets it). Fixed for the frame.
+        // The drawn eye whose last test is older (a turn with no free slot is lost, so it stays with that eye; an eye that isn't drawn
+        // never gets it). Fixed for the frame.
         private static int TurnEye
         {
             get

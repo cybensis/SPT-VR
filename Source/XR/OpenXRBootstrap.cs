@@ -26,8 +26,6 @@ namespace TarkovVR.Source.XR
         {
             return OpenXRRuntime.IsExtensionEnabled(EyeGazeInteraction.extensionString);
         }
-        public static bool registerFrameWatch = false;   // dev: the native frame-call watcher for the cost probe
-
         // false = Plugin falls back to OpenVR. Called through Plugin.TryStartOpenXR, which also catches the call itself failing
         // (Unity.XR.OpenXR.dll missing: this method can't be compiled).
         public static bool Initialize()
@@ -150,16 +148,6 @@ namespace TarkovVR.Source.XR
             nameField?.SetValue(liveResolution, "SPT-VR Live Resolution");
             liveResolution.enabled = true;
             features.Add(liveResolution);
-
-            // The frame-call watcher (native, hooks xrWaitFrame and friends) only feeds the cost probe's OpenXR rows: not
-            // registered in release builds
-            if (registerFrameWatch)
-            {
-                OpenXRFrameWatch frameWatch = ScriptableObject.CreateInstance<OpenXRFrameWatch>();
-                nameField?.SetValue(frameWatch, "SPT-VR Frame Watch");
-                frameWatch.enabled = true;
-                features.Add(frameWatch);
-            }
 
             FieldInfo featuresField = typeof(OpenXRSettings).GetField("features", BindingFlags.NonPublic | BindingFlags.Instance);
             if (featuresField == null)

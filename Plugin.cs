@@ -75,8 +75,6 @@ namespace TarkovVR
             ApplyPatches("TarkovVR.Patches");
             InitializeConditionalPatches();
 
-            // Dev measurement tools, not added in releases: StereoCostProbe (Ctrl+F10, also needs OpenXRBootstrap.registerFrameWatch
-            // for its OpenXR rows) and ShadowShareProbe (Ctrl+F8) - gameObject.AddComponent<TarkovVR.Source.Misc.StereoCostProbe>() etc.
             // The desktop window: one eye, cropped to the window and stabilised (for recording)
             gameObject.AddComponent<TarkovVR.Source.Graphics.DesktopMirror>();
             // VR Graphics "Disable Hideout Shadows"

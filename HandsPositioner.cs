@@ -24,7 +24,6 @@ namespace TarkovVR
             if (VRGlobals.weaponHolder != null && VRGlobals.weaponHolder.transform.parent == this.transform)
                 gunRotation = Source.Player.VRManager.RunSway.Offset(gunRotation) * gunRotation;
             this.transform.rotation = gunRotation;
-            Source.Player.VRManager.TurnMeasure.AtPlacement(this.transform);
             // Tarkov moves this one's parent again before the arm IK, and the rig gets its pin after it: put back on the hand there
             Source.Player.VRManager.LateGunPlacement.Note(this.transform);
             // A gun held by the support hand alone or slung is stamped in world space under this: put it back after the move
