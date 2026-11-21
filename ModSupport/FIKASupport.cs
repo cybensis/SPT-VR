@@ -313,7 +313,7 @@ namespace TarkovVR.ModSupport.FIKA
                 UIPatches.extractionTimerUi.transform.parent = UIPatches.gameUi.transform;
             if (UIPatches.healthPanel != null)
                 UIPatches.healthPanel.transform.parent = UIPatches.battleScreenUi.transform;
-            if (UIPatches.healthPanel != null)
+            if (UIPatches.stancePanel != null)
                 UIPatches.stancePanel.transform.parent = UIPatches.battleScreenUi.transform;
             if (UIPatches.battleScreenUi != null)
                 UIPatches.battleScreenUi.transform.parent = VRGlobals.commonUi.GetChild(0);

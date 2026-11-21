@@ -31,14 +31,6 @@ namespace TarkovVR.Patches.Core.Player
         public static GunInteractionController currentGunInteractController;
         public static Transform currentScope;
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(AutomaticFireOperation), "SwitchToMalfunction")]
-        private static void UnlockHand(AutomaticFireOperation __instance)
-        {
-            if (!__instance.Player.IsYourPlayer)
-                return;
-        }
-
         // Removes the gun's sway/tilt when turning and walking, unless the weapon inertia setting is on
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MotionEffector), "Process")]
@@ -204,7 +196,7 @@ namespace TarkovVR.Patches.Core.Player
 
 
 
-        //This method will set the compass position to the right hand
+        // Puts the compass in the left hand
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "PropUpdate")]
         private static bool FixCompassToLeftHand(EFT.Player __instance)
@@ -1195,17 +1187,9 @@ namespace TarkovVR.Patches.Core.Player
             return false;
         }
 
-        //Waits for vrOpticController to be created before going forward with the CopyComponentFromOptic method
         static SightModVisualControllers visualController;
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.CameraControl.OpticComponentUpdater), "CopyComponentFromOptic")]
-        private static void WaitForVROpticController(EFT.CameraControl.OpticComponentUpdater __instance, OpticSight opticSight)
-        {
-            if (!VRGlobals.vrOpticController)
-                return;
-        }
 
-        // This actually handles the scope zoom 
+        // This actually handles the scope zoom
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.CameraControl.OpticComponentUpdater), "CopyComponentFromOptic")]
         private static void SetOpticCamFoV(EFT.CameraControl.OpticComponentUpdater __instance, OpticSight opticSight)
@@ -1618,7 +1602,7 @@ namespace TarkovVR.Patches.Core.Player
             float markScale = __instance.CollimatorMaterial.GetFloat("_MarkScale");
             if (markScale != 1) {
                 __instance.CollimatorMaterial.SetFloat("_MarkScale", 1f);
-                // Mark shift increases the size of the dot/holo the smaller the value, the more negative it gets the smaller it gets
+                // _MarkShift.y (negative) sets the dot/holo's size, scaled from the sight's original _MarkScale
                 float newMarkShift = 150 + ((1 - markScale) * 125);
                 __instance.CollimatorMaterial.SetVector("_MarkShift",new Vector4(0, newMarkShift * -1, 0,0));
             }

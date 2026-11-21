@@ -452,7 +452,7 @@ public class GunInteractionController : MonoBehaviour
             // A grenade in the left hand is anchored at the right grip mirrored across the grenade's centre plane
             // (RealLeftHandedPatches.GunPlane), so the mirrored grip lands on the controller. A gun's grip sits on its centre plane;
             // a grenade's is 11-12 cm off it.
-            // When the whole grenade is mirrored (GrenadeHold.mirrorInLeftHand: the positioner scaled -1 on x), the grip marker already
+            // When the whole grenade is mirrored (GrenadeHold.MirroredInLeftHand: the positioner scaled -1 on x), the grip marker already
             // is the left grip. It's anchored as is, through the positioner's scale (InverseTransformVector), so the holder's local
             // position is mirrored too.
             bool mirroredGrenade = GrenadeHold.MirroredInLeftHand;

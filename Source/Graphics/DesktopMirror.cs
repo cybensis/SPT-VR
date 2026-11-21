@@ -32,11 +32,8 @@ namespace TarkovVR.Source.Graphics
         public static int gridRows = 14;
         public static bool logDetails = false;         // setup and drawing-path lines ("[DesktopMirror]"); warnings always
 
-        // The game's (Unity 2022) XRMirrorViewBlitMode values: Default 0 = Unity's own mirror, None -6. The named constants aren't used
-        // because they compile in from the 2019 references this builds against, where None is 0 (2022's Default). The render pass
-        // structs below are safe: their layout comes from the game's assembly at run time, and only fields both versions have are read.
-        private const int UnityMirror = 0;
-        private const int NoMirror = -6;
+        private const int UnityMirror = XRMirrorViewBlitMode.Default;   // Unity's own mirror
+        private const int NoMirror = XRMirrorViewBlitMode.None;
         private const int LensMaskSize = 128;
 
         private static readonly List<XRDisplaySubsystem> displays = new List<XRDisplaySubsystem>();
@@ -592,7 +589,7 @@ namespace TarkovVR.Source.Graphics
 
         private static XRDisplaySubsystem Display()
         {
-#pragma warning disable CS0618 // GetInstances: the 2019 references' name; still in the game's 2022
+#pragma warning disable CS0618 // GetInstances is obsolete in 2022 (GetSubsystems) but still works
             SubsystemManager.GetInstances(displays);
 #pragma warning restore CS0618
             foreach (XRDisplaySubsystem display in displays)

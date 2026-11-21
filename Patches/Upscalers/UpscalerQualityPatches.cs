@@ -72,10 +72,11 @@ namespace TarkovVR.Patches.Upscalers
                 {
                     scale = fsr3Mode switch
                     {
-                        EFSR3Mode.Quality => 0.775f,          // 1.5x
-                        EFSR3Mode.Balanced => 0.6667f,         // 1.7x
-                        EFSR3Mode.Performance => 0.5882f,         // 2.0x
-                        EFSR3Mode.UltraPerformance => 0.5f, // 3.0x
+                        // per-axis render scale, milder than AMD's 1.5 / 1.7 / 2 / 3x
+                        EFSR3Mode.Quality => 0.775f,           // 1.29x
+                        EFSR3Mode.Balanced => 0.6667f,         // 1.5x
+                        EFSR3Mode.Performance => 0.5882f,      // 1.7x
+                        EFSR3Mode.UltraPerformance => 0.5f,    // 2x
                         _ => 1f
                     };
                     label = $"[VR FSR3] Set eye texture scale to {scale} for mode {fsr3Mode}";
@@ -84,10 +85,11 @@ namespace TarkovVR.Patches.Upscalers
                 {
                     scale = fsr2Mode switch
                     {
-                        EFSR2Mode.Quality => 0.775f,          // 1.5x
-                        EFSR2Mode.Balanced => 0.6667f,         // 1.7x
-                        EFSR2Mode.Performance => 0.5882f,         // 2.0x
-                        EFSR2Mode.UltraPerformance => 0.5f, // 3.0x
+                        // per-axis render scale, milder than AMD's 1.5 / 1.7 / 2 / 3x
+                        EFSR2Mode.Quality => 0.775f,           // 1.29x
+                        EFSR2Mode.Balanced => 0.6667f,         // 1.5x
+                        EFSR2Mode.Performance => 0.5882f,      // 1.7x
+                        EFSR2Mode.UltraPerformance => 0.5f,    // 2x
                         _ => 1f
                     };
                     label = $"[VR FSR2] Set eye texture scale to {scale} for mode {fsr2Mode}";

@@ -13,7 +13,7 @@ namespace TarkovVR.Source.Weapons
         public static bool enabled = true;
         public static float joltGain = 1f;              // scale on the physical response; 1 = the real masses and speeds
         // The hand's hold: how stiffly the gun is kept at the controller pose, in position and in turn about the grip. It is a stiffness,
-        // so a light gun comes back quicker and moves less for the same knock (a 3.5 kg rifle: 3.5 Hz, and 3 Hz turning)
+        // so a light gun comes back quicker and moves further for the same knock (a 3.5 kg rifle: 3.5 Hz, and 3 Hz turning)
         public static float holdStiffness = 1700f;      // N/m
         public static float holdDamping = 0.45f;        // damping ratio (1 = it comes straight back, lower = it rocks)
         public static float turnStiffness = 90f;        // N m/rad, about the grip across the bore

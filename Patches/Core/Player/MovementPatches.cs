@@ -177,7 +177,7 @@ namespace TarkovVR.Patches.Core.Player
             else
                 VRGlobals.player.MovementContext._relativeSpeed = xAxis;
 
-            // Dragging a body slows you: the multiplier (1 when not dragging) comes from the corpse's ragdoll mass on grab (BodyGrab.cs)
+            // Dragging a body slows you: the multiplier is BodyGrab's bodyDragSpeedMultiplier while dragging, 1 otherwise
             VRGlobals.player.MovementContext.SetCharacterMovementSpeed(
                 VRGlobals.player.MovementContext._relativeSpeed * VRGlobals.player.MovementContext.MaxSpeed
                 * Source.Player.Interactions.HandsInteractionController.bodyDragMoveSpeedMultiplier);

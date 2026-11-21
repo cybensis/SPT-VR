@@ -1288,8 +1288,8 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         /// <summary>
-        /// A use/eat began while we hold a loot item: stow it into the inventory if it fits (same path as the backpack
-        /// quick-stow), otherwise drop it. Either way our hold ends, so the finger override (gated on usingItem) stops.
+        /// A held loot item whose use/eat ended without consuming it: stow it into the inventory if it fits (same path as the
+        /// backpack quick-stow), otherwise drop it. Either way our hold ends, so the finger override (gated on usingItem) stops.
         /// </summary>
         private void ReleaseHeldForUse()
         {

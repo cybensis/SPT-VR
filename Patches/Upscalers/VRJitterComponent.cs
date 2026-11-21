@@ -107,7 +107,7 @@ namespace TarkovVR.Patches.Upscalers
     {
         public static int CurrentSampleCount { get; private set; } = 8;
 
-        // FSR uses its documented jitter sequence length, ceil(8*n^2) (18 at 1.5x, 23 at 1.7x, 32 at 2x), not one rounded up to a
+        // FSR uses its documented jitter sequence length, ceil(8*n^2) (18 at 1.5x, 24 at 1.7x, 32 at 2x), not one rounded up to a
         // power of two: a longer sequence spreads the samples too far and worsens specular shimmer.
 
         public static void SetSampleCountForScale(float scale, bool isDLSS)

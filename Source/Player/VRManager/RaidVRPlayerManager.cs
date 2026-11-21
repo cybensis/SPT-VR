@@ -12,8 +12,6 @@ namespace TarkovVR.Source.Player.VRManager
         public float rayDistance = 0.75f;
         // The interaction UI is brought a bit toward the player, otherwise it can end up inside the object
         public float dirMultiplier = 0.1f;
-        // The camera's centre doesn't line up with the centre of vision in VR, so this drops the gaze ray a little
-        public float downwardOffset = 0.1f;
         private Vector3 interactUiPos;
         private LootItem interactLootItem; // the loot item the menu is for, so it can track its movement
         private bool raycastHit = false;
@@ -149,7 +147,7 @@ namespace TarkovVR.Source.Player.VRManager
         // it might not be enough to reach the bottom.
         public float GetDistanceMultiplier(Vector3 rayDirection)
         {
-            // Calculate the angle between the camera's forward direction and the horizontal plane
+            // The ray's angle from straight down
             float angle = Vector3.Angle(rayDirection, Vector3.down);
 
             // Increase the multiplier as the angle gets closer to looking down

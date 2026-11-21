@@ -230,7 +230,7 @@ namespace TarkovVR
                             string controllerType = "Unknown";
                             if (modelLower.Contains("vive") || renderLower.Contains("vive_controller") || renderLower.Contains("vr_controller_vive"))
                             {
-                                // Only set once — don't overwrite a confirmed type with Unknown
+                                // A Vive wand overrides a type another controller set; the other types are only set when none is yet
                                 if (VRGlobals.vrControllerType != "vive")
                                     VRGlobals.vrControllerType = "vive";
                                 controllerType = "Vive Wand";

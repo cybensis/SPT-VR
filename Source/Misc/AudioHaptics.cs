@@ -88,14 +88,6 @@ namespace TarkovVR.Source.Misc
             tap = null;
         }
 
-        // Debug helper: is one of our filter taps on this source GameObject right now?
-        public static string DescribeTap(GameObject go)
-        {
-            if (go == null) return "noGO";
-            var t = go.GetComponent<HapticAudioTap>();
-            return t == null ? "none" : (t.enabled ? "ENABLED" : "disabled");
-        }
-
         // After this long with nothing of ours playing, the pump shuts down and destroys the tap (see DestroyTap).
         // OnClipPlayed restarts everything on the next clip.
         public static float idleStopSec = 1f;

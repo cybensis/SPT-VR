@@ -575,10 +575,6 @@ namespace TarkovVR.Source.Player.Interactions
                 // teammate: those relocate via Teleport-on-revive)
                 AddReleasedBody(grabbedRagdoll, grabbedIsDownedPlayer ? null : grabbedCorpse);
             }
-            else if (grabbedRagdoll != null)
-            {
-                grabbedRagdoll._checkCorpseIsStill = (allAsleep, timePassed) => allAsleep;
-            }
 
             ResetBodyGrabState();
         }

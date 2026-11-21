@@ -391,7 +391,7 @@ namespace TarkovVR.Source.Player.Interactions
         };
 
         // Noodles bag handling/rip: left palm vs pack_CAT over STATE_OPEN (its open state). Reach-up (y peaks ~0.197
-        // at t≈0.44) then tear-down arc; all 10 keys kept (the pre-0.45 keys are unsampled at PullStart 0.45, kept
+        // at t≈0.44) then tear-down arc; all 10 keys kept (the keys before the preset's pullStartTime are never sampled, kept
         // so it can be lowered live). The rip visual itself is OpenPlay.
         private static float[] NoodlesOpenPath => new float[]
         {

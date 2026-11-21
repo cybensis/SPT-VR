@@ -87,11 +87,6 @@ namespace TarkovVR.Source.Player.VRManager
         public bool showScopeZoom = false;
         public float crouchHeightDiff = 0;
 
-        // Joystick crouch drops the view instantly (crouchHeightDiff comes from CharacterController.height) while the body and arms
-        // ease down on SmoothedPoseLevel. This is the time to ease the view toward crouchHeightDiff so view and arms descend together.
-        public static float crouchViewSmoothTime = 0.14f; // s, 0 = instant. Not read anywhere at present.
-
-        public static float headViewYOffset = 0f;                  // trims eye height relative to the head bone. Not read anywhere at present.
         public static bool drivePoseFromPhysicalCrouch = true;     // true: physically crouching drives the body pose down (the in-game head/anchor follows)
         public Transform scopeUiPosition;
         public bool isWeapPistol = false;

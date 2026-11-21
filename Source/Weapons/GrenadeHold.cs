@@ -70,7 +70,6 @@ namespace TarkovVR.Source.Weapons
         private static bool pushingIn;              // the ring's latch is pushing the pin back in (pull runs pinFreeDistance -> 0)
         private static bool repinArmed;             // the ring has been away from the grenade since the pull (or the last push)
         private static bool pinReseated;            // pushed back in: the pin is held on its seat (the pin-back clip would move it around)
-        private static bool holderTurnedArmed;      // PlaceArmed turned the holder (four models): turned back when the pin goes back in
         // KeepHandTurn: the holder's rotation when the grenade came in, and the grip marker's rotation under it on the last resting frame
         private static Quaternion holderRest = Quaternion.identity;
         private static Quaternion markerAtRest = Quaternion.identity;
@@ -222,7 +221,7 @@ namespace TarkovVR.Source.Weapons
             pull = 0f;
             pinInHand = false;
             pinFinger = null;
-            pushingIn = repinArmed = pinReseated = holderTurnedArmed = false;
+            pushingIn = repinArmed = pinReseated = false;
             markerAtRestSeen = false;
             offTriggerDown = false;
             ringInReach = false;
@@ -336,7 +335,7 @@ namespace TarkovVR.Source.Weapons
             rushUntil = Time.time + seconds;
         }
 
-        // Whether this grenade's throw is playing (the throw's freeze owns its animator). Checked per grenade: another grenade's throw must not count
+        // Whether this grenade's throw is playing. Checked per grenade: another grenade's throw must not count
         private static bool ThrowingNow(GrenadeHandsController grenade) => TarkovVR.Patches.Core.VR.VRGrenadeController.Throwing(grenade);
 
         // The armed hold's holder pose (the same as InputHandlers' PositionGrenadeAfterPinPull)
@@ -344,10 +343,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (VRGlobals.weaponHolder == null)
                 return;
-            Transform holder = VRGlobals.weaponHolder.transform;
-            Vector3 position = new Vector3(-0.1f, -0.43f, -0.25f);
-            string model = controller.HandsHierarchy != null ? controller.HandsHierarchy.name : "";
-            PlaceHolder(position);
+            PlaceHolder(new Vector3(-0.1f, -0.43f, -0.25f));
             if (WeaponPatches.currentGunInteractController != null)
                 WeaponPatches.currentGunInteractController.framesAfterEnabled = 0;
         }
@@ -540,9 +536,6 @@ namespace TarkovVR.Source.Weapons
             armRequested = false;
             pinRushEnds = -1f;
             WeaponPatches.pinPulled = false;
-            if (holderTurnedArmed && VRGlobals.weaponHolder != null)
-                VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
-            holderTurnedArmed = false;
             Haptic(Handedness.OffHandSource, 0.6f, 0.06f);
             Haptic(Handedness.GunHandSource, 0.25f, 0.04f);
             controller.PutGrenadeBack();

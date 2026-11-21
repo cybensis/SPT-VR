@@ -53,13 +53,6 @@ namespace TarkovVR.Patches.Visuals
             return false;
         }
 
-        //Tarkov fog doesn't render correctly in VR so disable it
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(MBOIT_Scattering), "Start")]
-        private static void DisableMBOIT(CloudController __instance)
-        {
-        }
-
         [HarmonyPrefix]
         [HarmonyPatch(typeof(PrismEffects), "SetFogShaderValues")]
         private static bool FixFogForVR(PrismEffects __instance, Material fogMaterial)

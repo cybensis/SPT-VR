@@ -2994,7 +2994,6 @@ namespace TarkovVR.Source.Weapons
             return (gunHand ? VRGlobals.vrPlayer.RightHand : VRGlobals.vrPlayer.LeftHand).transform;
         }
 
-        // The rendered hand's knuckle line (the loot pointer's palm). The LeftHand rig transform sits at the wrist.
         // Whether the hand holding the magazine is the gun hand (taking a belt gun's box while the off hand holds the gun up,
         // VRReloadController.Belt) instead of the off hand. Set where a hold starts; while false, the Magazine* helpers below are the off hand's.
         private static bool magazineInGunHand;
@@ -3025,6 +3024,7 @@ namespace TarkovVR.Source.Weapons
         private static SoundHand MagazineHand => magazineInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
         private static SoundHand MagazineHandAlone => magazineInGunHand ? SoundHand.GunHandAlone : SoundHand.OffHandAlone;
 
+        // The rendered hand's knuckle line (the loot pointer's palm). The LeftHand rig transform sits at the wrist.
         private static Vector3 OffHandPalm()
         {
             if (VRGlobals.handsInteractionController != null)

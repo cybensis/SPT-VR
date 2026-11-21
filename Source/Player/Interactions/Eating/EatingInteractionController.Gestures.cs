@@ -169,27 +169,13 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            if (!playingOpen)
+            var stateInfo = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
+            bool past = stateInfo.fullPathHash != s.openStateHash || stateInfo.normalizedTime >= openReadyTime;
+            if (past)
             {
-                // the held item is in the other (holding) hand
-                if (ZoneReached(s.openHand, Other(s.openHand), openZoneOffset, openDistance) && TriggerEdgeImpl(s.openHand == Hand.Dominant))
-                {
-                    playingOpen = true;
-                    controller.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
-                    Pulse();
-                    LogStep($"[ManualEat] Opening {s.label}...");
-                }
-            }
-            else
-            {
-                var stateInfo = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
-                bool past = stateInfo.fullPathHash != s.openStateHash || stateInfo.normalizedTime >= openReadyTime;
-                if (past)
-                {
-                    playingOpen = false;
-                    controller.FirearmsAnimator?.SetAnimationSpeed(0f);
-                    FinishOpen(s);
-                }
+                playingOpen = false;
+                controller.FirearmsAnimator?.SetAnimationSpeed(0f);
+                FinishOpen(s);
             }
         }
 
@@ -714,8 +700,8 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Move the arms animator from STATE_OPEN into STATE_USE. The short playUntil lets Tick run it for a few frames
         // so the state takes hold, then it freezes. FinishSequence must cancel from STATE_USE: cancelling from
-        // STATE_OPEN leaves the hands busy and the food can't be discarded. Used by the Bag (shake) and Pack (take)
-        // gestures, whose grabs don't otherwise advance the animator.
+        // STATE_OPEN leaves the hands busy and the food can't be discarded. Used by the Bag's shake (its grab doesn't
+        // otherwise advance the animator; the Pack's take plays a gesture pulse instead) and by RequestFinish.
         private static void EnterUseState()
         {
             // Non-standard graphs (noodles) have no STATE_USE: push into the food's own use/chew state (eatLoopState,

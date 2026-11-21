@@ -510,8 +510,7 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(WeaponPreview), "CreateWeaponPreviewCamera")]
         private static bool FixWeaponPreviewCamera(WeaponPreview __instance)
         {
-            // Need to wait a bit before setting the FoV on this cam because
-            // something else is changing it
+            // The preview camera is made from this template: mono, 22 deg FoV
             __instance._cameraTemplate.stereoTargetEye = StereoTargetEyeMask.None;
             __instance._cameraTemplate.fieldOfView = 22;
 

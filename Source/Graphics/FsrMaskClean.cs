@@ -9,7 +9,7 @@ namespace TarkovVR.Source.Graphics
     // Cleans the VR hidden-area mask out of the game's FSR2/3 inputs. Masked pixels hold a depth ~1 cm from the eye and that point's
     // camera motion. FSR's nearest-depth motion dilation and previous-depth scatter spread them into the visible image, and its depth
     // clip drops the history there, which shows as mask-shaped aliased patches. Before each eye's FSR, depth and motion are copied with
-    // masked pixels set to far depth and zero motion (shader Hidden/SPTVR/FsrMaskClean, bundle sptvr/Assets/fsrmask), and FSR reads
+    // masked pixels set to far depth and zero motion (shader Hidden/SPTVR/FsrMaskClean2, bundle sptvr/Assets/fsrmask), and FSR reads
     // the copies (Remap). Only while the occlusion mesh is on; without the bundle FSR reads the originals.
     public static class FsrMaskClean
     {

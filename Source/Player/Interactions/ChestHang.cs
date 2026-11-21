@@ -18,7 +18,7 @@ namespace TarkovVR.Source.Player.Interactions
     // With "Toggle Gun Grip" (VRSettings.GetGunGripToggle) a press lets go instead; VRPlayerManager.ForegripGrip and MountedGun do the same.
     public static class ChestHang
     {
-        public static Vector3 chestOffset = new Vector3(0.25f, -0.05f, -0.08f); // headset-local, yaw-only: where the grip end sits (sternum height, dominant side); x mirrors left-handed
+        public static Vector3 chestOffset = new Vector3(0.25f, -0.05f, -0.08f); // in the body's frame (BodyYaw, from the neck): where the grip end sits (sternum height, dominant side); x mirrors left-handed
         public static float slingAcross = 0.5f;         // how far the muzzle points across toward the off side (0 = straight down)
         public static float slingForwardTilt = 0.35f;   // muzzle tips out from the body
         public static float slingYawDeg = 15f;          // whole-gun yaw toward the off side; mirrors left-handed
@@ -91,7 +91,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool holderSaved;
         private static Vector3 savedHolderLocalPos;
         private static Quaternion savedHolderLocalRot;
-        // Sling pose in the yaw-only head frame, so it stays rigid under stick and physical turns.
+        // Sling pose in the body's frame (BodyYaw), so it stays rigid under stick and physical turns.
         private static Vector3 slingLocalPos;
         private static Quaternion slingLocalRot = Quaternion.identity;
         private static Vector3 posVel;
@@ -1057,7 +1057,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         // ---- per-frame pose drives (called from GunInteractionController.UpdateWeaponPosition) ----
 
-        // Canonical across-chest orientation in the yaw frame: muzzle down and across toward the off side, the gun's face out
+        // Canonical across-chest orientation in the body's frame: muzzle down and across toward the off side, the gun's face out
         // from the chest. The same pose on every sling, not the release orientation. Recomputed per frame so the knobs can be tuned live.
         private static Quaternion CanonicalSlingRot(bool leftHanded)
         {

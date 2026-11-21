@@ -219,7 +219,7 @@ namespace TarkovVR.Patches.Core.VR
 
             if (throwVelocity.magnitude > 0.1f)
             {
-                // Transform from controller local space to world space
+                // Tracking space (the rig's local space) to world
                 Vector3 worldSpaceVelocity = VRGlobals.vrOffsetter.transform.TransformDirection(throwVelocity);
 
                 float grenadeVelocityMultiplier = 1.5f;

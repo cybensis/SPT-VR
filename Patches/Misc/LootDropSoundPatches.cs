@@ -25,9 +25,9 @@ namespace TarkovVR.Patches.Misc
     //   GunBanks        -- the gun drop banks (ItemDropSounds), class picked by weight; every clip has gun clatter in it.
     //
     // Co-op (FIKA): a dropped item is an ObservedLootItem on every machine. The dropper simulates it locally
-    // (bool_3 == false), so vanilla OnCollisionEnter fires. Everyone else observes it (bool_3 == true): LootSyncStruct ->
+    // (_isNetworkGame == false), so vanilla OnCollisionEnter fires. Everyone else observes it (_isNetworkGame == true): LootSyncStruct ->
     // ApplyNetPacket -> PlayDropSound() when it settles, the same path weapon drops sync on. Both are hooked and split by
-    // bool_3, so no machine plays it twice. Only EFT types are referenced (no FIKA types), so this is harmless in solo.
+    // _isNetworkGame, so no machine plays it twice. Only EFT types are referenced (no FIKA types), so this is harmless in solo.
     [HarmonyPatch]
     internal class LootDropSoundPatches
     {
@@ -81,7 +81,7 @@ namespace TarkovVR.Patches.Misc
             new ConditionalWeakTable<LootItem, StrongBox<float>>();
 
         // On the dropper's machine and in single player, vanilla fires OnCollisionEnter from real collisions.
-        // Networked observers (bool_3 == true) are driven by packets instead and handled in PlayDropSound.
+        // Networked observers (_isNetworkGame == true) are driven by packets instead and handled in PlayDropSound.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(LootItem), "OnCollisionEnter")]
         private static void VoiceOnImpact(LootItem __instance, Collision collision)
