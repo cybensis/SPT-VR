@@ -447,9 +447,7 @@ namespace TarkovVR.Source.Player.Interactions
             UpdatePressCheckHook();
             // That hand on the charging handle: the rack clip's finger pose on top
             VRReloadController.ApplyGunHandFingerPose();
-            // Left-handed stage 2 test (off by default): the gun hand's grip mirrored onto the free off hand
-            TarkovVR.Source.Player.Body.HandMirror.ApplyTest();
-            // Real left-handed test (off by default): the gun in the left hand - both hands' fingers swapped onto their mirror images
+            // The gun in the left hand: both hands' fingers swapped onto their mirror images
             TarkovVR.Source.Player.Body.HandMirror.ApplyRealLeftHanded();
             // The gun in the left hand, a press check: its fingers' mirror image on the left (after the grip's, above)
             ApplyPressCheckHookLeft();

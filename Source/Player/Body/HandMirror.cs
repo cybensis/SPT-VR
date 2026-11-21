@@ -9,13 +9,8 @@ namespace TarkovVR.Source.Player.Body
     // body's centre plane and applied to the other hand's bone from that bone's own rest pose:
     //     to = toPalmRest^-1 * Mirror(fromPalmRest * (fromPalm^-1 * from) * fromRest^-1) * toRest      (rest rotations in mesh space)
     // The rest pose maps exactly onto the rest pose; the centre plane is read off the two palms' bind positions (logged once).
-    //
-    // mirrorTest (live, UnityExplorer): hold a gun right-handed and raise the free off hand: it shows a left-hand version of the
-    // gun hand's grip.
     public static class HandMirror
     {
-        public static bool mirrorTest = false;
-
         private const string RIGHT = "Base HumanR";
         private const string LEFT = "Base HumanL";
 
@@ -56,29 +51,6 @@ namespace TarkovVR.Source.Player.Body
         private static BonePair[] rightToLeft;
         private static Vector3 centrePlaneNormal = Vector3.right;
         private static float nextFindTime;
-
-        // End of HandsInteractionController.LateUpdate: both hands' fingers are final for this frame
-        public static void ApplyTest()
-        {
-            if (!mirrorTest || VRGlobals.player == null || VRGlobals.firearmController == null || VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.isSupporting)
-                return;
-            if (!EnsureBones())
-                return;
-            Mirror(rightPalm, rightPalmRest, leftPalm, leftPalmRest, rightToLeft);
-        }
-
-        // Each pair's 'to' bone, parents first (palm order), so a child's parent already carries its new pose
-        private static void Mirror(Transform fromPalm, Quaternion fromPalmRest, Transform toPalm, Quaternion toPalmRest, BonePair[] pairs)
-        {
-            Quaternion fromPalmInverse = Quaternion.Inverse(fromPalm.rotation);
-            Quaternion toPalmRestInverse = Quaternion.Inverse(toPalmRest);
-            foreach (BonePair pair in pairs)
-            {
-                Quaternion turn = fromPalmRest * (fromPalmInverse * pair.from.rotation) * Quaternion.Inverse(pair.fromRest);
-                Quaternion inToPalm = toPalmRestInverse * Reflect(turn, centrePlaneNormal) * pair.toRest;
-                pair.to.rotation = toPalm.rotation * inToPalm;
-            }
-        }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The gun in the left hand (Handedness.GunInLeftHand, right-handed mode)

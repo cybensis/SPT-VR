@@ -297,12 +297,9 @@ namespace TarkovVR.Source.Player.Interactions
 
             // LateUpdate-phase rig pins (after the IK solve), like HandsPositioner.LateUpdate —
             // without this mid-eat the rig drifts post-solve and the hands jitter while walking.
-            if (driveBodyFollowDuringEat)
-            {
-                if (medsBody != null && VRGlobals.vrPlayer != null)
-                    medsBody.rotation = VRGlobals.vrPlayer.handsRotation;
-                PinRigToBody();
-            }
+            if (medsBody != null && VRGlobals.vrPlayer != null)
+                medsBody.rotation = VRGlobals.vrPlayer.handsRotation;
+            PinRigToBody();
 
             // Pull-to-open latch last: it needs the prop re-zeroing above applied (the grip is read through the holding wrist's
             // rigid chain, which must have baseT back on its holder) and the rig pins final (the latch's parent target rides

@@ -10,7 +10,6 @@ namespace TarkovVR.Source.Player.VRManager
     // root's recoil-free move undone (RecoilPose.FreeFrame: the recoil still shows). The later pin then finds the rig in place.
     public static class LateGunPlacement
     {
-        public static bool enabled = true;
         public static float maxCorrection = 0.5f;   // m: more in one frame is a teleport (respawn, weapon switch), left alone
         public static bool debugLog = false;        // a line a second: the most the gun and the rig moved here in a frame
 
@@ -30,7 +29,7 @@ namespace TarkovVR.Source.Player.VRManager
         // HandsPositioner.Update: the held gun's positioner just put on the hand
         public static void Note(Transform placed)
         {
-            if (!enabled || placed == null || placed.parent == null || VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.rawRightHand == null
+            if (placed == null || placed.parent == null || VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.rawRightHand == null
                 || VRGlobals.weaponHolder == null || VRGlobals.weaponHolder.transform.parent != placed)
                 return;
             Transform hand = VRGlobals.vrPlayer.rawRightHand.transform;
@@ -45,7 +44,7 @@ namespace TarkovVR.Source.Player.VRManager
         // Player.IkProcess prefix, after the others (IKPatches' airborne zeroing moves the hands root too)
         public static void BeforeArmIk(EFT.Player player)
         {
-            if (!enabled || notedFrame != Time.frameCount || positioner == null || root == null || positioner.parent != root)
+            if (notedFrame != Time.frameCount || positioner == null || root == null || positioner.parent != root)
                 return;
             notedFrame = -1;
             if (player.MovementContext != null && player.MovementContext.StationaryWeapon != null)

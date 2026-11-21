@@ -29,7 +29,6 @@ namespace TarkovVR.Source.Player.Body
 
         // While sprinting with the run anim disabled, the gait still pumps the forearm twist this reads, so the elbow
         // goal swings wildly. Hold it at its neutral base position during that sprint (the lerp eases in/out).
-        public static bool sprintNeutralElbows = true;
 
         // The Custom elbow driver (IKPatches.DriveElbow) ignores the bend goals this component moves, so the wrist-roll
         // deflection is also published here (X delta from base, goal units; clamped + sprint-frozen like the goals).
@@ -40,7 +39,7 @@ namespace TarkovVR.Source.Player.Body
 
         void Update()
         {
-            bool freezeForSprint = sprintNeutralElbows && VRGlobals.player != null &&
+            bool freezeForSprint = VRGlobals.player != null &&
                                    VRGlobals.player.IsSprintEnabled && VRSettings.GetDisableRunAnim();
 
             // Twist input: the wrist driver's measured physical hand roll (IKPatches.DriveWrist; the bone euler only carries the

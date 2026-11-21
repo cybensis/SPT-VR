@@ -14,7 +14,6 @@ namespace TarkovVR.Source.Player.VR
     // (IKSolverTrigonometric.OnUpdate), so it just follows.
     internal static class ArmLength
     {
-        public static bool enabled = true;                // false = Tarkov's arm + the height-based shoulder shift
         public static float minWristSpan = 1f;            // m; arms at the sides or held forward stay well under this
         public static float shoulderBelowHead = 0.18f;    // m; same drop OverrideShoulders places the shoulders at
         public static float maxOffShoulderHeight = 0.3f;  // m; how far above or below the shoulders still counts as arms out
@@ -101,7 +100,7 @@ namespace TarkovVR.Source.Player.VR
 
         private static float ScaleFor(ArmBones arm)
         {
-            if (!enabled || VRSettings.GetLeftHandedMode() || arm.naturalLength <= 0f)
+            if (VRSettings.GetLeftHandedMode() || arm.naturalLength <= 0f)
                 return 1f;
             float wantedLength = WantedLength();
             return wantedLength > 0f ? Mathf.Clamp(wantedLength / arm.naturalLength, minScale, maxScale) : 1f;
@@ -124,7 +123,7 @@ namespace TarkovVR.Source.Player.VR
         // same space in the hideout too.
         public static void TryMeasure()
         {
-            if (!enabled || VRSettings.GetLeftHandedMode() || !HeadTracking.RawHmdPose(out Vector3 head, out _))
+            if (VRSettings.GetLeftHandedMode() || !HeadTracking.RawHmdPose(out Vector3 head, out _))
                 return;
 
             Vector3 leftWrist = WristOf(VRInput.LeftHandPose, SteamVR_Input_Sources.LeftHand, -1f);

@@ -164,12 +164,11 @@ namespace TarkovVR.Source.Player.Interactions
         private static void StepOpen(EatStyle s)
         {
             if (playingOpenAnim) { WaitOpenAnim(s); return; } // riding the one-shot open animation (rip)
-            if (physicalPullToOpen && !playingOpen)
+            if (!playingOpen)
             {
                 StepOpenPull(s);
                 return;
             }
-            if (!physicalPullToOpen && pullingOpen) EndPull(); // flag toggled off live mid-pull — don't strand the latch
 
             if (!playingOpen)
             {
@@ -608,7 +607,7 @@ namespace TarkovVR.Source.Player.Interactions
                     }
                 }
                 // Finish when the live resource hits empty; items without a resource component use the use-time clock.
-                bool done = drinkFdc != null && drinkLiveDrain
+                bool done = drinkFdc != null
                     ? drinkFdc.HpPercent <= 0.0001f
                     : drinkHeldTime >= drinkUseTime * drinkRemainingFrac;
                 if (done)
@@ -658,7 +657,6 @@ namespace TarkovVR.Source.Player.Interactions
         // proportional, the same model DoMedEffect runs.
         private static void DrainDrinkLive()
         {
-            if (!drinkLiveDrain) return;
             // Time-based progress (drinkTimeAppliedFrac) is tracked apart from the total applied (drinkAppliedFrac):
             // a CanSpoon's spoon bites also bump the total, and draining against it would stall the bar until the
             // held time caught up. The time delta is capped at the live remaining, so mixed mouth+spoon can't over-apply.
@@ -689,7 +687,7 @@ namespace TarkovVR.Source.Player.Interactions
         // BaseSoundPlayer.Update releases it later.
         private static void StopDrinkSound()
         {
-            try { if (cutDrinkSoundOnLower) soundPlayer?._clipsSource?.Stop(); }
+            try { soundPlayer?._clipsSource?.Stop(); }
             catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] StopDrinkSound: {exception.Message}"); }
             TarkovVR.Source.Misc.AudioHaptics.Stop(); // the hand buzz cuts with the audio
         }

@@ -70,8 +70,8 @@ namespace TarkovVR.Source.Player.Interactions
         // Hand-pin runs from the IK solver's OnPostUpdate: Player.LateUpdate is too early (FinalIK solves
         // after it). Pins the rendered wrist (bone3) onto the rig target; a pull-latched hand pins to the
         // latch (glued to the item) instead.
-        private static void PinLeftAfterIk() { if (active && !manualDone && driveHandsToTargets) PinBoneToTarget(VRGlobals.ikManager?.leftArmIk, LeftPinTarget()); }
-        private static void PinRightAfterIk() { if (active && !manualDone && driveHandsToTargets) PinBoneToTarget(VRGlobals.ikManager?.rightArmIk, RightPinTarget()); }
+        private static void PinLeftAfterIk() { if (active && !manualDone) PinBoneToTarget(VRGlobals.ikManager?.leftArmIk, LeftPinTarget()); }
+        private static void PinRightAfterIk() { if (active && !manualDone) PinBoneToTarget(VRGlobals.ikManager?.rightArmIk, RightPinTarget()); }
 
         // Where each hand's IK target + wrist pin should aim right now: the pull latch while
         // that hand is latched onto the held item, else its normal rig target.
@@ -164,7 +164,6 @@ namespace TarkovVR.Source.Player.Interactions
         // palmCollisionPoints is off; the static fallback if the skeleton is missing.
         private static Vector3 PalmOffsetLocal(Hand hand)
         {
-            if (!palmCollisionPoints) return Vector3.zero;
             if (!palmAnchorsResolved) ResolvePalmAnchors();
             Transform wrist = hand == Hand.Dominant ? palmWristDom : palmWristOff;
             Transform[] leaves = hand == Hand.Dominant ? palmLeavesDom : palmLeavesOff;
@@ -196,11 +195,10 @@ namespace TarkovVR.Source.Player.Interactions
         // CanSpoon's can-at-mouth drink) probe the mouth with the open zone's item point (palm +
         // openZoneOffset: the cap/lid/bar top) instead of palm + eatZoneOffset. Foods where a piece is carried
         // in the free hand, and sausage (skipOpen, no open zone), keep the palm probe. false = palm everywhere.
-        public static bool mouthProbeUsesOpenZone = true;
 
         private static Vector3 EatProbeOffset(Hand eatHand)
         {
-            if (mouthProbeUsesOpenZone && style != null && def != null && !def.skipOpen
+            if (style != null && def != null && !def.skipOpen
                 && eatHand == Other(style.openHand)) // the eating hand holds the item
                 return openZoneOffset;
             return eatZoneOffset;
@@ -386,7 +384,6 @@ namespace TarkovVR.Source.Player.Interactions
         // wrapper/bag/pack/most drinks).
         private static void PulseHand(bool dominant)
         {
-            if (!eatingHaptics) return;
             VRInput.Haptic.Execute(0f, 0.06f, 1f, 0.4f, HandSource(dominant));
         }
 
@@ -479,7 +476,6 @@ namespace TarkovVR.Source.Player.Interactions
         // controllers as haptics, through the OnAudioFilterRead tap on the BetterSource the clip went out on.
         public static void OnEatAudio(BaseSoundPlayer sp, AudioClip clip, float volume)
         {
-            if (!audioHaptics || !eatingHaptics) return;
             if (!active || manualDone || sp == null || sp != soundPlayer) return;
             if (phase != Phase.Closed || (!pullingOpen && !playingOpen)) return; // opening only
             try

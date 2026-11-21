@@ -197,8 +197,6 @@ namespace TarkovVR.Patches.Core.Player
             // Height-based scaling
             float baselineHeight = VRSettings.GetSeatedMode() ? SITTING_BASELINE : STANDING_BASELINE;
             float heightRatio = VRGlobals.vrPlayer.initPos.y / baselineHeight;
-            // With ArmLength on the arm itself is the right length, so the shoulders stay put
-            float armLengthOffset = TarkovVR.Source.Player.VR.ArmLength.enabled ? 0f : (heightRatio - 1f) * 0.25f;
 
             // State-based offsets
             bool isSprinting = __instance.Player.IsSprintEnabled;
@@ -255,10 +253,10 @@ namespace TarkovVR.Patches.Core.Player
 
             // Calculate shoulder offsets
             float leftLateral = -ShoulderWidth - sprintOffset;
-            float leftDepth = ShoulderDepth + sprintOffset + armLengthOffset; //+ usingItemOffset;
+            float leftDepth = ShoulderDepth + sprintOffset; //+ usingItemOffset;
 
             float rightLateral = ShoulderWidth + sprintOffset;
-            float rightDepth = ShoulderDepth + aimOffset + sprintOffset + armLengthOffset; //+ usingItemOffset;
+            float rightDepth = ShoulderDepth + aimOffset + sprintOffset; //+ usingItemOffset;
 
             Vector3 leftOffset = right * leftLateral + Vector3.up * ShoulderHeight + forward * leftDepth;
             Vector3 rightOffset = right * rightLateral + Vector3.up * ShoulderHeight + forward * rightDepth;

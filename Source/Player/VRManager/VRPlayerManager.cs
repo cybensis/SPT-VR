@@ -77,9 +77,8 @@ namespace TarkovVR.Source.Player.VRManager
         // The right stick's Y is shared between the menu scroll (ScrollNext/Prev) and crouch.
         public int interactMenuActionCount = 0;
         // true: a single-option interaction menu ("Search", "Take") leaves the stick free to crouch. false: any open menu blocks crouch.
-        public static bool allowCrouchWithSingleAction = true;
         // The open interaction menu needs the right stick to navigate. blockCrouch and ScrollHandler both gate on this.
-        public bool interactMenuOwnsStick => interactMenuOpen && !(allowCrouchWithSingleAction && interactMenuActionCount <= 1);
+        public bool interactMenuOwnsStick => interactMenuOpen && interactMenuActionCount > 1;
         // The gun hand's stick is zooming the scope looked through (set each frame in UpdateRightHand; one frame of slack for order)
         private int scopeZoomStickFrame = -10;
         public bool ScopeZoomOwnsStick => Time.frameCount - scopeZoomStickFrame <= 1;
@@ -571,7 +570,6 @@ namespace TarkovVR.Source.Player.VRManager
         // a transition that skips that re-enable leaves the right hand frozen. So re-assert it while stably empty-handed.
         // Must be debounced: a weapon draw briefly looks empty (EmptyHandsController.Drop disables the IK, the firearm controller
         // takes over a few frames later), and re-enabling the IK in that window wedges the draw ("busy hands" on equip).
-        public static bool reassertRightArmIkWhenEmpty = true;
         public static float reassertEmptyDelay = 0.25f; // seconds of continuous clean-empty before we touch the IK
         private float lastNotCleanEmptyTime;
 
@@ -587,8 +585,7 @@ namespace TarkovVR.Source.Player.VRManager
             if (VRGlobals.inGame && !VRGlobals.menuOpen)
                 WeaponPatches.RepairUnspawnedEmptyHands();
 
-            bool cleanEmpty = reassertRightArmIkWhenEmpty
-                && VRGlobals.player != null && VRGlobals.player.HandsIsEmpty
+            bool cleanEmpty = VRGlobals.player != null && VRGlobals.player.HandsIsEmpty
                 && VRGlobals.firearmController == null   // no gun active OR mid-equip/draw
                 && !VRGlobals.usingItem && !isSupporting
                 && !Interactions.EatingInteractionController.ManualActive
@@ -625,17 +622,14 @@ namespace TarkovVR.Source.Player.VRManager
         // mirror image. Wrist = what lands the pointing fingertip on openxr_poke (valve_controller_knu_1_0_*.json, no other
         // controller's model has that point). IK aims the wrist at RightHand / LeftHand, so everything measured from those
         // transforms keeps its relation to the rendered hand.
-        public static bool alignFreeHands = true;    // false = free hands placed with the gun hand's offsets
         public static Vector3 freeRightHandWrist = new Vector3(0.0147f, 0.064f, -0.1715f);
         public static Vector3 freeRightHandRotation = new Vector3(50f, 170f, 70f);
         public static Vector3 freeLeftHandWrist = new Vector3(-0.0246f, 0.0468f, -0.188f);
         public static Vector3 freeLeftHandRotation = new Vector3(-50f, 10f, 70f);
-        public static bool logHandAlignment = false; // every 2s: rendered hand next to SteamVR's hand skeleton, both in the controller's frame
 
         private bool rightHandPlacedFree;
-        private float nextHandAlignmentLogTime;
 
-        private static bool AlignsFreeHands => alignFreeHands && VRGlobals.vrControllerType == "index" && !VRSettings.GetLeftHandedMode();
+        private static bool AlignsFreeHands => VRGlobals.vrControllerType == "index" && !VRSettings.GetLeftHandedMode();
 
         private static bool RightHandIsFree => Interactions.ChestHang.Detached
             || Interactions.EatingInteractionController.ManualActive
@@ -726,7 +720,7 @@ namespace TarkovVR.Source.Player.VRManager
                 return;
             Vector3 controllerPosition = fromAction.localPosition;
             Quaternion controllerRotation = fromAction.localRotation;
-            if (alignFreeHands && VRGlobals.vrControllerType == "index")
+            if (VRGlobals.vrControllerType == "index")
             {
                 rightControllerHand.localPosition = controllerPosition + controllerRotation * freeRightHandWrist;
                 rightControllerHand.localRotation = controllerRotation * Quaternion.Euler(freeRightHandRotation);
@@ -764,7 +758,7 @@ namespace TarkovVR.Source.Player.VRManager
                 return;
             Vector3 controllerPosition = fromAction.localPosition;
             Quaternion controllerRotation = fromAction.localRotation;
-            if (alignFreeHands && VRGlobals.vrControllerType == "index")
+            if (VRGlobals.vrControllerType == "index")
             {
                 leftControllerHand.localPosition = controllerPosition + controllerRotation * freeLeftHandWrist;
                 leftControllerHand.localRotation = controllerRotation * Quaternion.Euler(freeLeftHandRotation);
@@ -796,50 +790,6 @@ namespace TarkovVR.Source.Player.VRManager
             Quaternion offset = AlignsFreeHands ? Quaternion.Euler(freeLeftHandRotation)
                 : Quaternion.Euler(VRSettings.GetSecondaryHandVertOffset() + secondaryHandRotOffset.x, secondaryHandRotOffset.y, VRSettings.GetSecondaryHandHorOffset() + secondaryHandRotOffset.z);
             LeftHand.transform.localRotation *= Handedness.GunInLeftHand ? MirrorX(offset) : offset;
-        }
-
-        // Runs at render time, so the bones hold this frame's final pose. Hold still to read it: the IK aimed at last frame's controller pose.
-        private void LogHandAlignment(VRPose rightPose)
-        {
-            if (!AlignsFreeHands || Time.unscaledTime < nextHandAlignmentLogTime || VRGlobals.ikManager == null)
-                return;
-            nextHandAlignmentLogTime = Time.unscaledTime + 2f;
-
-            // Two-handed, the gun's aim comes from the line between the hands, so only the one-handed hold says anything about the hand
-            if ((rightHandPlacedFree || !isSupporting) && VRGlobals.ikManager.rightArmIk != null)
-                LogOneHandAlignment(rightHandPlacedFree ? "R free" : "R holding", VRGlobals.ikManager.rightArmIk.solver.bone3.transform, "Base HumanRDigit", OpenXRInput.RIGHT_HAND, rightPose.localPosition, rightPose.localRotation);
-            if (!isSupporting && VRGlobals.ikManager.leftArmIk != null)
-                LogOneHandAlignment("L", VRGlobals.ikManager.leftArmIk.solver.bone3.transform, "Base HumanLDigit", OpenXRInput.LEFT_HAND,
-                    VRInput.LeftHandPose.GetLocalPosition(SteamVR_Input_Sources.LeftHand), VRInput.LeftHandPose.GetLocalRotation(SteamVR_Input_Sources.LeftHand));
-        }
-
-        private void LogOneHandAlignment(string handName, Transform palm, string digitPrefix, int hand, Vector3 controllerPosition, Quaternion controllerRotation)
-        {
-            Transform fingerEnd = palm.Find($"{digitPrefix}21/{digitPrefix}22/{digitPrefix}23");
-            if (fingerEnd == null)
-                return;
-
-            Transform rig = VRGlobals.vrOffsetter.transform;
-            Quaternion toController = Quaternion.Inverse(controllerRotation);
-            Quaternion rigRotation = Quaternion.Inverse(rig.rotation);
-            Vector3 PointInController(Vector3 worldPoint) => toController * (rig.InverseTransformPoint(worldPoint) - controllerPosition);
-            Vector3 DirectionInController(Vector3 worldDirection) => toController * (rigRotation * worldDirection);
-
-            // The rig has no bone at the fingertip: about 2.5cm past the last joint
-            string line = $"[HandAlign] {handName} rendered wrist {PointInController(palm.position):F3} fingers {DirectionInController(-palm.right):F2} back {DirectionInController(palm.up):F2}"
-                + $" index tip {PointInController(fingerEnd.TransformPoint(-0.025f, 0f, 0f)):F3}";
-
-            if (VRInput.UsingOpenXR
-                && OpenXRHandTracking.TryGetJoint(hand, OpenXRHandTracking.WRIST_JOINT, out Vector3 wristPosition, out Quaternion wristRotation)
-                && OpenXRHandTracking.TryGetJoint(hand, OpenXRHandTracking.INDEX_TIP_JOINT, out Vector3 tipPosition, out _))
-            {
-                line += $" | skeleton wrist {(toController * (wristPosition - controllerPosition)):F3} fingers {(toController * (wristRotation * Vector3.forward)):F2} back {(toController * (wristRotation * Vector3.up)):F2}"
-                    + $" index tip {(toController * (tipPosition - controllerPosition)):F3}";
-                float[] curls = OpenXRHandTracking.GetCurls(hand);
-                if (curls != null)
-                    line += $" index curl {curls[1]:0.00}";
-            }
-            Plugin.MyLog.LogInfo(line);
         }
 
         // How much the aim is smoothed this frame (smoothingFactor, 50 = none): the old hold-breath slerp first (only without AimSteady,
@@ -1059,8 +1009,6 @@ namespace TarkovVR.Source.Player.VRManager
                 RightHand.transform.localPosition = fromAction.localPosition + fromAction.localRotation * freeRightHandWrist;
                 RightHand.transform.localRotation = fromAction.localRotation * Quaternion.Euler(freeRightHandRotation);
             }
-            if (logHandAlignment)
-                LogHandAlignment(fromAction);
         }
 
         private void UpdateLeftHand(VRPose fromAction, SteamVR_Input_Sources fromSource)

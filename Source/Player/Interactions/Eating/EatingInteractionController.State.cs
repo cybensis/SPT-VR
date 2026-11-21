@@ -9,7 +9,6 @@ namespace TarkovVR.Source.Player.Interactions
     internal static partial class EatingInteractionController
     {
         //--- Tunables (public so they can be A/B'd live in the headset) -------------
-        public static bool enableManualEating = VRSettings.GetManualEating();
 
         // Gesture trigger radii (metres), seeded per food on spawn (= the zone radii). mouthForwardDot gates the eat to in front.
         public static float openDistance = 0.18f;
@@ -27,7 +26,6 @@ namespace TarkovVR.Source.Player.Interactions
         // true = probe/anchor the zones at the rendered hand's palm (fingertip-leaf centroid, recomputed per frame so it rides
         // the finger curl, see PalmOffsetLocal). false = the rig transform's origin, which is the wrist (the controller pose
         // pushed back controllerLength, ~10cm off the grip): rotating the hand sweeps that point through an arc.
-        public static bool palmCollisionPoints = true;
         // Wrist-local stand-in palm offset, used only if the hand skeleton can't be resolved (the centroid needs ikManager's bone3).
         public static Vector3 palmFallbackLocal = new Vector3(0f, 0f, 0.08f);
 
@@ -56,22 +54,16 @@ namespace TarkovVR.Source.Player.Interactions
         public static float reachStartTime = 0.02f;
         public static float reachDeepTime = 0.3f;
 
-        public static bool eatingHaptics = true;
         // Every audible eating clip also streams its waveform envelope to the controllers (Source/Misc/AudioHaptics).
         // Master scale: AudioHaptics.strength.
-        public static bool audioHaptics = true;
         // Drive the body-follow ourselves each eat frame: mid-eat nothing else does (the IKManager/VRPlayerManager gates
         // skip it, the gun's HandsPositioner is disabled), and the rig/IK desync shows as walking jitter. Keep true.
-        public static bool driveBodyFollowDuringEat = true;
         // A/B: false (default) parents props to the IK wrist bone (bone3, pinned to the rig target by driveHandsToTargets:
         // no walk lag, no prop/hand mismatch); true parents them to the rig targets.
-        public static bool debugParentToTarget = false;
         // Pin bone3 to the rig target after the IK solve so the wrist tracks 1:1. Required for the prop-on-bone3 setup above.
-        public static bool driveHandsToTargets = true;
         // Pull-to-open: holding trigger at the open zone latches the opening hand onto the held item (LatchHandToItem), and
         // the hand's travel relative to the holding hand scrubs the open. Release = unlatch, progress stays. Every archetype;
         // the drink recap stays a plain trigger press. false = press once and the open plays.
-        public static bool physicalPullToOpen = true;
         // Metres of hand travel (in the holding hand's frame) for a full open pull.
         public static float openPullDistance = 0.28f;
         // The trigger axis scrubs the start of every open grab: pullLatchAxis..pullFullPressAxis drives the first
@@ -271,9 +263,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static float openReadyTime = 0.92f;
         // Last bite: auto-fire the trigger/fire cancel (fast put-away + weapon draw).
         // Off = wait out the operation's use-time.
-        public static bool cancelToFinish = true;
         // Last bite: jump the animator straight to STATE_END instead of playing out STATE_EAT.
-        public static bool skipLastBiteAnim = true;
         // Where in STATE_END the put-away starts (skips the can-hold bite at the start). Seeded per food.
         public static float putAwayStartTime = 0.3f;
         // Each scoop/eat gesture plays the animation forward this long (seconds), then freezes. 0 = bites stay frozen.
@@ -297,7 +287,6 @@ namespace TarkovVR.Source.Player.Interactions
         // Live drain: while held at the mouth the consumed fraction is applied in drinkDrainStep chunks of the whole item
         // (energy/hydration + HpPercent + bar refresh), and the auto-finish fires when the live resource hits empty.
         // drinkAppliedFrac = what's already applied this eat; the finish applies only the remainder.
-        public static bool drinkLiveDrain = true;
         public static float drinkDrainStep = 0.01f; // 1% chunks — smooth, near vanilla's per-tick cadence
         private static float drinkAppliedFrac;
         private static float drinkTimeAppliedFrac; // the part of drinkAppliedFrac that came from at-mouth TIME
@@ -318,7 +307,6 @@ namespace TarkovVR.Source.Player.Interactions
         // Cut the glug when the bottle leaves the mouth, with BetterSource.Stop() on the player's own clip source. Not
         // ReleaseClipsSource: returning the pooled source to BetterAudio mid-play can leave the sound player silent after a
         // fast lower -> raise. false = the gulp clip finishes on its own (the vanilla auto-release cleans it up).
-        public static bool cutDrinkSoundOnLower = true;
         // Timed-eat loop state, seeded from FoodDef.eatLoopState each spawn (0 = STATE_USE). Live-tunable: sausage's
         // non-standard chew hash is a guess.
         public static int eatLoopState;

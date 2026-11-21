@@ -141,14 +141,6 @@ namespace TarkovVR.Source.Player.Interactions
                     Reset();
                     return;
                 }
-
-                // Diagnostic: route props to the rig hand targets instead of the IK bones.
-                if (debugParentToTarget)
-                {
-                    leftHandBone = VRGlobals.vrPlayer.LeftHand.transform;
-                    rightHandBone = VRGlobals.vrPlayer.RightHand.transform;
-                    LogStep("[ManualEat] DIAG: props parented to IK TARGETS (RightHand/LeftHand).");
-                }
                 leftHandBoneRef = leftHandBone; // for the handheld wrapper's left-hand holder (built on open)
 
                 bool ok = def.kind == FoodKind.Handheld ? SetupHandheldProps(root, rightHandBone)
@@ -196,7 +188,7 @@ namespace TarkovVR.Source.Player.Interactions
                     }
                 }
 
-                if (driveHandsToTargets) SubscribePinAfterIk();
+                SubscribePinAfterIk();
 
                 LogStep($"[ManualEat] Props reparented to hands (kind={def.kind}).");
             }
@@ -253,11 +245,8 @@ namespace TarkovVR.Source.Player.Interactions
                 instance.FirearmsAnimator?.SetAnimationSpeed(Time.time < playUntil ? spawnAnimSpeed : 0f);
 
             // Mid-eat nothing else pins the rig to the body: without this the IK hands jitter while walking.
-            if (driveBodyFollowDuringEat)
-            {
-                if (VRGlobals.ikManager != null) VRGlobals.ikManager.MatchLegsToArms();
-                PinRigToBody();
-            }
+            if (VRGlobals.ikManager != null) VRGlobals.ikManager.MatchLegsToArms();
+            PinRigToBody();
             DriveArms();
 
             // A finish queued from STATE_OPEN waits here for STATE_USE to engage (see RequestFinish).
@@ -422,55 +411,43 @@ namespace TarkovVR.Source.Player.Interactions
                 var firearmsAnimator = controller.FirearmsAnimator;
                 firearmsAnimator?.SetNextLimb(false);
 
-                if (cancelToFinish)
+                // The fire-cancel aborts the over-time heal effect: apply the consumed energy/hydration now and drain the
+                // item's resource by the same fraction. The live drink drain and the per-bite drain already applied
+                // drinkAppliedFrac of it, so only the remainder goes here; emptied is read off the live resource.
+                float remainder = fraction - drinkAppliedFrac;
+                if (remainder > 0.0001f)
                 {
-                    // The fire-cancel aborts the over-time heal effect: apply the consumed energy/hydration now and drain the
-                    // item's resource by the same fraction. The live drink drain and the per-bite drain already applied
-                    // drinkAppliedFrac of it, so only the remainder goes here; emptied is read off the live resource.
-                    float remainder = fraction - drinkAppliedFrac;
-                    if (remainder > 0.0001f)
-                    {
-                        ApplyConsumedNutrition(remainder);
-                        drinkAppliedFrac = fraction;
-                    }
-                    // Chunked float math can leave a hair of resource when this use consumed everything left: snap it to 0 so
-                    // the empty-discard fires.
-                    if (drinkFdc != null && fraction >= drinkRemainingFrac - 0.001f
-                        && drinkFdc.HpPercent > 0f && drinkFdc.HpPercent <= drinkFdc.MaxResource * 0.01f)
-                        drinkFdc.HpPercent = 0f;
-                    bool emptied = drinkFdc != null
-                        ? drinkFdc.HpPercent <= 0.0001f
-                        : fraction >= drinkRemainingFrac - 0.0001f; // no resource component = one-shot
-                    LogStep(drinkFdc != null
-                        ? $"[ManualEat] Consumed {fraction:P0} ({drinkFdc.HpPercent:F1}/{drinkFdc.MaxResource:F0} left{(emptied ? " — empty" : "")})."
-                        : $"[ManualEat] Consumed {fraction:P0} (no resource component{(emptied ? " — treated as empty" : "")}).");
-                    pendingOp.GoNextBodyPart();   // keep — leaves the controller in the state the cancel needs
-                    // SetActiveParam(false) is required: it flips the controller out of mid-use into the cancellable/put-away
-                    // state. Without it the controller stays frozen and the fire-cancel has nothing to act on.
-                    firearmsAnimator?.SetActiveParam(false, false);
-                    firearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
-                    // Jump the arms animator straight to STATE_END, skipping the rest of STATE_EAT (the auto bite).
-                    if (skipLastBiteAnim)
-                    {
-                        try { controller._player.ArmsAnimatorCommon.Play(STATE_END_HASH, 1, putAwayStartTime); }
-                        catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] skip-bite Play failed: {exception.Message}"); }
-                    }
-                    // Auto-fire the fire cancel (press, then release on the next input frame): puts the food away and draws
-                    // the weapon fast.
-                    TarkovVR.Source.Controls.VRInputManager.ForceCommand(EFT.InputSystem.ECommand.ToggleShooting);
-                    TarkovVR.Source.Controls.VRInputManager.ForceCommand(EFT.InputSystem.ECommand.EndShooting);
-                    // The cancel aborts the vanilla resource depletion, so an emptied item is never removed: discard it
-                    // ourselves once the put-away has settled it back into a container (the discard needs a stable parent).
-                    // A partially used item keeps its remaining resource and stays.
-                    if (emptied && VRGlobals.vrPlayer != null)
-                        VRGlobals.vrPlayer.StartCoroutine(ConsumeFoodWhenSettled(controller.Item));
+                    ApplyConsumedNutrition(remainder);
+                    drinkAppliedFrac = fraction;
                 }
-                else
-                {
-                    pendingOp.GoNextBodyPart();   // nutrition (persists in background)
-                    firearmsAnimator?.SetActiveParam(false, false); // use done -> animator goes to END/put-away
-                    firearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
-                }
+                // Chunked float math can leave a hair of resource when this use consumed everything left: snap it to 0 so
+                // the empty-discard fires.
+                if (drinkFdc != null && fraction >= drinkRemainingFrac - 0.001f
+                    && drinkFdc.HpPercent > 0f && drinkFdc.HpPercent <= drinkFdc.MaxResource * 0.01f)
+                    drinkFdc.HpPercent = 0f;
+                bool emptied = drinkFdc != null
+                    ? drinkFdc.HpPercent <= 0.0001f
+                    : fraction >= drinkRemainingFrac - 0.0001f; // no resource component = one-shot
+                LogStep(drinkFdc != null
+                    ? $"[ManualEat] Consumed {fraction:P0} ({drinkFdc.HpPercent:F1}/{drinkFdc.MaxResource:F0} left{(emptied ? " — empty" : "")})."
+                    : $"[ManualEat] Consumed {fraction:P0} (no resource component{(emptied ? " — treated as empty" : "")}).");
+                pendingOp.GoNextBodyPart();   // keep — leaves the controller in the state the cancel needs
+                // SetActiveParam(false) is required: it flips the controller out of mid-use into the cancellable/put-away
+                // state. Without it the controller stays frozen and the fire-cancel has nothing to act on.
+                firearmsAnimator?.SetActiveParam(false, false);
+                firearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
+                // Jump the arms animator straight to STATE_END, skipping the rest of STATE_EAT (the auto bite).
+                try { controller._player.ArmsAnimatorCommon.Play(STATE_END_HASH, 1, putAwayStartTime); }
+                catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] skip-bite Play failed: {exception.Message}"); }
+                // Auto-fire the fire cancel (press, then release on the next input frame): puts the food away and draws
+                // the weapon fast.
+                TarkovVR.Source.Controls.VRInputManager.ForceCommand(EFT.InputSystem.ECommand.ToggleShooting);
+                TarkovVR.Source.Controls.VRInputManager.ForceCommand(EFT.InputSystem.ECommand.EndShooting);
+                // The cancel aborts the vanilla resource depletion, so an emptied item is never removed: discard it
+                // ourselves once the put-away has settled it back into a container (the discard needs a stable parent).
+                // A partially used item keeps its remaining resource and stays.
+                if (emptied && VRGlobals.vrPlayer != null)
+                    VRGlobals.vrPlayer.StartCoroutine(ConsumeFoodWhenSettled(controller.Item));
             }
             catch (Exception exception) { Plugin.MyLog.LogError($"[ManualEat] Finish error: {exception}"); }
         }

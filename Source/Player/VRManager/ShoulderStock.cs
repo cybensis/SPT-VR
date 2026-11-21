@@ -15,7 +15,6 @@ namespace TarkovVR.Source.Player.VRManager
     // All maths in tracking space (hand rig-locals + the raw headset pose): the hideout rewrites the camera's local transform.
     public static class ShoulderStock
     {
-        public static bool enabled = true;           // dev kill-switch; the user-facing gate is the "Virtual Gunstock" menu toggle
 
 
         // Influence = reach x height x posture, each a fade (full -> zero):
@@ -62,7 +61,7 @@ namespace TarkovVR.Source.Player.VRManager
                 ResetState();
             lastUpdateTime = Time.time;
 
-            if (!enabled || !VRSettings.GetVirtualStockOn() || TarkovVR.Source.Player.Interactions.ChestHang.Detached)
+            if (!VRSettings.GetVirtualStockOn() || TarkovVR.Source.Player.Interactions.ChestHang.Detached)
             {
                 // Detached = the rear hand is off the gun (slung / support-held): no stock butt to speak of
                 ResetState();
