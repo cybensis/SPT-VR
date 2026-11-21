@@ -10,7 +10,6 @@ namespace TarkovVR.Source.Player.Interactions
     // then logRightRestPose prints the paste-ready array.
     internal partial class HandsInteractionController
     {
-        public static bool rightOpenHand = true;            // master switch for the detached right-hand pose
         // Per-joint bake for the right hand (captured off the procedural flatten). null = the procedural flatten
         // (ApplyFlatFlex on the right hand's own animated pose). The left bake's eulers don't transfer to the right
         // bones in any mirror convention: re-author via capture instead.
@@ -52,7 +51,7 @@ namespace TarkovVR.Source.Player.Interactions
             // Pose the dominant hand when it's off the gun: slung/support-held (ChestHang.Detached) or empty-handed,
             // like the left. A held gun keeps its grip pose.
             bool emptyHands = VRGlobals.player != null && VRGlobals.player.HandsIsEmpty;
-            bool free = rightOpenHand && VRGlobals.inGame && !VRGlobals.menuOpen
+            bool free = VRGlobals.inGame && !VRGlobals.menuOpen
                         && !VRGlobals.usingItem && !EatingInteractionController.ManualActive
                         // (not while it holds the gun alone by the foregrip, the gun in the left hand: HandMirror's foregrip pose then)
                         && ((ChestHang.Detached && !TarkovVR.Patches.Core.Player.RealLeftHandedPatches.SupportHeld) || emptyHands

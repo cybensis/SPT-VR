@@ -11,7 +11,6 @@ namespace TarkovVR.Source.Player.Interactions
     // (GrenadeSlot.SwapHeldTo: Tarkov's switch, its put-away and draw skipped, the same hand holding it). Only with the pin in.
     public static class GrenadePicker
     {
-        public static bool enabled = true;
         public static float aboveHand = 0.12f;      // m the menu floats over the holding controller, turned to face you
 
         private static GameObject menu;
@@ -48,7 +47,7 @@ namespace TarkovVR.Source.Player.Interactions
                     GrenadeSlot.SwapHeldTo(grenade, next);
                 return;
             }
-            if (enabled && pressed && canPick)
+            if (pressed && canPick)
                 TryOpen(grenade);
         }
 

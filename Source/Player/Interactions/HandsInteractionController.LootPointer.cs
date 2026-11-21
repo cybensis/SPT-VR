@@ -202,8 +202,7 @@ namespace TarkovVR.Source.Player.Interactions
             // Otherwise it is stowed/dropped right away.
             if (usingOrEating && HeldItemAlive())
             {
-                if (deferUseLootRelease) BeginDeferredUseRelease();
-                else ReleaseHeldForUse();
+                BeginDeferredUseRelease();
             }
 
             // Pointing only happens with a free hand — not while holding/summoning, not mid use/eat.

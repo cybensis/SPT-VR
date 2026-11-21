@@ -31,14 +31,13 @@ namespace TarkovVR.Source.Player.Interactions
         public static float grabRadius = 0.13f;         // m RightHand rig to a body gun's grip, as ChestHang.regrabRadius
         public static float gunGrabRadius = 0.06f;      // m any point of the hand (palm, fingertips) off a gun's barrel line: anywhere on it takes it
         public static float switchTimeout = 3f;         // s before a switch that never lands is given up
-        public static bool debugLog = true;             // every dominant grip press: the zones, each slot's gun and grip distance, why it did or didn't take one
+        public static bool debugLog = false;            // every dominant grip press: the zones, each slot's gun and grip distance, why it did or didn't take one
         public static bool leftHandTakes = true;        // right-handed mode: the left hand takes a gun off the body too, and holds it left-handed
         // The gun a grab switches to: its draw skipped the moment Tarkov starts it (BodyWeaponPatches.SkipDraw), before the animator plays a
         // frame of it. UpdateSwitch's skip comes a frame later: the draw's swing-up and sound have started by then.
         public static bool skipDrawAtSpawn = true;
         // One log line a frame for switchTraceTime after a grab starts a switch: the hands' operation, the arms animator's layer 1, the
         // gun's animated root and its hand holder - what moves if a swing still shows
-        public static bool switchTrace = true;
         public static float switchTraceTime = 1.5f;
         private static Item lastSwitchItem;
 
@@ -110,8 +109,6 @@ namespace TarkovVR.Source.Player.Interactions
             prevLeftGrip = leftGrip;
             if (!leftGrip)
                 LeftGrabbedThisPress = false;
-            if (switchTrace && lastSwitchItem != null && Time.time - switchStarted <= switchTraceTime)
-                TraceSwitchFrame();
             if (Switching)
             {
                 HandAtBodyGun = false;
@@ -536,7 +533,7 @@ namespace TarkovVR.Source.Player.Interactions
                     return;
                 if (!SkipDrawNow(firearmController))
                     return;
-                if (switchTrace || debugLog)
+                if (debugLog)
                     Plugin.MyLog.LogInfo($"[BodyWeapons] draw of {firearmController.Item.LocalizedShortName()} skipped as it started (+{Time.time - switchStarted:0.000}s, frame {Time.frameCount}): op now {firearmController.CurrentOperation?.GetType().Name}");
             }
             catch (System.Exception exception)

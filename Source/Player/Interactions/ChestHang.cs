@@ -21,7 +21,6 @@ namespace TarkovVR.Source.Player.Interactions
     // VRPlayerManager.ForegripGrip and a mounted gun in MountedGun the same).
     public static class ChestHang
     {
-        public static bool enabled = true;
         public static Vector3 chestOffset = new Vector3(0.25f, -0.05f, -0.08f); // headset-local, yaw-only: where the grip end sits (sternum height, dominant side); x mirrors left-handed
         public static float slingAcross = 0.5f;         // how far the muzzle points across toward the off side (0 = straight down)
         public static float slingForwardTilt = 0.35f;   // muzzle tips out from the body
@@ -41,13 +40,11 @@ namespace TarkovVR.Source.Player.Interactions
         public static Vector3 hipOffset = new Vector3(0.22f, -0.68f, 0.02f);
         public static Vector3 hipMuzzle = new Vector3(0f, -1f, 0.15f);
         public static Vector3 hipGrip = new Vector3(0.2f, 0f, -1f);
-        public static bool hangHaptics = true;
         // Done eating / using meds: the gun Tarkov draws back goes to its spot like at a raid start, unless the gun hand's grip is held
         public static bool hangAfterMeds = true;
         public static float afterMedsHangWindow = 5f;   // s after the hands change for the gun to go idle and hang
         public static bool debugLog = false;            // 1/sec chain dump while detached + save/restore lines
         private static float nextDebugLog;
-        public static bool gripSound = true;            // every grab (foregrip / grip retake / off the sling / a gun off the body)
         public static bool gripSoundHandOn = true;      // the gun's own hand-on-the-grip sound; false = cloth foley + a hint of gun
         public static float gripClothVolume = 0.85f;    // cloth mix: the gear (rig/backpack) pickup foley = the cloth layer
         public static float gripGunVolume = 0.18f;      // cloth mix: the weapon's own pickup clip, quiet, underneath
@@ -66,8 +63,6 @@ namespace TarkovVR.Source.Player.Interactions
         // gun hand's controller and the off hand is free for the magazine. Ends on letting go of the handle (to the sling, or the
         // support hold if the off hand is back on the foregrip) or the off hand taking the foregrip again. Right-handed holds only.
         public static bool HandleHeld { get; private set; }
-        public static bool handleHoldReload = true;             // false = letting go of the foregrip with the handle back slings the gun
-        public static bool handleHoldLog = true;                // a line per start / end of that hold
         public static bool Detached => Hanging || SupportOnly || HandleHeld; // fire gate
         public static bool HandInRegrabZone { get; private set; } // dominant palm within regrab reach of the detached gun (loot pointer yields to the regrab)
         public static bool OffHandAtGunGrip { get; private set; } // the off hand where a grip press takes the gun into it (the off-hand loot pointer and body grab yield)
@@ -124,7 +119,7 @@ namespace TarkovVR.Source.Player.Interactions
             prevOffGripWasLeft = offIsLeft;
             OffHandAtGunGrip = false;
 
-            if (!enabled || !(VRGlobals.vrPlayer is RaidVRPlayerManager || VRGlobals.vrPlayer is HideoutVRPlayerManager))
+            if (!(VRGlobals.vrPlayer is RaidVRPlayerManager || VRGlobals.vrPlayer is HideoutVRPlayerManager))
             {
                 gripSeen = false;
                 releaseTimer = 0f;
@@ -288,16 +283,12 @@ namespace TarkovVR.Source.Player.Interactions
                         BeginSupportHold(firearmController);
                     else
                         BeginHang(firearmController);
-                    if (handleHoldLog)
-                        Plugin.MyLog.LogInfo($"[ChestHang] handle let go: the gun {(supporting ? "in the off hand on the foregrip" : "to the sling")}");
                 }
                 else if (supporting)
                 {
                     // The off hand back on the foregrip, the handle still back: it holds the gun up again
                     HandleHeld = false;
                     BeginSupportHold(firearmController);
-                    if (handleHoldLog)
-                        Plugin.MyLog.LogInfo("[ChestHang] off hand back on the foregrip: the gun held up by it, the handle still back");
                 }
                 prevGrip = grip;
                 return;
@@ -427,7 +418,7 @@ namespace TarkovVR.Source.Player.Interactions
             Hanging = true;
             // No ADS with the gun off the grip (DetachedAimPatches)
             TarkovVR.Patches.Core.Player.DetachedAimPatches.StopAimingOffTheGrip();
-            if (hangHaptics && !snap)
+            if (!snap)
                 Pulse(0.6f);
         }
 
@@ -451,7 +442,7 @@ namespace TarkovVR.Source.Player.Interactions
         // The left hand where a grip press takes the slung gun into it (BodyWeapons' left-hand take yields there)
         internal static bool LeftHandAtHangingGrip()
         {
-            return enabled && Hanging && VRGlobals.firearmController != null && LeftHandAtGrip(VRGlobals.firearmController);
+            return Hanging && VRGlobals.firearmController != null && LeftHandAtGrip(VRGlobals.firearmController);
         }
 
         // ---- the gun from one hand into the other ----
@@ -474,7 +465,7 @@ namespace TarkovVR.Source.Player.Interactions
                 atGrip = false;
             OffHandAtGunGrip = atGrip;
             // A light blip on the off hand coming into reach of the grip (as the regrab zone's): only where a press would swap
-            if (swapZoneBlip.Enter(atGrip) && hangHaptics)
+            if (swapZoneBlip.Enter(atGrip))
                 HapticMixer.PlayPulse(Handedness.OffHandSource, 0.25f, 0.07f, 95f);
             if (magazineNearer && offGripPressed)
                 GripPressLeftToMagazineFrame = Time.frameCount;
@@ -552,8 +543,7 @@ namespace TarkovVR.Source.Player.Interactions
             // The old gun hand is at the grip: no blip until it leaves and comes back
             swapZoneBlip.MarkInside();
             OffHandAtGunGrip = false;
-            if (hangHaptics)
-                Pulse(0.45f, throughGun: true);
+            Pulse(0.45f, throughGun: true);
             PlayGripSound();
         }
 
@@ -582,14 +572,13 @@ namespace TarkovVR.Source.Player.Interactions
             SupportOnly = true;
             TarkovVR.Patches.Core.Player.DetachedAimPatches.StopAimingOffTheGrip();
             // The gun hand lets go, and the support hand now carries the whole gun: it feels that through the gun
-            if (hangHaptics)
-                Pulse(0.35f, throughGun: true);
+            Pulse(0.35f, throughGun: true);
         }
 
         // The support hold's off hand letting go with the gun hand on the charging handle: that hand carries the gun from here
         private static bool CanHoldByHandle()
         {
-            return handleHoldReload && VRReloadController.HandleInGunHand && !Handedness.GunInLeftHand
+            return VRReloadController.HandleInGunHand && !Handedness.GunInLeftHand
                 && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.RightHand != null;
         }
 
@@ -611,10 +600,7 @@ namespace TarkovVR.Source.Player.Interactions
             HandleHeld = true;
             // The gun hand off the shared hand latch onto a pin on the handle: the off hand's magazine needs that latch on the track
             VRReloadController.PinGunHandOnHandle();
-            if (hangHaptics)
-                Pulse(0.35f, throughGun: true);
-            if (handleHoldLog)
-                Plugin.MyLog.LogInfo($"[ChestHang] off hand let go with the handle back: {firearmController.Item.LocalizedShortName()} held by the handle");
+            Pulse(0.35f, throughGun: true);
         }
 
         public static bool DriveHandleHoldPose()
@@ -716,7 +702,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static readonly TarkovVR.Source.Misc.ZoneEntryBlip regrabZoneBlip = new TarkovVR.Source.Misc.ZoneEntryBlip();
         private static void RegrabZonePulse(bool near)
         {
-            if (regrabZoneBlip.Enter(near) && hangHaptics)
+            if (regrabZoneBlip.Enter(near))
                 Pulse(0.3f);
         }
 
@@ -751,7 +737,7 @@ namespace TarkovVR.Source.Player.Interactions
                 VRGlobals.ikManager.rightArmIk.solver.target = null;
                 VRGlobals.ikManager.rightArmIk.enabled = false;
             }
-            if (hangHaptics && wasDetached)
+            if (wasDetached)
                 Pulse(0.45f, throughGun: true);
             // The same grab sound for every grab, off the sling included
             if (wasDetached)
@@ -764,7 +750,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static void PlayGripSound()
         {
             var firearmController = VRGlobals.firearmController;
-            if (!gripSound || firearmController == null || firearmController.WeaponRoot == null)
+            if (firearmController == null || firearmController.WeaponRoot == null)
                 return;
             if (gripSoundHandOn)
             {

@@ -14,7 +14,6 @@ namespace TarkovVR.Source.Player.Interactions
     // Runs inside each hand's finger pass, on the pose that pass just wrote, and keeps its RecoverAnimated bookkeeping.
     internal partial class HandsInteractionController
     {
-        public static bool graspItems = true;                   // false = the open hand on a held item, the item sunk into the palm
         public static bool graspDebug = false;                  // a line per grab: the shape, the grip, the solve time, each finger's contact
         public static float graspCloseTime = 0.12f;             // s the fingers take to close on it
         public static float graspOpenTime = 0.1f;               // s to open again on letting go
@@ -32,7 +31,6 @@ namespace TarkovVR.Source.Player.Interactions
         public static float graspPalmSkin = 0.016f;             // m from the bones to the palm's skin
         public static float graspPalmHalfWidth = 0.03f;         // m: the palm's patch an item can't be inside of, across...
         public static float graspPalmHalfLength = 0.035f;       // ...and along (wrist to knuckles)
-        public static bool graspPinch = true;
         public static float pinchMaxLength = 0.075f;            // m: an item this short and...
         public static float pinchMaxWidth = 0.03f;              // ...this narrow is pinched between the index and the thumb
         public static float pinchIndexCurlDeg = 35f;            // the index's curl the pinch point is read at
@@ -121,7 +119,7 @@ namespace TarkovVR.Source.Player.Interactions
                 hand.shape.Dispose();
                 hand.shape = null;
             }
-            hand.pinch = graspPinch && hand.shape != null && hand.shape.FitsAPinch(pinchMaxLength, pinchMaxWidth);
+            hand.pinch = hand.shape != null && hand.shape.FitsAPinch(pinchMaxLength, pinchMaxWidth);
         }
 
         // BeginSummon: where the item comes to rest in the hand. Kept the way it's turned; brought in until its nearest point is on the
@@ -131,8 +129,6 @@ namespace TarkovVR.Source.Player.Interactions
         private bool TryGraspRestPosition(LootItem item, bool dominant, out Vector3 itemTarget)
         {
             itemTarget = item.transform.position;
-            if (!graspItems)
-                return false;
             GraspHand hand = graspHands[dominant ? 1 : 0];
             BeginGrasp(hand, item);
             if (hand.shape == null || !TryGraspItemShift(dominant, hand.shape, hand.pinch, item.transform.position, item.transform.rotation, out Vector3 shift))
@@ -243,7 +239,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             GraspHand hand = graspHands[dominant ? 1 : 0];
             // What this hand holds: a loot item, or a door's handle / the door itself (PhysicalDoors)
-            bool lootHere = graspItems && HoldsLoot(dominant) && GraspRig(dominant) != null && HeldItemAlive();
+            bool lootHere = HoldsLoot(dominant) && GraspRig(dominant) != null && HeldItemAlive();
             Component holding = null;
             Transform holdingRig = null;
             if (lootHere)
@@ -251,13 +247,13 @@ namespace TarkovVR.Source.Player.Interactions
                 holding = heldItem;
                 holdingRig = GraspRig(dominant);
             }
-            else if (graspItems && PhysicalDoors.GraspTarget(dominant, out Component doorPart, out Transform doorLatch))
+            else if (PhysicalDoors.GraspTarget(dominant, out Component doorPart, out Transform doorLatch))
             {
                 holding = doorPart;
                 holdingRig = doorLatch;
             }
             bool keyHere = false;
-            if (holding == null && graspItems && PhysicalDoors.KeyGraspTarget(dominant, out Component key))
+            if (holding == null && PhysicalDoors.KeyGraspTarget(dominant, out Component key))
             {
                 // It rides the palm bone itself (PhysicalDoors.SpawnKey)
                 holding = key;
@@ -273,7 +269,7 @@ namespace TarkovVR.Source.Player.Interactions
                 BeginGrasp(hand, holding, lootHere && dominant != heldInDominantHand && otherHand.item == heldItem ? otherHand.shape : null);
                 // A key is pinched whatever its size: Tarkov holds it on the index
                 if (keyHere)
-                    hand.pinch = graspPinch && hand.shape != null;
+                    hand.pinch = hand.shape != null;
             }
             if (holdingHere)
                 hand.rig = holdingRig;

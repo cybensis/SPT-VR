@@ -43,7 +43,6 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Diagnostic: on releasing a downed teammate, log for ~25 frames the bone's world position, its local position and
         // the player root. World moves with local constant = the parent/root is being moved; local moves = the bone is driven.
-        public static bool debugDownedRelease = false;
 
         // maxDepenetrationVelocity of the ragdoll bones while dragged (higher = snags on terrain less; too high pops a
         // deeply clipped body) and at rest (low = no ragdoll explosion when the body is shot later)
@@ -582,10 +581,6 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 grabbedRagdoll._checkCorpseIsStill = (allAsleep, timePassed) => allAsleep;
             }
-
-            if (grabbedIsDownedPlayer && debugDownedRelease)
-                StartCoroutine(LogDownedRelease(grabbedRagdoll,
-                    grabbedReviveInteractable != null ? grabbedReviveInteractable.transform : null));
 
             ResetBodyGrabState();
         }

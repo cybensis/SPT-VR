@@ -28,18 +28,12 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool enabled = true;                 // master switch (also gates HandCollision + the TurnAway suppression)
         public static float bodyRadius = 0.05f;            // m; gun body/receiver capsule
         public static float barrelRadius = 0.02f;          // m; gun barrel capsule
-        // false = walking / turning moves the proxy rigidly (AddRigMotion): no lag, but it can shove the gun into a wall
-        public static bool rigMotionThroughPhysics = true;
-        public static bool haptics = true;                 // first-impact thud only
         public static float impactHapticStrength = 1f;     // amplitude ~ approach speed
-        public static bool impactSound = true;             // the gun's surface-aware drop bank on first contact
         public static float impactSoundVolume = 0.3f;
         public static float impactSoundMinSpeed = 1.2f;    // m/s the gun meets the surface at (from the hand's motion) below which it stays silent
         public static float impactSoundFullSpeed = 4f;     // m/s at which it plays at impactSoundVolume
         public static float impactSoundRetrigger = 0.8f;   // s between impact sounds
         public static float freshContactGap = 0.3f;        // s off a surface before touching it again counts as a new impact
-        public static bool collideWithGlass = true;        // windows (TransparentCollider) are solid to the gun until broken
-        public static bool glassBreak = true;              // whack a window hard enough and it shatters
         public static float glassBreakMinSpeed = 2.0f;     // m/s approach needed to break
         public static float glassBreakDamage = 30f;        // melee damage carried by the synthetic hit (~knife slash)
         public static bool leftoverGlassAtTouch = true;    // what's left of a broken window breaks at any touch (false = it needs the whack too)
@@ -57,9 +51,6 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool atFinalPlacement = true;
 
         private static WeaponPhysicsProxy proxy;
-        private static Vector3 lastPlayerPos;              // rig root last frame (rig-motion delta for the proxy)
-        private static Quaternion lastPlayerRot;
-        private static bool hasLastPlayerPos;
         private static Vector3 lastTargetGrip;             // the hand's gun pose last frame: how fast the gun meets a surface
         private static Quaternion lastTargetRotation;
         private static bool hasLastTarget;
@@ -69,7 +60,6 @@ namespace TarkovVR.Source.Player.Interactions
         private static float contactEndStamp = -10f;       // impact re-arm
         private static float lastImpactSoundStamp = -10f;
         private static int occlusionMask;
-        private static bool maskIncludesGlass;
         private static int glassLayer = -1;
 
         // Barrel tip: farthest of fireport + muzzle-device transforms (suppressors extend past the fireport), re-picked
@@ -92,7 +82,6 @@ namespace TarkovVR.Source.Player.Interactions
         {
             hasResolvedOffset = false;
             StripEnacted();
-            hasLastPlayerPos = false;
             hasLastTarget = false;
             proxy?.Deactivate();
         }
@@ -205,19 +194,6 @@ namespace TarkovVR.Source.Player.Interactions
             lastTargetRotation = weaponRootRotation;
             targetGrip = rawGrip;
             hasLastTarget = true;
-
-            // Optional: rig motion (locomotion + turning) as a rigid transform of the proxy. Reference = camRoot, the VR rig
-            // root: the stick turn rotates it directly (VRControlsPatches) and locomotion tracks it to the player each
-            // frame (MovementPatches). player.Transform lags on turns (the body yaw follows the headset through the aim
-            // system): don't use it as the reference.
-            Transform rig = VRGlobals.camRoot != null ? VRGlobals.camRoot.transform : VRGlobals.player.Transform.Original;
-            Vector3 playerPos = rig.position;
-            Quaternion playerRot = rig.rotation;
-            if (hasLastPlayerPos && !rigMotionThroughPhysics)
-                proxy.AddRigMotion(playerRot * Quaternion.Inverse(lastPlayerRot), lastPlayerPos, playerPos);
-            lastPlayerPos = playerPos;
-            lastPlayerRot = playerRot;
-            hasLastPlayerPos = true;
 
             proxy.Configure(weaponLn, bodyRadius, barrelRadius);
             proxy.SetTarget(rawGrip, weaponRootRotation);               // drive the proxy to the controller pose
@@ -379,7 +355,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         internal static int GetOcclusionMask()
         {
-            if (occlusionMask == 0 || maskIncludesGlass != collideWithGlass)
+            if (occlusionMask == 0)
             {
                 // Same layers EFT's own weapon overlap uses; fallback = the mod's usual solid-world mask.
                 LayerMask mask = EFTHardSettings.Instance != null
@@ -387,8 +363,7 @@ namespace TarkovVR.Source.Player.Interactions
                     : (LayerMask)LayerMask.GetMask("Default", "Terrain", "HighPolyCollider");
                 occlusionMask = mask.value != 0 ? mask.value : LayerMask.GetMask("Default", "Terrain", "HighPolyCollider");
                 glassLayer = LayerMask.NameToLayer("TransparentCollider");
-                maskIncludesGlass = collideWithGlass;
-                if (collideWithGlass && glassLayer >= 0)
+                if (glassLayer >= 0)
                     occlusionMask |= 1 << glassLayer;      // windows are solid to the gun (and breakable)
             }
             return occlusionMask;
@@ -409,7 +384,7 @@ namespace TarkovVR.Source.Player.Interactions
                 ? -VRGlobals.firearmController.WeaponRoot.up : -normal;
             // What's left of a broken window gives at a touch (vanilla: walking into it breaks it). Every piece is its own collider,
             // so pushing on into the next one is a new contact.
-            bool leftoverGlass = glassBreak && leftoverGlassAtTouch && IsLeftoverGlass(col);
+            bool leftoverGlass = leftoverGlassAtTouch && IsLeftoverGlass(col);
             if (leftoverGlass)
                 TryBreakGlass(col, point, normal, barrelDir);
             if (!fresh)
@@ -421,19 +396,16 @@ namespace TarkovVR.Source.Player.Interactions
             // proxy's catch-up toward a hand already inside the wall, large whenever the gun is pressed in, however gently.
             Vector3 pointVelocity = targetVelocity + Vector3.Cross(targetAngularVelocity, point - targetGrip);
             float approach = Mathf.Max(0f, Vector3.Dot(pointVelocity, -normal));
-            if (haptics)
-            {
-                float amplitude = Mathf.Clamp01(approach / 2.5f) * impactHapticStrength;
-                if (amplitude > 0.05f)
-                    Pulse(0.08f, 85f, amplitude);
-            }
-            if (impactSound && approach > impactSoundMinSpeed &&
+            float amplitude = Mathf.Clamp01(approach / 2.5f) * impactHapticStrength;
+            if (amplitude > 0.05f)
+                Pulse(0.08f, 85f, amplitude);
+            if (approach > impactSoundMinSpeed &&
                 Time.time - lastImpactSoundStamp > impactSoundRetrigger)
             {
                 lastImpactSoundStamp = Time.time;
                 PlayImpactSound(col, point, approach);
             }
-            if (glassBreak && !leftoverGlass && approach >= glassBreakMinSpeed)
+            if (!leftoverGlass && approach >= glassBreakMinSpeed)
                 TryBreakGlass(col, point, normal, barrelDir);
             Door door = CollisionWorld.DoorOf(col);
             if (door != null)

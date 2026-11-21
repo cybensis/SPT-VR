@@ -21,7 +21,6 @@ namespace TarkovVR.Source.Player.Interactions
     // handle go to the other players through SPT-VR-FikaSync. Breaching with the gun: PhysicalDoors.Breach; keys: PhysicalDoors.Keys.
     internal static partial class PhysicalDoors
     {
-        public static bool enabled = true;
         public static float handleReach = 0.09f;        // m from the palm to the handle's meshes that takes the handle
         public static float leverReach = 0.14f;         // m off the handle's turning axis, and...
         public static float axisReach = 0.16f;          // ...m along it from the pivot: the lever on the far side of the door, a knob
@@ -42,7 +41,6 @@ namespace TarkovVR.Source.Player.Interactions
         public static float flingMinSpeed = 15f;        // deg/s at the release that keeps it swinging
         // The release swing from the hand's own tracked velocity as the grip opens (like a grenade throw), not the door's smoothed speed,
         // which lags and drops as the hand slows letting go. false = the smoothed speed.
-        public static bool releaseFromHandVelocity = true;
         // The let-go registers 20-70 ms after the hand starts opening (OpenXRInput's grip), the hand already slowing: the swing takes the
         // hand's fastest over this window before it
         public static float releasePeakWindow = 0.12f;  // s
@@ -51,7 +49,6 @@ namespace TarkovVR.Source.Player.Interactions
         public static float doorGripReleaseWrap = 0.3f;
         // The player's body blocks a door a hand moves or that coasts: it stops against the body. Tarkov's character controller pushes
         // the body out of a door's colliders at any speed, which dragged the shoulder off the held handle.
-        public static bool bodyBlocksDoors = true;
         // The body walking into a door that's free to swing (not latched, not locked, no hand on it) pushes it out of the way, as the gun
         // and the free hands do. A latched or locked one still stops the body.
         public static bool bodyPushesDoors = true;
@@ -71,9 +68,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static float syncInterval = 1f / 15f;    // s between the angle packets of a moving door
         public static bool logGrabs = true;             // a line per grab: the door, its handle, its angles
         internal static bool syncBroken;                // SPT-VR-FikaSync older than 2.2.0: no door packet to send
-        public static bool logCensus = true;            // a line per raid: how many doors have a turnable handle
 
-        public static bool Active => enabled && VRSettings.GetPhysicalDoorsOn();
+        public static bool Active => VRSettings.GetPhysicalDoorsOn();
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -235,8 +231,6 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 ResetAll();
                 censusPlayerId = playerId;
-                if (logCensus)
-                    LogCensus();
             }
 
             keyHands = hands;
@@ -657,7 +651,7 @@ namespace TarkovVR.Source.Player.Interactions
                         else
                         {
                             float releaseSpeed = 0f;
-                            if (releaseFromHandVelocity && TryReleaseSpeed(hold, run.door, out releaseSpeed))
+                            if (TryReleaseSpeed(hold, run.door, out releaseSpeed))
                                 run.angularVelocity = FastestRecentSwing(hold, releaseSpeed);
                             if (Mathf.Abs(run.angularVelocity) >= flingMinSpeed)
                                 run.swinging = true;
@@ -667,7 +661,7 @@ namespace TarkovVR.Source.Player.Interactions
                             {
                                 releaseLogs++;
                                 Plugin.MyLog.LogInfo($"[Doors] let go of '{run.door.name}': {run.angularVelocity:0} deg/s (the hand at the let-go "
-                                    + $"{(releaseFromHandVelocity ? $"{releaseSpeed:0}" : "-")}), coasts about {CoastDegrees(Mathf.Abs(run.angularVelocity)):0} deg");
+                                    + $"{releaseSpeed:0}), coasts about {CoastDegrees(Mathf.Abs(run.angularVelocity)):0} deg");
                             }
                         }
                     }
@@ -1003,7 +997,7 @@ namespace TarkovVR.Source.Player.Interactions
         // controller's capsule). A door already in it (the body stepped into the swing) may only move out.
         private static float BlockedByBody(Door door, float from, float to)
         {
-            if (!bodyBlocksDoors || Mathf.Abs(Mathf.DeltaAngle(from, to)) < 1e-3f)
+            if (Mathf.Abs(Mathf.DeltaAngle(from, to)) < 1e-3f)
                 return to;
             Collider body = PlayerBody();
             if (body == null)

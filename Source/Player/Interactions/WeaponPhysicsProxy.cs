@@ -44,7 +44,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static float holdFollow = 1.25f;
         // A line each time the gun ends up inside something solid in the real world (a pass-through): what, how deep, whether the
         // sandbox had it, how fast the gun was moving and turning, the substeps. Off once the pass-through is understood.
-        public static bool passThroughLog = true;
+        public static bool passThroughLog = false;
 
         public static float proxyMass = 10f;             // kg; only matters against a door body: heavier = the gun shoves doors more easily
         public static float doorMass = 1f;               // kg of a door in the sandbox
@@ -240,15 +240,6 @@ namespace TarkovVR.Source.Player.Interactions
             }
             targetPos = pos;
             targetRot = rot;
-        }
-
-        // Apply the rig's rigid motion (locomotion + turning) directly - see WeaponCollision.
-        public void AddRigMotion(Quaternion dRot, Vector3 pivotPrev, Vector3 pivotCur)
-        {
-            if (!active || rb == null)
-                return;
-            rb.position = pivotCur + dRot * (rb.position - pivotPrev);
-            rb.rotation = dRot * rb.rotation;
         }
 
         public void Deactivate() => SetActive(false);

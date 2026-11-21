@@ -15,8 +15,6 @@ namespace TarkovVR.Source.Player.Interactions
     // Physics.ClosestPoint measures them at the pose it's given.
     internal sealed class GraspShape
     {
-        public static bool buildHulls = true;
-        public static bool readGpuMeshes = true;        // non-readable meshes: their vertices back from the GPU (AsyncGPUReadback)
         public static int maxParts = 10;                 // the biggest parts by volume; the rest (screws, decals) don't shape a grip
         // A hull = each part's furthest vertex in this many directions spread over a sphere. A hull of n points has at most 2n-4 faces and
         // PhysX cooks at most 255 polygons (more = its "partial hull" warning on every grab), so 100 = at most 196.
@@ -121,19 +119,14 @@ namespace TarkovVR.Source.Player.Interactions
                     shape.boundsMax = Vector3.Max(shape.boundsMax, point);
                 }
             }
-            if (buildHulls)
+            foreach ((Part part, Mesh mesh) in candidates)
             {
-                foreach ((Part part, Mesh mesh) in candidates)
-                {
-                    if (mesh == null || Mathf.Min(part.halfSize.x, Mathf.Min(part.halfSize.y, part.halfSize.z)) * 2f < minHullThickness)
-                        shape.hullsSkipped++;
-                    else if (mesh.isReadable)
-                        shape.BuildHull(part, mesh.vertices, fromGpu: false);
-                    else if (readGpuMeshes)
-                        shape.RequestGpuVertices(part, mesh);
-                    else
-                        shape.hullsSkipped++;
-                }
+                if (mesh == null || Mathf.Min(part.halfSize.x, Mathf.Min(part.halfSize.y, part.halfSize.z)) * 2f < minHullThickness)
+                    shape.hullsSkipped++;
+                else if (mesh.isReadable)
+                    shape.BuildHull(part, mesh.vertices, fromGpu: false);
+                else
+                    shape.RequestGpuVertices(part, mesh);
             }
             return shape;
         }

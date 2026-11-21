@@ -995,8 +995,7 @@ namespace TarkovVR.Source.Controls
                 // Off-hand trigger executes a reach-selected weapon part (offHandInteract) with the A-button's edge mapping. Only while a
                 // part is selected: the off trigger otherwise belongs to breath-hold (ADS) and UI, and selection excludes aiming/supporting.
                 bool offTriggerPress = false, offTriggerRelease = false;
-                if (GunInteractionController.offHandInteract
-                    && WeaponPatches.currentGunInteractController != null
+                if (WeaponPatches.currentGunInteractController != null
                     && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1)
                 {
                     float triggerAxis = Handedness.OffHandTrigger.axis;

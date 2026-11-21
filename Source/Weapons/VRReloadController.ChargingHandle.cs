@@ -868,7 +868,7 @@ namespace TarkovVR.Source.Weapons
             handLatched = false;
             handLatchReleasing = false;
             handLatchSnapping = false;
-            if (debugLog || ChestHang.handleHoldLog)
+            if (debugLog)
                 Plugin.MyLog.LogInfo("[VRReload] gun hand pinned on the handle: the hand latch free for the off hand");
         }
 

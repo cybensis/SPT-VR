@@ -1322,7 +1322,6 @@ namespace TarkovVR.Source.Player.Interactions
         // and stops the eat. So the held item is hidden for the use and its fate decided when the use ends: fully
         // consumed -> gone; cancelled / a sip of a multi-use drink -> stow if it fits, else drop it back into the world.
         // false = stow/drop the moment the use starts (ReleaseHeldForUse).
-        public static bool deferUseLootRelease = true;
 
         private LootItem pendingUseLoot;        // hidden held item awaiting the use/eat outcome
         private Transform pendingUseLootParent; // its original world parent (for the drop-back)

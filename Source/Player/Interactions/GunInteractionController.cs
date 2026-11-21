@@ -29,7 +29,6 @@ public class GunInteractionController : MonoBehaviour
     // --- off-hand weapon interact ---
     // Reach the support hand to a weapon part to select it; the off-hand trigger executes (InteractHandler).
     // The legacy dominant-grip + gaze activation can't work with the sling: the grip is always held while holding the gun.
-    public static bool offHandInteract = true;        // false = legacy grip + gaze (A/B only)
     public static float maxAnchorDistance = 5f;       // m: the right marker further from the holder than this isn't anchored to
     public static float interactReachRadius = 0.14f;  // m off-palm to a part to select it (nearest part wins inside it)
     public static float interactProbeForward = 0.08f; // m wrist->palm along the off controller forward
@@ -200,7 +199,6 @@ public class GunInteractionController : MonoBehaviour
 
         // Cache frequently accessed values
         bool isLeftHanded = VRSettings.GetLeftHandedMode();
-        bool gripPressed = isLeftHanded ? VRInput.LeftGrip.state : VRInput.RightGrip.state;
         bool menuOpen = VRGlobals.menuOpen;      
         bool radialMenuActive = VRGlobals.vrPlayer.radialMenu.active;
 
@@ -218,15 +216,8 @@ public class GunInteractionController : MonoBehaviour
         bool interactCommon = !menuOpen && !radialMenuActive && !isAiming && !WeaponPatches.grenadeEquipped && !ManualReloadReplacesMenu();
         int nearestPartIdx = -1;
         bool shouldShowHighlight;
-        if (offHandInteract)
-        {
-            nearestPartIdx = interactCommon ? OffHandNearestPart() : -1;
-            shouldShowHighlight = nearestPartIdx != -1;
-        }
-        else
-        {
-            shouldShowHighlight = interactCommon && gripPressed;
-        }
+        nearestPartIdx = interactCommon ? OffHandNearestPart() : -1;
+        shouldShowHighlight = nearestPartIdx != -1;
         if (!shouldShowHighlight && highlightingMesh)
             ForceCleanupHighlight();
 
@@ -318,18 +309,12 @@ public class GunInteractionController : MonoBehaviour
         if (hasMalfunction)
         {
             HandleMalfunctionHighlighting(isLeftHanded);
-            if (offHandInteract)
-                SelectPart(boltIndex, hasExaminedAfterMalfunction ? 1 : 0);   // a jam routes any reach to the bolt, same as the gaze path
-            else
-                HandleMalfunctionRaycast(cameraPosition, cameraForward);
+            SelectPart(boltIndex, hasExaminedAfterMalfunction ? 1 : 0);   // a jam routes any reach to the bolt, same as the gaze path
         }
         else
         {
             HandleNormalHighlighting(isLeftHanded);
-            if (offHandInteract)
-                SelectPart(nearestPartIdx, 0);
-            else
-                HandleNormalRaycast(cameraPosition, cameraForward);
+            SelectPart(nearestPartIdx, 0);
         }
     }
 
@@ -427,44 +412,6 @@ public class GunInteractionController : MonoBehaviour
             VRGlobals.blockLeftJoystick = block;
         else
             VRGlobals.blockRightJoystick = block;
-    }
-
-    private void HandleMalfunctionRaycast(Vector3 cameraPosition, Vector3 cameraForward)
-    {
-        LayerMask mask = 1 << WEAPON_COLLIDER_LAYER;
-        if (Physics.Raycast(cameraPosition, Quaternion.Euler(5, 0, 0) * cameraForward, out RaycastHit hit, 2, mask))
-        {
-            if (lastHitCompIndex != boltIndex)
-            {
-                int actionIndex = hasExaminedAfterMalfunction ? 1 : 0;
-                weaponUiLists[boltIndex].SelectedAction = weaponUiLists[boltIndex].Actions[actionIndex];
-                playerOwner.AvailableInteractionState.UpdateState(weaponUiLists[boltIndex]);
-
-                lastHitCompIndex = boltIndex;
-                VRGlobals.vrPlayer.interactionUi.localScale = new Vector3(0.5f, 0.5f, 0.5f);
-            }
-        }
-    }
-
-    private void HandleNormalRaycast(Vector3 cameraPosition, Vector3 cameraForward)
-    {
-        LayerMask mask = 1 << WEAPON_COLLIDER_LAYER;
-
-        if (Physics.Raycast(cameraPosition, Quaternion.Euler(5, 0, 0) * cameraForward, out RaycastHit hit, 2, mask))
-        {
-            int index = FindClosestTransform(hit.point);
-            if (lastHitCompIndex != index)
-            {
-                weaponUiLists[index].SelectedAction = weaponUiLists[index].Actions[0];
-                playerOwner.AvailableInteractionState.UpdateState(weaponUiLists[index]);
-                lastHitCompIndex = index;
-                VRGlobals.vrPlayer.interactionUi.localScale = new Vector3(0.5f, 0.5f, 0.5f);
-            }
-        }
-        else if (lastHitCompIndex != -1)
-        {
-            ClearInteraction();
-        }
     }
 
     private void ClearInteraction()

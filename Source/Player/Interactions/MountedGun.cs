@@ -31,7 +31,6 @@ namespace TarkovVR.Source.Player.Interactions
         public static float regrabRadius = 0.18f;   // m on the gun: a hand that let go takes its handle again
         // The Utyos is held by its right handle alone (Tarkov's left hand only rests on its stock): the left hand stays on your controller.
         // false = the left takes a handle too, both grips to take it, like the AGS.
-        public static bool utesOneHanded = true;
         // The body on the gun faces its aim (Tarkov's step clips play off the aim turning away from the body, so none play) and stands
         // under your head instead of where its steps take it. false = Tarkov's steps.
         public static bool bodyFollowsHead = true;
@@ -48,11 +47,10 @@ namespace TarkovVR.Source.Player.Interactions
         public static float aimExitReach = 0.28f;   // m / deg out of the aim again (wider: no flicker on the edge)
         public static float aimExitAngle = 35f;
         // The turn the hands give it, filtered (One Euro: tracking noise held still at rest, a fast swing followed closely). false = raw.
-        public static bool aimFilter = true;
         public static float aimMinCutoff = 2f;          // Hz at rest: lower = steadier, more lag starting a turn
         public static float aimSpeedCutoff = 0.05f;     // Hz added per deg/s of turn
         public static float aimDerivativeCutoff = 1f;   // Hz, the turn speed's own smoothing
-        public static bool debugLog = true;         // a line per take / mount / let-go, plus the live handles against the zones
+        public static bool debugLog = false;        // a line per take / mount / let-go, plus the live handles against the zones
         public static bool debugViz = false;        // the handle zones as spheres
 
         // Each gun's hands in its idle hold (weapon_L_IK_marker / weapon_R_IK_marker, utes_idle / ags_idle), in its 'weapon' bone's frame:
@@ -244,7 +242,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         private static bool OneHanded(StationaryWeapon stationaryWeapon) =>
-            utesOneHanded && stationaryWeapon != null && stationaryWeapon.Animation != StationaryWeapon.EStationaryAnimationType.AGS_17;
+            stationaryWeapon != null && stationaryWeapon.Animation != StationaryWeapon.EStationaryAnimationType.AGS_17;
 
         private static void Take(EFT.Player player, StationaryWeapon stationaryWeapon, bool leftOn)
         {
@@ -472,7 +470,7 @@ namespace TarkovVR.Source.Player.Interactions
         // One Euro filter on yaw (wrapped) and pitch; kept inside the mount's limits so it never trails behind a stop
         private static Vector2 FilterAim(MovementContext movementContext, Vector2 raw)
         {
-            if (!aimFilter || !aimFiltered)
+            if (!aimFiltered)
             {
                 aimFiltered = true;
                 filteredAim = raw;

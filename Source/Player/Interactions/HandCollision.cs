@@ -15,9 +15,7 @@ namespace TarkovVR.Source.Player.Interactions
     public static class HandCollision
     {
         // ---- live-tunable knobs (UnityExplorer) ----
-        public static bool enabled = true;
         public static float handRadius = 0.05f;           // m; collision sphere around the hand point
-        public static bool contactHaptics = true;
         public static float hapticStrength = 0.4f;
         public static float teleportReset = 1.5f;         // m; a desired-position jump past this resets continuity
 
@@ -39,7 +37,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         public static void Apply()
         {
-            if (!enabled || !WeaponCollision.enabled ||
+            if (!WeaponCollision.enabled ||
                 VRGlobals.vrPlayer == null || VRGlobals.player == null ||
                 !VRGlobals.inGame || VRGlobals.menuOpen)
             {
@@ -187,7 +185,7 @@ namespace TarkovVR.Source.Player.Interactions
             bool contactNow = (hitAny && offset.sqrMagnitude > 1e-8f) || pushedDoor;
             if (!contactNow && state.inContact)
                 state.contactEndStamp = Time.time;
-            if (contactNow && !state.inContact && contactHaptics && Time.time - state.contactEndStamp > 0.2f)
+            if (contactNow && !state.inContact && Time.time - state.contactEndStamp > 0.2f)
             {
                 float amplitude = Mathf.Clamp01(approach / 3f) * hapticStrength;
                 if (amplitude > 0.05f)
