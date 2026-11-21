@@ -29,7 +29,6 @@ namespace TarkovVR.Patches.Core.VR
         // true: the grenade leaves the hand at the release and its use ends that same frame, doing what the throw clip's end does
         // (FireEnd -> OnDropFinishedAction: the hands go back to what they held before) without the clip. false: the clip plays on from
         // 40 % after the release and the hands come back at its end, 0.3-0.5 s later.
-        public static bool finishAtRelease = true;
         private static float releasedAt;
 
         public static float tripwireHoldDuration = 0.4f;        // long-hold time (s) on the face button to toggle plant mode
@@ -177,45 +176,12 @@ namespace TarkovVR.Patches.Core.VR
             }
             // Thrown this frame (the release runs in the input update): end the use here, not inside the release. Ending it swaps the
             // hands' controller, which the rest of the release (the holder, emptyHands) mustn't then touch
-            if (finishAtRelease)
-            {
-                // Co-op client: ending the throw sends a hands change, which the host refuses until it has answered the last move
-                if (CoopHost.HoldsBack(releasedAt))
-                    return;
-                BaseGrenadeHandsController thrownNow = activeGrenadeController;
-                EndThrow();
-                thrownNow.OnDropFinishedAction();
+            // Co-op client: ending the throw sends a hands change, which the host refuses until it has answered the last move
+            if (CoopHost.HoldsBack(releasedAt))
                 return;
-            }
-
-            AnimatorStateInfoWrapper stateInfo = activeGrenadeController._firearmsAnimator.Animator.GetCurrentAnimatorStateInfo(1);
-
-            if (isFrozen)
-            {
-                if (stateInfo.normalizedTime < lastNormalizedTime && lastNormalizedTime >= 0.3f)
-                    activeGrenadeController._firearmsAnimator.Animator.speed = 0f;
-
-                if (Time.time >= freezeStartTime + freezeDuration)
-                {
-                    activeGrenadeController._firearmsAnimator.Animator.speed = 1f;
-                    BaseGrenadeHandsController thrown = activeGrenadeController;
-                    EndThrow();
-                    thrown.OnDropFinishedAction();
-                }
-                return;
-            }
-
-            if (stateInfo.normalizedTime < lastNormalizedTime && lastNormalizedTime > 0.45f)
-            {
-                activeGrenadeController._firearmsAnimator.Animator.Play(590329303, 1, 0f);
-                activeGrenadeController._firearmsAnimator.Animator.speed = 0f;
-                frozenAnimators = activeGrenadeController.ControllerGameObject != null
-                    ? activeGrenadeController.ControllerGameObject.GetComponentsInChildren<Animator>(true) : null;
-                freezeStartTime = Time.time;
-                isFrozen = true;
-            }
-
-            lastNormalizedTime = stateInfo.normalizedTime;
+            BaseGrenadeHandsController thrownNow = activeGrenadeController;
+            EndThrow();
+            thrownNow.OnDropFinishedAction();
         }
 
         // The grenade's own animators while its clip is frozen: their speed is restored if the throw ends before the freeze does (the
@@ -287,10 +253,6 @@ namespace TarkovVR.Patches.Core.VR
             // Released where the grenade is in the hand (Tarkov's own spot, pulled in off a wall between it and the body), not at the
             // controller's tracking point ~13 cm from it
             bool fromHand = ThrowVelocity.releaseFromHand && __instance._grenadeTransform != null;
-
-            // finishAtRelease off: play the throw clip from around where the hand opens
-            if (!finishAtRelease)
-                __instance._firearmsAnimator.Animator.Play(590329303, 1, 0.40f);
             // A fresh throw: nothing carried over from one that ended early (its freeze state, the clip time it last saw)
             EndThrow();
             throwInProgress = true;
@@ -334,7 +296,7 @@ namespace TarkovVR.Patches.Core.VR
             // The throw clip's fuse crack (SoundAtPoint SndFuse, just after its drop on every grenade) doesn't play when the throw ends
             // at the release. Played now, while the hands are out: their sound player lets a playing clip finish when they go back to
             // the pool. No SndFuse in a grenade's sounds (M67, RDG-2) = silent, as in the clip.
-            if (finishAtRelease && __instance._controllerObject != null)
+            if (__instance._controllerObject != null)
             {
                 BaseSoundPlayer grenadeSounds = __instance._controllerObject.GetComponent<BaseSoundPlayer>();
                 if (grenadeSounds != null)

@@ -43,40 +43,28 @@ namespace TarkovVR.Source.Player.Body
             bool freezeForSprint = sprintNeutralElbows && VRGlobals.player != null &&
                                    VRGlobals.player.IsSprintEnabled && VRSettings.GetDisableRunAnim();
 
-            // Twist input: the wrist driver's measured physical hand roll when it's active (the bone euler then only
-            // carries the (1 - w2) residual of the roll). Falls back to the euler read when the drivers are off.
-            bool useTau = TarkovVR.Patches.Core.Player.IKPatches.naturalWrist &&
-                          TarkovVR.Patches.Core.Player.IKPatches.naturalElbow;
-
+            // Twist input: the wrist driver's measured physical hand roll (IKPatches.DriveWrist; the bone euler only carries the
+            // (1 - w2) residual of the roll)
             if (leftWristTransform != null && leftBendGoal != null)
             {
-                float twist = useTau ? TarkovVR.Patches.Core.Player.IKPatches.wristTauL : ReadEulerTwist(leftWristTransform);
+                float twist = TarkovVR.Patches.Core.Player.IKPatches.wristTauL;
                 leftTargetPos = freezeForSprint ? leftBendGoalBasePos
-                                                : CalculateElbowPosition(twist, leftBendGoalBasePos, true, !useTau);
+                                                : CalculateElbowPosition(twist, leftBendGoalBasePos, true);
                 leftBendGoal.localPosition = Vector3.Lerp(leftBendGoal.localPosition, leftTargetPos, Time.deltaTime * smoothSpeed);
                 leftTwistDeltaX = leftTargetPos.x - leftBendGoalBasePos.x;
             }
             if (rightWristTransform != null && rightBendGoal != null)
             {
-                float twist = useTau ? TarkovVR.Patches.Core.Player.IKPatches.wristTauR : ReadEulerTwist(rightWristTransform);
+                float twist = TarkovVR.Patches.Core.Player.IKPatches.wristTauR;
                 rightTargetPos = freezeForSprint ? rightBendGoalBasePos
-                                                 : CalculateElbowPosition(twist, rightBendGoalBasePos, false, !useTau);
+                                                 : CalculateElbowPosition(twist, rightBendGoalBasePos, false);
                 rightBendGoal.localPosition = Vector3.Lerp(rightBendGoal.localPosition, rightTargetPos, Time.deltaTime * smoothSpeed);
                 rightTwistDeltaX = rightTargetPos.x - rightBendGoalBasePos.x;
             }
         }
 
-        static float ReadEulerTwist(Transform wrist)
-        {
-            float twist = wrist.localEulerAngles.x;
-            if (twist > 180f)
-                twist -= 360f;
-            return twist;
-        }
-
-        // oneSidedClamp: the outward-only floor, for the euler path only. The tau input is signed around its own neutral:
-        // clamped, an untrimmed arm (tau near 0 at neutral) loses half its roll range and reads as dead.
-        Vector3 CalculateElbowPosition(float wristTwist, Vector3 basePos, bool isLeftHand, bool oneSidedClamp)
+        // The twist is signed around its own neutral: no outward-only clamp (an untrimmed arm would lose half its roll range)
+        Vector3 CalculateElbowPosition(float wristTwist, Vector3 basePos, bool isLeftHand)
         {
             float elbowOffset = wristTwist * elbowOffsetMultiplier;
             bool isLeftHandedMode = Handedness.MirrorLeftHanded;
@@ -92,29 +80,9 @@ namespace TarkovVR.Source.Player.Body
             Vector3 newPos = basePos;
 
             if (isLeftHand)
-            {
                 newPos.x -= elbowOffset;
-                // Prevent left elbow from moving too far right (inward)
-                if (oneSidedClamp)
-                {
-                    if (isLeftHandedMode)
-                        newPos.x = Mathf.Max(newPos.x, basePos.x);
-                    else
-                        newPos.x = Mathf.Min(newPos.x, basePos.x);
-                }
-            }
             else
-            {
                 newPos.x += elbowOffset;
-                // Prevent right elbow from moving too far left (inward)
-                if (oneSidedClamp)
-                {
-                    if (isLeftHandedMode)
-                        newPos.x = Mathf.Min(newPos.x, basePos.x);
-                    else
-                        newPos.x = Mathf.Max(newPos.x, basePos.x);
-                }
-            }
 
             return newPos;
         }

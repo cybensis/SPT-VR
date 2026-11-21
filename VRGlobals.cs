@@ -69,9 +69,6 @@ namespace TarkovVR
         public static GameObject weaponHolder;
         public static GameObject oldWeaponHolder;
 
-        public static bool inspectWeapon = false;
-        public static bool checkMagazine = false;
-        public static bool changeFireMode = false;
         public static bool usingItem = false;
         public static bool switchingWeapon = false;
         public static int quickSlot = -1;

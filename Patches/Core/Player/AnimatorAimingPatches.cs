@@ -16,13 +16,12 @@ namespace TarkovVR.Patches.Core.Player
     [HarmonyPatch]
     internal class AnimatorAimingPatches
     {
-        public static bool enabled = true;      // false = Tarkov's aim pose on those guns as it is
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), nameof(EFT.Player.FirearmController.SetAimingInAnimator))]
         private static bool NoAnimatorAim(EFT.Player.FirearmController __instance)
         {
-            if (!enabled || __instance == null || __instance._player == null || !__instance._player.IsYourPlayer || __instance.Item == null
+            if (__instance == null || __instance._player == null || !__instance._player.IsYourPlayer || __instance.Item == null
                 || !__instance.Item.WithAnimatorAiming || __instance.Item is EFT.InventoryLogic.RocketLauncher)
                 return true;
             __instance.ResetAimingAnimationsFlags();

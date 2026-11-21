@@ -24,15 +24,6 @@ namespace TarkovVR.Patches.Visuals
         // position and no depth). Vanilla builds it from the camera's mono projection with a centred lens: in VR each eye's
         // frustum is off-centre, so both eyes got one pixel -> direction map = the clouds in a different place per eye. Rebuilt
         // per eye below (OnPreRenderCamera runs once per eye in MultiPass). CloudSix skips RenderClouds itself.
-        public static bool vanillaClouds = true;    // false = Tarkov's clouds not drawn (their shadow cookie stays)
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(CloudLayerRenderer), "RenderClouds")]
-        private static bool ShowVanillaClouds()
-        {
-            return vanillaClouds;
-        }
-
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CloudController), "UpdateParameters")]
         private static void CloudDirectionsPerEye(BuiltinSkyParameters parameters, Camera cam)

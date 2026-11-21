@@ -35,11 +35,9 @@ namespace TarkovVR.Patches.Misc
         public enum SurfaceBankSource { FootstepBanks, GunBanks }
         public enum FootstepSurfaceKind { ProneDrop, Landing }
 
-        public static bool enableLootDropSounds = true;
         public static LootDropSoundMode dropSoundMode = LootDropSoundMode.Layered;
         public static SurfaceBankSource surfaceSource = SurfaceBankSource.FootstepBanks;
         public static FootstepSurfaceKind footstepKind = FootstepSurfaceKind.ProneDrop; // ProneDrop = heavier thud; Landing = lighter
-        public static bool logLootDropSounds = false;
 
         // GunBanks weight split (kg): < lightWeightMax -> Pistol, >= heavyWeightMin -> Rifle, else SubMachineGun.
         public static float lightWeightMax = 1.0f;
@@ -136,8 +134,6 @@ namespace TarkovVR.Patches.Misc
 
         private static void Voice(LootItem instance, Vector3 pos, BaseBallistic.ESurfaceSound surface, float impact)
         {
-            if (!enableLootDropSounds)
-                return;
 
             // ItemOwner.RootItem is the stable accessor for the held item (same one vanilla reads for the
             // pickup sound). Weapons already have a real DropSoundType -> vanilla voiced them, so bail.
@@ -163,9 +159,6 @@ namespace TarkovVR.Patches.Misc
                     PlaySurfaceBank(item, surface, pos, impact);
                     break;
             }
-
-            if (logLootDropSounds)
-                Plugin.MyLog.LogInfo($"[LootDropSound] {item.Template._name} ({item.ItemSound}, w={item.TotalWeight:0.00}kg) impact={impact:0.0} mode={dropSoundMode}/{surfaceSource} surf={surface}");
         }
 
         // Maps impact speed to a per-layer volume multiplier (velVolumeSoft..velVolumeLoud), blended by how

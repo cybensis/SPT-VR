@@ -101,8 +101,6 @@ namespace TarkovVR.Patches.Visuals
         // image after this one (uiCam) turns the image over once more. So: into the eye image, flipped only when another headset
         // camera draws after it this frame (uiCam can be skipped: UiCameraGate); into a texture of its own, always flipped.
         // false = FlippedV = true always.
-        public static bool flipByDestination = true;
-        public static bool logFlipDestinations = false;    // each change of what was decided, the first 12
         private static string lastFlipDestination;
         private static int flipDestinationLogs;
         private static readonly List<XRDisplaySubsystem> xrDisplays = new List<XRDisplaySubsystem>();
@@ -112,22 +110,10 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(SSAAImpl), "OnRenderImage")]
         private static void FlipForDestination(SSAAImpl __instance, RenderTexture destination)
         {
-            if (!flipByDestination)
-                return;
             Camera camera = __instance._currentCamera;
             bool intoEyeImage = destination == null || IsEyeImage(destination);
             Camera drawnOverBy = intoEyeImage && camera != null ? LaterEyeCamera(camera) : null;
             __instance.FlippedV = !intoEyeImage || drawnOverBy != null;
-            if (!logFlipDestinations || flipDestinationLogs >= 12)
-                return;
-            string kind = (destination == null ? "null (the camera's own target)"
-                : $"'{System.Text.RegularExpressions.Regex.Replace(destination.name ?? "", @"\d+", "#")}'{(intoEyeImage ? " (eye image)" : "")}")
-                + (intoEyeImage ? (drawnOverBy != null ? $", drawn over by '{drawnOverBy.name}' (depth {drawnOverBy.depth:0})" : ", nothing drawn after it") : "");
-            if (kind == lastFlipDestination)
-                return;
-            lastFlipDestination = kind;
-            flipDestinationLogs++;
-            Plugin.MyLog.LogInfo($"[SSAAFlip] frame {Time.frameCount}: '{(camera != null ? camera.name : "?")}' (depth {(camera != null ? camera.depth : 0f):0}) final image into {kind} - flipped {__instance.FlippedV}");
         }
 
         // The desktop window drawn right where the game camera's picture is finished, when nothing draws over it (DesktopMirror)
@@ -617,7 +603,6 @@ namespace TarkovVR.Patches.Visuals
         // buildings/terrain/other players never pop in/out; the win comes from the high-count clutter layers.
         // useLayerCullDistances is live (UnityExplorer); cullDistanceMultiplier follows the VR menu's
         // "Clutter Draw Distance" slider (Graphics). Either change rebuilds + re-applies next frame. Log: "[CullDist]".
-        public static bool useLayerCullDistances = true;   // master toggle
         public static float cullDistanceMultiplier = 1f;   // scales the whole table; <1 = more aggressive (set from the slider)
 
         private static float[] _cullDistances;             // cached scaled array (rebuilt on multiplier change)
@@ -655,20 +640,6 @@ namespace TarkovVR.Patches.Visuals
 
             // Driven by the VR menu's "Clutter Draw Distance" slider (Graphics); a change rebuilds the table below.
             cullDistanceMultiplier = TarkovVR.Source.Settings.VRSettings.GetCullDistance();
-
-            if (!useLayerCullDistances)
-            {
-                // Restore far-clip-everywhere once, so toggling off mid-raid actually reverts.
-                if (_cullApplied)
-                {
-                    if (_zeroDistances == null)
-                        _zeroDistances = new float[32];
-                    cam.layerCullDistances = _zeroDistances;
-                    _cullApplied = false;
-                    Plugin.MyLog.LogInfo("[CullDist] Disabled — restored far-clip on all layers.");
-                }
-                return;
-            }
 
             if (_cullDistances == null || _builtMultiplier != cullDistanceMultiplier)
             {

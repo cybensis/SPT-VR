@@ -468,7 +468,7 @@ namespace TarkovVR.Source.Weapons
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[GrenadeHold] thrown from the {(Handedness.GunInLeftHand ? "left" : "right")} hand"
                     + (keepHandTurn ? (markerAtRestSeen ? $" (its hand kept its turn: the armed hold turned the grip up to {keptTurnMax:0} deg)" : " (no resting turn seen to keep)") : "")
-                    + (TarkovVR.Patches.Core.VR.VRGrenadeController.finishAtRelease ? ", over at the release" : ", the throw clip after it"));
+                    + (", over at the release"));
             controller.ThrowGrenadeInner(null, 0f, 1f, Vector3.zero, 1f, false, true);
         }
 

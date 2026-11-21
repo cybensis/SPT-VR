@@ -1146,7 +1146,6 @@ namespace TarkovVR.Patches.Core.Player
         // _CamTex the lens samples. We shrink that camera's own target; redirecting it to a different target breaks GPU-Instancer grass.
         // decoupleOpticReticle = true: _CamTex points at a separate full-res lensTex, and OpticReticleDecoupler upscales RenderTexture_0
         // into it and re-draws the reticle sharp each frame. false: the lens samples the shrunk RT directly (cheapest, soft reticle).
-        public static bool decoupleOpticReticle = true;
         public static int opticLensResolution = 1024;     // lens/reticle texture size when decoupling (sharp).
 
         [HarmonyPrefix]
@@ -1167,18 +1166,6 @@ namespace TarkovVR.Patches.Core.Player
                 return;
 
             var decoupler = __instance.Camera.GetComponent<TarkovVR.Source.Weapons.OpticReticleDecoupler>();
-
-            if (!decoupleOpticReticle)
-            {
-                // Soft-reticle mode: the lens samples the shrunk RenderTexture_0 directly (the vanilla binding SetResolution
-                // just set). Drop the decoupler and point _CamTex back at RenderTexture_0.
-                if (decoupler != null)
-                {
-                    UnityEngine.Shader.SetGlobalTexture("_CamTex", __instance._renderTexture);
-                    UnityEngine.Object.Destroy(decoupler);
-                }
-                return;
-            }
 
             int lensSize = Mathf.Max(opticLensResolution, __instance._renderTexture.width);
 
@@ -1209,8 +1196,6 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(EFT.CameraControl.OpticRetrice), "OnPreCull")]
         private static bool SuppressLowResReticle(EFT.CameraControl.OpticRetrice __instance)
         {
-            if (!decoupleOpticReticle)
-                return true; // vanilla low-res draw
             __instance._commandBuffer?.Clear();
             return false;
         }

@@ -14,13 +14,9 @@ namespace TarkovVR.Patches.Core.Player
     [HarmonyPatch]
     public static class SprintFirePatches
     {
-        public static bool enabled = true;
-        public static bool debugLog = true;     // a line when a pull or a burst goes through a sprint (at most one per 2 s)
-
         private static bool pullingNow;
-        private static float nextLogTime;
 
-        private static bool Allowed => enabled && VRSettings.GetDisableRunAnim();
+        private static bool Allowed => VRSettings.GetDisableRunAnim();
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController.Idling), "SetTriggerPressed")]
@@ -28,8 +24,6 @@ namespace TarkovVR.Patches.Core.Player
         {
             EFT.Player player = __instance?.Controller?._player;
             pullingNow = Allowed && pressed && player != null && player.IsYourPlayer && player.IsSprintEnabled;
-            if (pullingNow)
-                Log("trigger pulled while sprinting: let through");
         }
 
         [HarmonyFinalizer]
@@ -65,15 +59,6 @@ namespace TarkovVR.Patches.Core.Player
             if (!(__instance.CurrentOperation is EFT.Player.FirearmController.AutomaticFireOperation) || __instance.IsTriggerPressed)
                 return;
             __instance.SetTriggerPressed(true);
-            Log("sprint started mid-burst: the trigger kept down");
-        }
-
-        private static void Log(string line)
-        {
-            if (!debugLog || Time.time < nextLogTime)
-                return;
-            nextLogTime = Time.time + 2f;
-            Plugin.MyLog.LogInfo("[SprintFire] " + line);
         }
     }
 }

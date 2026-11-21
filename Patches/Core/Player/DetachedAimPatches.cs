@@ -10,13 +10,12 @@ namespace TarkovVR.Patches.Core.Player
     [HarmonyPatch]
     internal class DetachedAimPatches
     {
-        public static bool enabled = true;      // false = aiming allowed with the gun hand off the grip
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), nameof(EFT.Player.FirearmController.SetAim), typeof(bool))]
         private static void NoAimOffTheGrip(EFT.Player.FirearmController __instance, ref bool value)
         {
-            if (enabled && value && ChestHang.Detached && __instance != null && __instance._player != null && __instance._player.IsYourPlayer)
+            if (value && ChestHang.Detached && __instance != null && __instance._player != null && __instance._player.IsYourPlayer)
                 value = false;
         }
 
@@ -24,7 +23,7 @@ namespace TarkovVR.Patches.Core.Player
         public static void StopAimingOffTheGrip()
         {
             EFT.Player.FirearmController firearmController = VRGlobals.firearmController;
-            if (enabled && firearmController != null && firearmController.IsAiming)
+            if (firearmController != null && firearmController.IsAiming)
                 firearmController.SetAim(false);
         }
     }

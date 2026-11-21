@@ -13,13 +13,12 @@ namespace TarkovVR.Patches.Visuals
     [HarmonyPatch]
     internal class IdleScreenEffectPatches
     {
-        public static bool skipIdleEffects = true;     // kill switch (live)
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(DeathFade), "OnRenderImage")]
         private static bool SkipIdleDeathFade(DeathFade __instance)
         {
-            return !(skipIdleEffects && __instance._ssaaPropagator != null
+            return !(__instance._ssaaPropagator != null
                      && Math.Abs(__instance._closeEyesValue) < Mathf.Epsilon && Math.Abs(__instance._fadeValue) < Mathf.Epsilon);
         }
 
@@ -27,14 +26,14 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(BloodOnScreen), "OnRenderImage")]
         private static bool SkipIdleBlood(BloodOnScreen __instance)
         {
-            return !(skipIdleEffects && __instance._ssaaPropagator != null && Time.time - __instance._lastHitTime > __instance.MaxBloodTime);
+            return !(__instance._ssaaPropagator != null && Time.time - __instance._lastHitTime > __instance.MaxBloodTime);
         }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(InfectionEffect), "OnRenderImage")]
         private static bool SkipIdleInfection(InfectionEffect __instance)
         {
-            if (!skipIdleEffects || __instance._ssaaPropagator == null) return true;
+            if (__instance._ssaaPropagator == null) return true;
             __instance._effectValue = Mathf.Clamp01(__instance._effectValue);   // the original's side effect
             return __instance._effectValue > 0f;
         }
@@ -43,7 +42,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(PostprocessGrayscale), "OnRenderImage")]
         private static bool SkipIdleGrayscale(PostprocessGrayscale __instance)
         {
-            return !(skipIdleEffects && __instance._ssaaPropagator != null && Math.Abs(__instance.EffectAmount) < Mathf.Epsilon);
+            return !(__instance._ssaaPropagator != null && Math.Abs(__instance.EffectAmount) < Mathf.Epsilon);
         }
 
         // Idle = no filter AND nothing pending for the filter bookkeeping AND no lookup texture (a serialized LUT with
@@ -52,7 +51,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(CC_Vintage), "OnRenderImage")]
         private static bool SkipIdleVintage(CC_Vintage __instance)
         {
-            return !(skipIdleEffects && __instance._ssaaPropagator != null && __instance.filter == CC_Vintage.Filter.None
+            return !(__instance._ssaaPropagator != null && __instance.filter == CC_Vintage.Filter.None
                      && __instance.m_CurrentFilter == CC_Vintage.Filter.None && __instance.lookupTexture == null);
         }
     }

@@ -28,10 +28,9 @@ namespace TarkovVR.Patches.Core.VR
         // The UI-layer camera draws only unlit canvases, usually nothing at all. Unity's default camera is deferred + HDR: a G-buffer
         // pass, a lighting pass and an HDR copy of the eye image, per eye, every frame (1.3 ms GPU + 0.84 ms render thread in the hideout).
         // Forward without HDR/MSAA draws straight into the eye image. false = Unity's default camera (applies to the next uiCam made).
-        public static bool lightUiCamera = true;
         internal static void MakeUiCameraLight(Camera uiCam)
         {
-            if (!lightUiCamera || uiCam == null) return;
+            if (uiCam == null) return;
             uiCam.renderingPath = RenderingPath.Forward;
             uiCam.allowHDR = false;
             uiCam.allowMSAA = false;

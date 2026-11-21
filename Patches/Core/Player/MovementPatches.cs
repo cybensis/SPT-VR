@@ -17,7 +17,6 @@ namespace TarkovVR.Patches.Core.Player
         // --- Proper analog movement direction (see AnalogMovementDirection below) -----------------------------------
         // ON = body physically travels in the exact analog stick heading (full 360°). OFF = vanilla EFT behaviour,
         // i.e. travel snapped to the 8 directions Tarkov has walk animations for.
-        public static bool analogMovementDirection = true;
         // Don't bother redirecting below this planar root-motion magnitude (avoids normalizing noise while idle/stopping).
         public static float analogMinPlanarMotion = 0.0001f;
         // While SPRINTING, cap how far off the sprint's forward heading you can steer (deg). Vanilla sprint is
@@ -231,7 +230,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(MovementState), "ApplyMotion")]
         private static void AnalogMovementDirection(MovementState __instance, ref Vector3 motion)
         {
-            if (!analogMovementDirection || VRGlobals.menuOpen || !VRGlobals.inGame)
+            if (VRGlobals.menuOpen || !VRGlobals.inGame)
                 return;
 
             MovementContext movementContext = __instance.MovementContext;

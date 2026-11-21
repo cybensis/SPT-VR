@@ -10,7 +10,6 @@ namespace TarkovVR.Patches.UI
     [HarmonyPatch]
     internal class VersionLabelPatches
     {
-        public static bool hideVersionLabel = true;
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PreloaderUI), "Awake")]
@@ -22,7 +21,7 @@ namespace TarkovVR.Patches.UI
 
         private static void Hide(PreloaderUI preloader)
         {
-            if (!hideVersionLabel || preloader == null || preloader._alphaVersionLabel == null)
+            if (preloader == null || preloader._alphaVersionLabel == null)
                 return;
             Graphic text = preloader._alphaVersionLabel.GetComponent<Graphic>() ?? preloader._alphaVersionLabel.GetComponentInChildren<Graphic>(true);
             if (text != null && text.enabled)
