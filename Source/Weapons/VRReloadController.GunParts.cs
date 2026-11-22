@@ -234,8 +234,7 @@ namespace TarkovVR.Source.Weapons
                 if (!(firearmController.CurrentOperation is FirearmController.Idling))
                     return;
 
-                // B, or the gun's magazine pulled out by hand without Manual Reload (that grab is the button press)
-                bool pressedByFinger = releaseHeld || (HoldingGunMagazine && onRail && railPullingOut && !VRSettings.GetManualReloadOn());
+                bool pressedByFinger = releaseHeld;
                 // A paddle catch is pressed by the off hand's thumb, not the gun hand's finger; other off-hand presses use their clip's finger
                 RockIn rockIn = RockInOf(firearmController);
                 bool thumbPresses = OffHandPressesCatch(firearmController);
@@ -825,7 +824,7 @@ namespace TarkovVR.Source.Weapons
             internal static void UpdateBoltSlap(bool handFree)
             {
                 FirearmController firearmController = null;
-                bool canSlap = handFree && TryGetMagazineGun(out firearmController, out Weapon slappedWeapon, out _) && slappedWeapon.IsBoltCatch
+                bool canSlap = handFree && VRSettings.GetManualReloadOn() && TryGetMagazineGun(out firearmController, out Weapon slappedWeapon, out _) && slappedWeapon.IsBoltCatch
                     && !VRGlobals.vrPlayer.isSupporting && !ChestHang.Detached
                     && !HandsInteractionController.HoldingLoot;
                 bool atCatch = false;

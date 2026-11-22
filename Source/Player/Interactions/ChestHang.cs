@@ -34,7 +34,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static float regrabForwardOffset = 0.07f;// m the zone sits toward the muzzle from the R-hand marker
         // The other gun spots (BodyWeapons, SpotPose): where the gun's Weapon_root sits relative to the eyes looking level, in the
         // body's frame, and which way its muzzle and grip point (x mirrors left-handed). back = the second primary, over the dominant
-        // shoulder, grip out behind you. hip = the pistol, on the dominant hip, muzzle down, grip to the rear.
+        // shoulder, grip out behind you (only with GunSpots off: its default is GunSpots.shoulderSpotGrip). hip = the pistol, on the
+        // dominant hip, muzzle down, grip to the rear.
         public static Vector3 backOffset = new Vector3(0.17f, -0.17f, -0.17f);
         public static Vector3 backMuzzle = new Vector3(-0.3f, -1f, -0.2f);
         public static Vector3 backGrip = new Vector3(0.3f, 0f, -1f);

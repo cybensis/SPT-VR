@@ -648,11 +648,13 @@ namespace TarkovVR.Source.Weapons
                 && GunIdle(firearmController) && !HandsInteractionController.HoldingLoot;
         }
 
+        // Manual Reload off: the hands take no part of the gun (only the foregrip, VRPlayerManager's), B is Tarkov's own reload
         private static bool CanWorkGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
         {
             weapon = null;
             magazineSlot = null;
-            if (!TryGetMagazineGun(out firearmController, out weapon, out magazineSlot))
+            firearmController = null;
+            if (!VRSettings.GetManualReloadOn() || !TryGetMagazineGun(out firearmController, out weapon, out magazineSlot))
                 return false;
             if (!GunIdle(firearmController))
                 return false;
@@ -772,12 +774,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (weapon.GetCurrentMagazine() == null)
                 return false;
-            // With Manual Reload, any gun: the mag catch holds it in the well until B is down (UpdateRail). Otherwise it is
-            // grab-and-pull, but not on pistols (the magazine sits inside the grip where the support hand cups it) or
-            // from the support grip.
-            if (!VRSettings.GetManualReloadOn() && (VRGlobals.vrPlayer.isWeapPistol || VRGlobals.vrPlayer.isSupporting))
-                return false;
-            // A pistol's magazine has to come partly out first (with the release held)
+            // (the mag catch holds it in the well until B is down: UpdateRail) A pistol's magazine has to come partly out first (with the release held)
             return !MagazineSlidesOntoHand || MagazinePartlyOut;
         }
 
@@ -969,8 +966,6 @@ namespace TarkovVR.Source.Weapons
             Belt.BeltBoxTakenOff(firearmController);
             if (debugLog)
                 LogAction($"[VRReload] grabbed gun magazine {magazine.LocalizedShortName()}, track axis {railAxisInWell.ToString("F2")}");
-            if (!VRSettings.GetManualReloadOn())
-                PlayFirstGunSound(firearmController, MagazineHand, MAG_BUTTON_SOUNDS);
             Pulse(MagazineHand, 0.35f, 0.05f);
         }
 
@@ -1005,7 +1000,7 @@ namespace TarkovVR.Source.Weapons
                 lastRefusedGroundItem = null;
                 return;
             }
-            if (!(lootItem.Item is Magazine magazine))
+            if (!(lootItem.Item is Magazine magazine) || !VRSettings.GetManualReloadOn())
                 return;
             if (!TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
                 return;
@@ -2216,8 +2211,6 @@ namespace TarkovVR.Source.Weapons
         // Manual Reload already played the button when B went down
         private static void PlayReleaseSounds(FirearmController firearmController)
         {
-            if (!VRSettings.GetManualReloadOn())
-                PlayFirstGunSound(firearmController, ReleasePressingHand(firearmController), MAG_BUTTON_SOUNDS);
             // Falls out of the gun the gun hand holds
             PlayFirstGunSound(firearmController, SoundHand.GunBody, MAG_OUT_SOUNDS);
         }

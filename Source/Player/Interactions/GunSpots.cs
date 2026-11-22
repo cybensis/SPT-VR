@@ -15,7 +15,8 @@ namespace TarkovVR.Source.Player.Interactions
     // Spots" clears them).
     // Spots are per slot, not per gun: the grip point (the R-hand marker) and the Weapon_root's rotation, in the body's frame
     // (ChestHang.BodyYaw: the neck and the body's yaw). ChestHang.SpotPose draws a placed spot instead of the default, and the shoulder
-    // and hip zones stop taking a placed slot's gun (BodyWeapons). Spots are not mirrored when the left-handed setting changes.
+    // and hip zones stop taking a placed slot's gun (BodyWeapons). Spots are not mirrored when the left-handed setting changes. The
+    // second primary has a spot of this kind with none placed (shoulderSpotGrip / shoulderSpotRotation), mirrored for the left hand.
     // A free hand is the off hand when it is off the foregrip and not on a reload part, the scope, a weapon part, loot or the breath
     // hold. The gun hand counts only with its gun slung or the hands empty (otherwise its trigger fires the gun in hand).
     public static class GunSpots
@@ -24,6 +25,10 @@ namespace TarkovVR.Source.Player.Interactions
         public static float holdSeconds = 1f;   // trigger held on the gun before it comes off its spot into the hand
         public static float holdSlack = 1.5f;   // the hold lasts while the hand's reach score (BodyWeapons.HandReach) stays under this
         public static bool debugLog = false;
+        // The second primary's spot with none placed: over the dominant shoulder, grip at the shoulder, in the placed spots' form (the grip
+        // from the neck and Weapon_root's rotation, body frame, right-handed)
+        public static Vector3 shoulderSpotGrip = new Vector3(0.211093977f, 0.09813571f, -0.0188097488f);
+        public static Quaternion shoulderSpotRotation = new Quaternion(-0.132647276f, -0.8278369f, -0.280668318f, 0.467243135f);
 
         private static readonly EquipmentSlot[] slots = { EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster };
 
@@ -56,7 +61,25 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool Busy => Ticking && (offHand.holding || gunHand.holding || placingHand != null);
         internal static bool IsPlacing(EquipmentSlot slot) => Ticking && placingHand != null && placingSlot == slot;
         // The slot's gun is not at its default zone (BodyWeapons' shoulder and hip zones leave it alone)
-        internal static bool MovedOffZone(EquipmentSlot slot) => IsPlacing(slot) || (enabled && VRSettings.GetGunSpot(SlotIndex(slot), out _, out _));
+        internal static bool MovedOffZone(EquipmentSlot slot) => IsPlacing(slot) || (enabled && SpotOf(slot, out _, out _));
+
+        // The slot's placed spot, or the second primary's default. Left-handed, that default is mirrored across the body (the gun turned, not
+        // mirrored: its muzzle and top go to the mirror image, its sides swap).
+        private static bool SpotOf(EquipmentSlot slot, out Vector3 grip, out Quaternion rotation)
+        {
+            if (VRSettings.GetGunSpot(SlotIndex(slot), out grip, out rotation))
+                return true;
+            if (slot != EquipmentSlot.SecondPrimaryWeapon)
+                return false;
+            grip = shoulderSpotGrip;
+            rotation = Quaternion.Normalize(shoulderSpotRotation);
+            if (VRSettings.GetLeftHandedMode())
+            {
+                grip.x = -grip.x;
+                rotation = new Quaternion(rotation.x, -rotation.y, -rotation.z, rotation.w);
+            }
+            return true;
+        }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -101,7 +124,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             position = Vector3.zero;
             rotation = Quaternion.identity;
-            if (!enabled || !VRSettings.GetGunSpot(SlotIndex(slot), out Vector3 grip, out Quaternion spotRotation))
+            if (!enabled || !SpotOf(slot, out Vector3 grip, out Quaternion spotRotation))
                 return false;
             Quaternion body = ChestHang.BodyYaw(out Vector3 neck);
             rotation = body * spotRotation;

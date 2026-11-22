@@ -336,9 +336,8 @@ namespace TarkovVR.Source.Controls
 
                     if (waitingForSecondTap && timeSinceLastTap < DOUBLE_TAP_WINDOW)
                     {
-                        // With a detachable magazine, the double tap drops it out of the gun (with Manual Reload the
-                        // first press already did)
-                        if (!manualReload && !VRReloadController.TryReleaseMagazine())
+                        // Tarkov's quick reload (with Manual Reload on a detachable magazine the first press already dropped it)
+                        if (!manualReload)
                             command = ECommand.QuickReloadWeapon;
                         waitingForSecondTap = false;
                         lastTapTime = 0f;
