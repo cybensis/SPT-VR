@@ -80,9 +80,8 @@ namespace TarkovVR.Patches.Core.Player
 
         // After the animator runs (LateUpdate), zeroes the props' animator-driven local transforms so they sit on
         // their holders.
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
-        public static void LateZeroProps(EFT.Player __instance)
+        // Player.LateUpdate postfix stage (FramePipeline)
+        internal static void LateZeroProps(EFT.Player __instance)
         {
             if (__instance == null || !__instance.IsYourPlayer) return;
             EatingInteractionController.LateZeroProps();

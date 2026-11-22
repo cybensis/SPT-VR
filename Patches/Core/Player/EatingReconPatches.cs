@@ -618,8 +618,5 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(BaseSoundPlayer), "SoundEventHandler")]
         private static void ReconSound(BaseSoundPlayer __instance, string soundName) => EatingRecon.OnSound(__instance, soundName);
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
-        private static void ReconTick(EFT.Player __instance) => EatingRecon.Tick(__instance);
     }
 }

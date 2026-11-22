@@ -8,9 +8,8 @@ namespace TarkovVR.Patches.Core.Player
     {
         // A tube shotgun's pump worked by hand (VRReloadController.Shotgun). Its bones are written after the animator and before
         // Tarkov's IK in this same LateUpdate (VisualPass -> IkProcess reads the left-hand marker on the pump), so the hand follows it.
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
-        private static void PumpBeforeIk(EFT.Player __instance)
+        // Player.LateUpdate prefix stage (FramePipeline)
+        internal static void PumpBeforeIk(EFT.Player __instance)
         {
             if (__instance == null || !__instance.IsYourPlayer)
                 return;
@@ -23,9 +22,8 @@ namespace TarkovVR.Patches.Core.Player
 
         // While a break-action's lever is pressed, the gun hand's IK marker is swapped only for Tarkov's IK in this LateUpdate.
         // It is put back here.
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
-        private static void LeverHandAfterIk(EFT.Player __instance)
+        // Player.LateUpdate postfix stage (FramePipeline)
+        internal static void LeverHandAfterIk(EFT.Player __instance)
         {
             if (__instance == null || !__instance.IsYourPlayer)
                 return;

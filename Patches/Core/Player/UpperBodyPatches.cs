@@ -1,17 +1,13 @@
-using HarmonyLib;
 using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Patches.Core.Player
 {
     // Turns and bends the local player's upper body toward the headset (LocalUpperBody) right before Player.VisualPass places the
     // shoulders. It runs first among the SetShoulders prefixes, so IKPatches.OverrideShoulders and the arm IK start from the solved torso.
-    [HarmonyPatch]
     internal static class UpperBodyPatches
     {
-        [HarmonyPrefix]
-        [HarmonyPriority(Priority.First)]
-        [HarmonyPatch(typeof(PlayerBones), nameof(PlayerBones.SetShoulders))]
-        private static void FollowHeadset(PlayerBones __instance)
+        // PlayerBones.SetShoulders prefix stage (FramePipeline)
+        internal static void FollowHeadset(PlayerBones __instance)
         {
             if (__instance.Player == null || !__instance.Player.IsYourPlayer)
                 return;

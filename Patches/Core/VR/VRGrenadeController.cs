@@ -149,9 +149,8 @@ namespace TarkovVR.Patches.Core.VR
             TarkovVR.Source.Player.Interactions.GrenadeSlot.OnGrenadeSpawned(__instance);
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
-        private static void CheckGrenadeAnimation(EFT.Player __instance)
+        // Player.LateUpdate prefix stage (FramePipeline)
+        internal static void CheckGrenadeAnimation(EFT.Player __instance)
         {
             if (!__instance.IsYourPlayer || !throwInProgress)
                 return;

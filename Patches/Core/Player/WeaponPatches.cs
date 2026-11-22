@@ -197,9 +197,8 @@ namespace TarkovVR.Patches.Core.Player
 
 
         // Puts the compass in the left hand
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.Player), "PropUpdate")]
-        private static bool FixCompassToLeftHand(EFT.Player __instance)
+        // Player.PropUpdate prefix stage (FramePipeline)
+        internal static bool FixCompassToLeftHand(EFT.Player __instance)
         {
             // Set every frame: setting it once in SetCompassState doesn't work
             if (__instance.IsYourPlayer && __instance._propActive && __instance._compassArrow) {
@@ -1415,9 +1414,8 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         // Triggers OnWeightUpdated (and FixWeightAfterOnWeightUpdated with it) every frame while holding an item, so stamina stays current
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(PhysicalBase), "LateUpdate")]
-        private static void ForceWeightRecalcWhileHoldingItem(PhysicalBase __instance)
+        // Physical.LateUpdate prefix stage (FramePipeline)
+        internal static void ForceWeightRecalcWhileHoldingItem(PhysicalBase __instance)
         {
             if (!VRSettings.GetHeldItemWeight()) 
                 return;

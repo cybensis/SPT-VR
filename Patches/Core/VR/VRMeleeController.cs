@@ -53,9 +53,8 @@ namespace TarkovVR.Patches.Core.VR
         private static void FikaSendMeleeHit(Vector3 point, Vector3 normal, Vector3 direction, float damage)
             => FikaVrSync.SendMeleeHit(point, normal, direction, damage);
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
-        private static void ManageKnifeCollider(EFT.Player __instance)
+        // Player.LateUpdate postfix stage (FramePipeline)
+        internal static void ManageKnifeCollider(EFT.Player __instance)
         {
             if (__instance == null || !__instance.IsYourPlayer) return;
             BaseKnifeController knifeController = __instance.HandsController as BaseKnifeController;

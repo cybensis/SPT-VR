@@ -766,9 +766,8 @@ namespace TarkovVR.Patches.UI
             return true;
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
-        private static bool FixItemPlacement(EFT.Player __instance)
+        // Player.LateUpdate prefix stage (FramePipeline)
+        internal static bool FixItemPlacement(EFT.Player __instance)
         {
             if (!__instance.IsYourPlayer || !VRGlobals.inGame)
                 return true;

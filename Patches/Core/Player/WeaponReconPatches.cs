@@ -607,9 +607,6 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(BaseSoundPlayer), "PlayClip")]
         private static void ReconPlayClip(BaseSoundPlayer __instance, AudioClip clip) => WeaponRecon.OnPlayClip(__instance, clip);
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
-        private static void ReconTick(EFT.Player __instance) => WeaponRecon.Tick(__instance);
     }
 
     // Every step of the magazine reload operation (and the client subclasses that override them)

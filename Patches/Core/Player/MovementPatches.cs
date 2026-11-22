@@ -257,9 +257,8 @@ namespace TarkovVR.Patches.Core.Player
         // GClass1913 is used by the PlayerCameraController to position and rotate the camera. PlayerCameraController holds the abstract
         // class GClass1943, which this inherits.
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(FirstPersonCameraState), "ManualLateUpdate")]
-        private static bool PositionCamera(FirstPersonCameraState __instance)
+        // FirstPersonCameraState.ManualLateUpdate prefix stage (FramePipeline)
+        internal static bool PositionCamera(FirstPersonCameraState __instance)
         {
             
             if (!__instance._player.IsYourPlayer || !VRGlobals.inGame || VRGlobals.menuOpen)

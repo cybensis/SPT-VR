@@ -26,9 +26,8 @@ namespace TarkovVR.Patches.Core.Player
         private static float smoothedStanceY = float.NaN;
         private static float prevCamLocalY = float.NaN;
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.Player), "HeightInterpolation")]
-        private static bool DisableYAxisSmoothing(EFT.Player __instance, float timeDeltatime)
+        // Player.HeightInterpolation prefix stage (FramePipeline)
+        internal static bool DisableYAxisSmoothing(EFT.Player __instance, float timeDeltatime)
         {
             if (!__instance.IsYourPlayer)
                 return true; // bots / other players keep vanilla smoothing
@@ -163,9 +162,8 @@ namespace TarkovVR.Patches.Core.Player
                 __instance.TurnAway.IsDirty = true;
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(PlayerBones), "SetShoulders")]
-        private static bool OverrideShoulders(PlayerBones __instance)
+        // PlayerBones.SetShoulders prefix stage (FramePipeline)
+        internal static bool OverrideShoulders(PlayerBones __instance)
         {
             if (__instance.Player == null || !__instance.Player.IsYourPlayer ||
                 VRGlobals.vrPlayer == null || VRGlobals.ikManager == null ||
@@ -312,9 +310,8 @@ namespace TarkovVR.Patches.Core.Player
 
         // method_20 just wrote the solvers' IK positions and method_19 (the solve) runs right after, so the bendNormal
         // written here is what this frame solves with.
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player), "IkProcess")]
-        private static void DriveElbowBendNormals(EFT.Player __instance)
+        // Player.IkProcess postfix stage (FramePipeline)
+        internal static void DriveElbowBendNormals(EFT.Player __instance)
         {
             if (!__instance.IsYourPlayer || VRGlobals.ikManager == null)
                 return;
@@ -700,9 +697,8 @@ namespace TarkovVR.Patches.Core.Player
             return rightArmBones != null || leftArmBones != null;
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.Player), "IkProcess")]
-        private static bool RemoveSprintAnimFromHands(EFT.Player __instance)
+        // Player.IkProcess prefix stage (FramePipeline)
+        internal static bool RemoveSprintAnimFromHands(EFT.Player __instance)
         {
             if (!__instance.IsYourPlayer)
                 return true;

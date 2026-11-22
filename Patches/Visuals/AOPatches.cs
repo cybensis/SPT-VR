@@ -66,9 +66,8 @@ namespace TarkovVR.Patches.Visuals
             }
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player), nameof(EFT.Player.VisualPass))]
-        private static void CountAOTimer()
+        // Player.VisualPass postfix stage (FramePipeline)
+        internal static void CountAOTimer()
         {
             if (aoRefreshTimer < 0f)
                 return;

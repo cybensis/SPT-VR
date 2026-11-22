@@ -85,10 +85,8 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
-        [HarmonyPostfix]
-        [HarmonyPriority(Priority.First)]
-        [HarmonyPatch(typeof(EFT.Player), nameof(EFT.Player.IkProcess))]
-        private static void SwapArms(EFT.Player __instance)
+        // Player.IkProcess postfix stage (FramePipeline)
+        internal static void SwapArms(EFT.Player __instance)
         {
             if (!__instance.IsYourPlayer || __instance._limbs == null || __instance._limbs.Length < 2)
                 return;
