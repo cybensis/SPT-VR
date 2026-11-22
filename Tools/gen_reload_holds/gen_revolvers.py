@@ -88,43 +88,66 @@ for family,(folder,container,craneLeaf,cylinderLeaf,extractorLeaf,releaseLeaf,op
     else:
         ge=setup(tree,clips[ejectClip]); te=times(clips[ejectClip])
         travel=travelTrack(ge,extractor,te); eRest,eTop,ejectTravel=swingWindow(travel,te,rest=0.0003)
-        ejectTimes=[timeAtShare(travel,te,eRest,eTop,k/(EJECT_KEYS-1)) for k in range(EJECT_KEYS)]
         # (with the bones riding the extractor's push besides it: the MTs-255's lever, under the crane; not the crane or cylinder, which
         # may still be swinging out)
         others=[p for p in movedIn(ge,P,wp,te,eRest,eTop,[extractor,release]) if p!=crane and p!=cylinder and not cylinder.startswith(p+'/')]
-        ejectBones=boneKeys(ge,[extractor]+others,ejectTimes,wp)
         a0=np.array(ge['localAt'](extractor,te[eRest])[0],float); a1=np.array(ge['localAt'](extractor,te[eTop])[0],float)
         ejectVector=a1-a0
-        # The left hand on it as it starts out (10% of its travel): the fingertip nearest any of the ejector's meshes (the MTs-255's is on
-        # its lever) = the press bone, which the hand rides; the palm in its frame, where the fingers close, and that fingertip's way over the
-        # push in the crane's frame (the hand's push is measured along it)
-        tStart=timeAtShare(travel,te,eRest,eTop,0.1)
+        # The part the left hand presses: the one a fingertip is nearest as the extractor starts out (10% of its travel)
+        tFirst=timeAtShare(travel,te,eRest,eTop,0.1)
         ejectPaths=[extractor]+others
         meshes={p:boneMeshPoints(folder,container,p.split('/')[-1]) for p in ejectPaths}
         c={}
         best=None
         for p in ejectPaths:
-            bp,br,_=ge['worldAt'](p,tStart,c)
+            bp,br,_=ge['worldAt'](p,tFirst,c)
             for finger in range(5):
-                jp,jr,_=ge['worldAt'](J[3+3*finger],tStart,c); tip=jp+ge['rotate'](jr,TIP)
+                jp,jr,_=ge['worldAt'](J[3+3*finger],tFirst,c); tip=jp+ge['rotate'](jr,TIP)
                 inBone=ge['rotate'](conj(br),tip-bp)
                 off=float(np.min(np.linalg.norm(meshes[p]-inBone,axis=1))) if meshes[p] is not None else float(np.linalg.norm(inBone))
                 if best is None or off<best[0]: best=(off,finger,p,inBone)
         off,finger,pressBone,tipInBone=best
-        # (the palm in the press bone's frame, as the cylinder hold: holdIn is the other way round, a held thing in the palm's frame)
-        palmOnPress,palmOnPressQ=inFrame(ge,pressBone,palm,tStart,c)
+        # A pressed part other than the extractor (the MTs-255's lever) drives it: it turns ~55 deg before the extractor moves, so the keys,
+        # the hold and the push follow the part's own motion from its rest. The hand rides the part's parent (the crane), moved along with the
+        # point it presses: riding the lever itself would swing the hand round with it.
+        lever=pressBone!=extractor
+        if lever:
+            leverTurn=turnTrack(ge,pressBone,te)
+            track,restAt=(leverTurn,0.05) if max(leverTurn)>=3 else (travelTrack(ge,pressBone,te),0.0003)
+            dRest,dTop,_=swingWindow(track,te,rest=restAt)
+        else:
+            track,dRest,dTop=travel,eRest,eTop
+        ejectTimes=[timeAtShare(track,te,dRest,dTop,k/(EJECT_KEYS-1)) for k in range(EJECT_KEYS)]
+        ejectBones=boneKeys(ge,ejectPaths,ejectTimes,wp)
+        # The left hand on it as it starts (10% of its motion): the palm in the frame the hand rides, where the hand meets the part, and that
+        # point's way over the push in the crane's frame (the hand's push is measured along it)
+        tStart=timeAtShare(track,te,dRest,dTop,0.1)
+        holdFrame=pressBone.rsplit('/',1)[0] if lever else pressBone
+        # (the palm in that frame, as the cylinder hold: holdIn is the other way round, a held thing in the palm's frame)
+        palmOnPress,palmOnPressQ=inFrame(ge,holdFrame,palm,tStart,c)
         ejectHold=dict(position=r5(palmOnPress),rotation=r5(palmOnPressQ/np.linalg.norm(palmOnPressQ)),fingers=holdIn(ge,palm,palm,tStart,J)['fingers'],t=round(float(tStart),3))
-        grabPoint=np.mean([inFrame(ge,pressBone,j,tStart,c)[0] for j in J[1:]],axis=0)
-        def tipInCrane(t):
+        def pointInCrane(local,t):
             cc={}; bp,br,_=ge['worldAt'](pressBone,t,cc); kp,kr,_=ge['worldAt'](crane,t,cc)
-            return ge['rotate'](conj(kr),bp+ge['rotate'](br,tipInBone)-kp)
-        contactStart,contactEnd=tipInCrane(te[eRest]),tipInCrane(te[eTop])
-        palm0=inFrame(ge,pressBone,palm,tStart,{})[0]; drift=max(float(np.linalg.norm(inFrame(ge,pressBone,palm,te[i],{})[0]-palm0)) for i in range(eRest,eTop+1))
+            return ge['rotate'](conj(kr),bp+ge['rotate'](br,local)-kp)
+        if lever:
+            # The clip's hand holds the front of the gun and the heel of the palm turns the lever (its knuckles ~10 cm off it): the grab point
+            # is the lever's mesh point nearest its knuckle centroid (the runtime's PalmOrigin), not where its fingers close
+            knuckles=np.mean([inFrame(ge,pressBone,J[1+3*f],tStart,{})[0] for f in range(1,5)],axis=0)
+            grabPoint=meshes[pressBone][int(np.argmin(np.linalg.norm(meshes[pressBone]-knuckles,axis=1)))] if meshes[pressBone] is not None else knuckles
+            contactStart,contactEnd=pointInCrane(grabPoint,te[dRest]),pointInCrane(grabPoint,te[dTop])
+        else:
+            grabPoint=np.mean([inFrame(ge,pressBone,j,tStart,c)[0] for j in J[1:]],axis=0)
+            contactStart,contactEnd=pointInCrane(tipInBone,te[eRest]),pointInCrane(tipInBone,te[eTop])
+        palm0=inFrame(ge,holdFrame,palm,tStart,{})[0]; drift=max(float(np.linalg.norm(inFrame(ge,holdFrame,palm,te[i],{})[0]-palm0)) for i in range(dRest,dTop+1))
+        extractorAtEnd=np.linalg.norm(np.array(ejectBones[0]['keys'][-1][:3])-np.array(ejectBones[0]['keys'][0][:3]))
         print(f'  ejector {ejectTravel*100:.2f} cm along {np.round(ejectVector/np.linalg.norm(ejectVector),3)} ({te[eRest]:.2f}-{te[eTop]:.2f}s), bones {[b["path"] for b in ejectBones]}; '
-              f'{["thumb","index","middle","ring","pinky"][finger]} on {pressBone.split("/")[-1]}, {off*100:.1f} cm off its mesh at {tStart:.2f}s, the push moves it '
-              f'{np.linalg.norm(contactEnd-contactStart)*100:.1f} cm, the palm drifts {drift*100:.1f} cm on it')
+              f'{["thumb","index","middle","ring","pinky"][finger]} on {pressBone.split("/")[-1]}, {off*100:.1f} cm off its mesh at {tFirst:.2f}s, the push moves it '
+              f'{np.linalg.norm(contactEnd-contactStart)*100:.1f} cm, the palm drifts {drift*100:.1f} cm on it'
+              +(f'; driven by it: keyed over its {max(track):.1f} {"deg" if max(track)>=3 else "m"} ({te[dRest]:.2f}-{te[dTop]:.2f}s), the extractor {extractorAtEnd*100:.2f} cm out at its end, '
+                f'grab point {np.linalg.norm(grabPoint)*100:.1f} cm off it, push along {np.round((contactEnd-contactStart)/max(np.linalg.norm(contactEnd-contactStart),1e-9),3)} (crane)' if lever else ''))
         ejector=dict(bones=ejectBones,bone=relPath(wp,extractor),travel=r5(ejectVector),pressBone=relPath(wp,pressBone),
                      hold=dict(ejectHold,grabPoint=r5(grabPoint)),contact=r5(contactStart),contactEnd=r5(contactEnd))
+        if lever: ejector['rideParent']=True
 
     # The bore: the pluck clip's case for its first 1.5 cm out of its chamber, in the cylinder's frame
     gp=setup(tree,clips[pluckClip]); tp=times(clips[pluckClip]); shell=shellports[0]

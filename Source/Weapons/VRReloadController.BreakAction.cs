@@ -411,13 +411,14 @@ namespace TarkovVR.Source.Weapons
 
             public sealed class SavedEjector
             {
-                public List<SavedPumpBone> bones;   // every bone the eject clip moves, keyed by the extractor's travel
+                public List<SavedPumpBone> bones;   // every bone the eject clip moves, keyed by the pressed part's motion (the extractor's travel, or a lever's turn)
                 public string bone;                 // the extractor (its parent the cylinder)
                 public float[] travel;              // its full travel, local
-                public string pressBone;            // the part the clip's finger pushes (the hand rides it)
-                public SavedBreakHold hold;         // the left palm on it, in its frame; grabPoint where the fingers close
-                public float[] contact;             // the pushing fingertip at the push's start and end, in the crane's frame
+                public string pressBone;            // the part the clip's hand pushes (the hand rides it)
+                public SavedBreakHold hold;         // the left palm on it, in the frame the hand rides; grabPoint (in the part's frame) where the hand takes it
+                public float[] contact;             // the pushed point at the push's start and end, in the crane's frame
                 public float[] contactEnd;
+                public bool rideParent;             // a lever (the MTs-255's): the hand rides its parent, moved along with the point it presses
             }
 
             internal sealed class Ejector
@@ -425,7 +426,8 @@ namespace TarkovVR.Source.Weapons
                 public KeyedBones bones;
                 public string pressPath;
                 public BreakHold hold;
-                public Vector3 push;                // the fingertip's way over the push, in the crane's frame
+                public Vector3 push;                // the pushed point's way over the push, in the crane's frame
+                public bool rideParent;
             }
 
             public sealed class SavedBreakBones
@@ -488,7 +490,7 @@ namespace TarkovVR.Source.Weapons
                 BreakHold hold = BreakHoldFrom(saved.hold);
                 if (bones == null || hold == null)
                     return null;
-                return new Ejector { bones = bones, pressPath = saved.pressBone, hold = hold, push = Vector3From(saved.contactEnd, 0) - Vector3From(saved.contact, 0) };
+                return new Ejector { bones = bones, pressPath = saved.pressBone, hold = hold, push = Vector3From(saved.contactEnd, 0) - Vector3From(saved.contact, 0), rideParent = saved.rideParent };
             }
 
             internal static KeyedBones KeyedFrom(SavedBreakBones saved)
@@ -760,6 +762,9 @@ namespace TarkovVR.Source.Weapons
                             transform.SetLocalPositionAndRotation(position, rotation);
                     }
                 }
+                // A lever turns under the hand: the hand rides its parent, moved along with the point it presses (the lever just posed)
+                if (HoldingEjector && data.ejector != null && data.ejector.rideParent && ejectorRider != null && ejectorRider.parent != null && ejectorPressBone != null)
+                    ejectorRider.localPosition = ejectorRiderAtGrab + ejectorRider.parent.InverseTransformPoint(EjectorGrabWorld(data, ejectorOnRightArm)) - ejectorGrabAtGrab;
             }
 
             // The hinge axis in world space (positive = opening), through the barrel bone's origin
@@ -1842,6 +1847,8 @@ namespace TarkovVR.Source.Weapons
 
             private static FirearmController ejectorFor;
             private static Transform ejectorRider;              // our transform on the part the hand pushes, which the hand latches onto
+            private static Vector3 ejectorRiderAtGrab;          // with rideParent: the rider and the pressed point at the grab, in the rider's parent's frame
+            private static Vector3 ejectorGrabAtGrab;
             private static Vector3 ejectorHandAtGrab;           // the controller at the grab, in the crane's frame
             private static float ejectorShareAtGrab;
             private static bool ejectorOnRightArm;
@@ -1859,10 +1866,17 @@ namespace TarkovVR.Source.Weapons
                 return rightArm ? MirroredThroughCylinder(grab) : grab;
             }
 
+            // What the hand rides: the pressed part, or a lever's parent (rideParent)
+            private static Transform EjectorRideFrame(BreakData data)
+            {
+                return data.ejector.rideParent && ejectorPressBone.parent != null ? ejectorPressBone.parent : ejectorPressBone;
+            }
+
             private static void EjectorHoldWorld(BreakData data, bool rightArm, out Vector3 position, out Quaternion rotation)
             {
-                position = ejectorPressBone.position + ejectorPressBone.rotation * data.ejector.hold.position;
-                rotation = ejectorPressBone.rotation * data.ejector.hold.rotation;
+                Transform frame = EjectorRideFrame(data);
+                position = frame.position + frame.rotation * data.ejector.hold.position;
+                rotation = frame.rotation * data.ejector.hold.rotation;
                 if (rightArm)
                 {
                     position = MirroredThroughCylinder(position);
@@ -1913,8 +1927,11 @@ namespace TarkovVR.Source.Weapons
                 ejectorHandAtGrab = barrelBone.InverseTransformPoint(controller.position);
                 if (ejectorRider == null)
                     ejectorRider = new GameObject("VREjectorHand").transform;
-                ejectorRider.SetParent(ejectorPressBone, worldPositionStays: false);
+                Transform rideFrame = EjectorRideFrame(data);
+                ejectorRider.SetParent(rideFrame, worldPositionStays: false);
                 ejectorRider.SetPositionAndRotation(controller.position, controller.rotation);
+                ejectorRiderAtGrab = ejectorRider.localPosition;
+                ejectorGrabAtGrab = rideFrame.InverseTransformPoint(EjectorGrabWorld(data, ejectorOnRightArm));
                 LatchHand(ejectorRider, gunHand: false);
                 EjectorHoldWorld(data, ejectorOnRightArm, out Vector3 palmPosition, out Quaternion palmRotation);
                 SnapHandTo(ejectorRider, palmPosition, palmRotation);
