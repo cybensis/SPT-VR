@@ -494,8 +494,16 @@ namespace TarkovVR.Source.Weapons
 
             bool reaching = false;
             OffHandAtChargingHandle = false;
-            if (!handBusy && CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
+            // A fixed-magazine gun (CanWorkFixedMagazineGun) comes in with no magazine slot: only its handle, stuck case and deflector
+            FirearmController firearmController = null;
+            Weapon weapon = null;
+            Slot magazineSlot = null;
+            bool magazineGun = !handBusy && CanStartGrab(out firearmController, out weapon, out magazineSlot);
+            if (!magazineGun)
+                magazineSlot = null;
+            if (magazineGun || (!handBusy && OffHandFreeOnGun && CanWorkFixedMagazineGun(out firearmController, out weapon)))
             {
+                bool hasMagazine = magazineSlot != null;
                 // A belt gun's scope latch, cover and belt first (VRReloadController.Belt): the trigger there is theirs
                 if (Belt.TickBeltGunGrabs(firearmController, weapon, triggerPressed, gunHand: false))
                     triggerPressed = false;
@@ -505,12 +513,12 @@ namespace TarkovVR.Source.Weapons
                 // A belt gun's box and handle are only for the hand its clips use for them (BeltBoxHandMay / BeltChargeHandMay):
                 // the gun hand on the PKM, either hand on any other gun.
                 bool offHandBox = Belt.BeltBoxHandMay(firearmController, gunHand: false);
-                bool inGrabZone = offHandBox && InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
+                bool inGrabZone = hasMagazine && offHandBox && InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
                 // Not a handle the gun hand already holds (ChestHang.HandleHeld)
                 bool inHandleZone = !supporting && !HoldingChargingHandle && InChargingHandleZone(firearmController, weapon) && Belt.BeltChargeHandMay(firearmController, gunHand: false);
                 bool inSideHandleZone = !supporting && !HoldingChargingHandle && !inHandleZone && HandleParts.InSideHandleZone(firearmController, weapon);
                 // Not at the grenade on the chest (GrenadeSlot.OffHandAtSlot, one frame late): the grenade's grab takes that press
-                bool inPouchZone = !supporting && offHandBox && InChestPouchZone(palm) && !GrenadeSlot.OffHandAtSlot;
+                bool inPouchZone = hasMagazine && !supporting && offHandBox && InChestPouchZone(palm) && !GrenadeSlot.OffHandAtSlot;
                 // A failure to eject: the case stuck in the ejection port, taken with the trigger like the handle (VRReloadController.Malfunctions)
                 bool atJamPort = InJamPortZone(firearmController, weapon, gunHand: false);
                 bool atDeflector = !atJamPort && Deflector.InDeflectorZone(firearmController, gunHand: false);
@@ -522,7 +530,7 @@ namespace TarkovVR.Source.Weapons
                 reaching = !supporting && (inGrabZone || inPouchZone);
                 // A grip press that ChestHang's hand swap left to the magazine (the hand was nearer to it than to the grip). It is taken with
                 // the swap's reach, so the palm may be just outside this zone (a short magazine in the grip, like the MP7's 20-round).
-                bool pressLeftToMagazine = offHandBox && ChestHang.GripPressLeftToMagazineFrame == Time.frameCount && GunMagazineGrabbable(weapon) && !MagazinePartlyOut;
+                bool pressLeftToMagazine = hasMagazine && offHandBox && ChestHang.GripPressLeftToMagazineFrame == Time.frameCount && GunMagazineGrabbable(weapon) && !MagazinePartlyOut;
                 // Checked before the handle: on an AK the handle rides the carrier right at the port (a rack would clear it too)
                 if (triggerPressed && atJamPort)
                     TakeJamCase(firearmController, gunHand: false);
@@ -548,7 +556,9 @@ namespace TarkovVR.Source.Weapons
             // With the gun hand off the grip and the off hand holding the gun up (ChestHang's support hold), the gun hand can take the
             // handle or a case stuck in the port. It uses its trigger, because its grip there would take the gun's grip back.
             GunHandAtBox = false;
-            if (!handBusy && ChestHang.SupportOnly && CanWorkGun(out FirearmController heldFirearm, out Weapon heldWeapon, out Slot heldMagazineSlot))
+            // (a fixed-magazine gun too: the slot is only for a belt gun's box)
+            if (!handBusy && ChestHang.SupportOnly && (CanWorkGun(out FirearmController heldFirearm, out Weapon heldWeapon, out Slot heldMagazineSlot)
+                || CanWorkFixedMagazineGun(out heldFirearm, out heldWeapon)))
             {
                 if (Belt.TickBeltGunGrabs(heldFirearm, heldWeapon, gunHandTriggerPressed, gunHand: true))
                     gunHandTriggerPressed = false;
@@ -624,6 +634,18 @@ namespace TarkovVR.Source.Weapons
         private static bool GunIdle(FirearmController firearmController)
         {
             return firearmController.CurrentOperation is FirearmController.Idling && expectedOperation == ExpectedOperation.None;
+        }
+
+        // A gun whose magazine is fixed and loads through its open action (the SKS's 10-round, VRReloadController.Rounds): no magazine to
+        // take or put in, but its handle, a stuck case and the deflector are worked by hand like any gun's. CanWorkGun only takes guns
+        // with a detachable magazine, so without this none of them could be taken on these guns.
+        private static bool CanWorkFixedMagazineGun(out FirearmController firearmController, out Weapon weapon)
+        {
+            firearmController = VRGlobals.firearmController;
+            weapon = firearmController != null ? firearmController.Item : null;
+            return enabled && VRGlobals.inGame && !VRGlobals.menuOpen && VRGlobals.vrPlayer != null && VRGlobals.player != null && weapon != null
+                && firearmController.Firearms != null && !firearmController.IsInLauncherMode() && Rounds.ManualTopLoader(firearmController)
+                && GunIdle(firearmController) && !HandsInteractionController.HoldingLoot;
         }
 
         private static bool CanWorkGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
@@ -2255,8 +2277,17 @@ namespace TarkovVR.Source.Weapons
             try
             {
                 FirearmController.FirearmOperation operation = firearmController.CurrentOperation;
-                if (expectedOperation == ExpectedOperation.PullOut && operation is FirearmController.PullOutMagOperation)
+                if (expectedOperation == ExpectedOperation.PullOut && operation is FirearmController.PullOutMagOperation pullOut)
                 {
+                    // The SKS (MustBoltBeOpennedForExternalReload, only it): Tarkov's pull would take the chambered round out with the
+                    // magazine, and its RemoveAmmoFromChamber / OnShellEjectEvent read the chamber with no null check, so the skip threw on an
+                    // empty chamber (and on the round it had just taken) and the hands were left mid-operation. The chamber stays as the
+                    // hands left it, as Start marks it on every other gun.
+                    if (firearmController.Item.MustBoltBeOpennedForExternalReload)
+                    {
+                        pullOut._isAmmoRemovedFromChamber = true;
+                        pullOut._isShellDropped = true;
+                    }
                     // Visible again right before RemoveMod returns it to the pool, so the pool gets it as it found it
                     RestorePendingView();
                     // BSG's own skip: runs the remaining mag-out callbacks in order, then plays idle

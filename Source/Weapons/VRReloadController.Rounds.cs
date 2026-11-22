@@ -344,7 +344,7 @@ namespace TarkovVR.Source.Weapons
                     && template.ReloadMagType == Weapon.EReloadMode.InternalMagazine;
             }
 
-            private static bool ManualTopLoader(FirearmController firearmController)
+            internal static bool ManualTopLoader(FirearmController firearmController)
             {
                 return enabled && VRSettings.GetManualReloadOn() && firearmController != null && firearmController._player != null && firearmController._player.IsYourPlayer
                     && LoadsFixedMagazineThroughAction(firearmController.Item);
