@@ -542,6 +542,8 @@ namespace TarkovVR.Source.Player.Interactions
         // Carries the source collider for feedback (glass break / surface sound).
         private GameObject CopyCollider(Collider source, int layer)
         {
+            if (source is TerrainCollider terrainCollider)
+                return CopyTerrainCollider(terrainCollider, layer);
             GameObject copy = new GameObject("wc_copy") { layer = layer };
             SceneManager.MoveGameObjectToScene(copy, sandbox);
             Transform sourceTransform = source.transform;
@@ -574,17 +576,59 @@ namespace TarkovVR.Source.Player.Interactions
                     capsuleCopy.center = capsuleCollider.center; capsuleCopy.radius = capsuleCollider.radius; capsuleCopy.height = capsuleCollider.height; capsuleCopy.direction = capsuleCollider.direction;
                     made = true;
                     break;
-                case TerrainCollider terrainCollider when terrainCollider.terrainData != null:
-                    var terrainCopy = copy.AddComponent<TerrainCollider>();
-                    terrainCopy.terrainData = terrainCollider.terrainData;
-                    made = true;
-                    break;
             }
             if (!made)
             {
                 Destroy(copy);
                 return null;
             }
+            copy.AddComponent<ProxyColliderSource>().source = source;
+            return copy;
+        }
+
+        // A terrain collider made with AddComponent has its tree colliders on (the default: Unity 2022.3 has no script access to that
+        // switch), and Tarkov's terrains are saved with them off. Every painted tree and bush would be solid in the sandbox only, by its
+        // prefab's colliders (the bushes' bush-sized AI spheres, the trees' branch meshes), which the near test (the real world) never
+        // sees: the gun went into a bush on the snap path and was thrown out of it once something else woke the drive. A clone of the
+        // terrain's own object keeps its saved switch. It's made under an inactive holder, so nothing on it starts, and everything but
+        // the collider is taken off before it's let out.
+        private GameObject cloneHolder;
+
+        private GameObject CopyTerrainCollider(TerrainCollider source, int layer)
+        {
+            if (source.terrainData == null)
+                return null;
+            if (cloneHolder == null)
+            {
+                cloneHolder = new GameObject("wc_cloneHolder");
+                cloneHolder.SetActive(false);
+                SceneManager.MoveGameObjectToScene(cloneHolder, sandbox);
+            }
+            Transform sourceTransform = source.transform;
+            GameObject copy = Instantiate(source.gameObject, sourceTransform.position, sourceTransform.rotation, cloneHolder.transform);
+            copy.name = "wc_copy";
+            for (int child = copy.transform.childCount - 1; child >= 0; child--)
+                DestroyImmediate(copy.transform.GetChild(child).gameObject);
+            // Scripts first (one may require the Terrain), then the rest
+            for (int pass = 0; pass < 3; pass++)
+            {
+                foreach (Component component in copy.GetComponents<Component>())
+                {
+                    if (component != null && !(component is Transform) && !(component is TerrainCollider) && (pass > 0 || component is MonoBehaviour))
+                        DestroyImmediate(component);
+                }
+            }
+            foreach (Behaviour left in copy.GetComponents<Behaviour>())
+                left.enabled = false;
+            if (copy.GetComponent<TerrainCollider>() == null)
+            {
+                Destroy(copy);
+                return null;
+            }
+            copy.layer = layer;
+            copy.transform.SetParent(null, worldPositionStays: true);
+            copy.transform.SetPositionAndRotation(sourceTransform.position, sourceTransform.rotation);
+            copy.transform.localScale = sourceTransform.lossyScale;
             copy.AddComponent<ProxyColliderSource>().source = source;
             return copy;
         }

@@ -681,16 +681,22 @@ namespace TarkovVR.Source.Player.Interactions
             view.LoadItem();
         }
 
+        // The model hangs on the slot's bone, or on its alternative under that bone (no backpack, or one the gun leans against:
+        // weapon_holster1/AlternativeSecondPrimaryHolster): the bone that's off on the way up goes on. Anything else off is left alone.
         private static void KeepSlotBoneOn(PlayerBody.SlotView view, GameObject model)
         {
             if (!model.activeSelf || model.activeInHierarchy)
                 return;
-            Transform bone = model.transform.parent;
-            if (bone == null || bone.gameObject.activeSelf || (bone != view._bone && bone != view._alternativeHolsterBone))
-                return;
-            bone.gameObject.SetActive(true);
-            if (!bonesTurnedOn.Contains(bone.gameObject))
-                bonesTurnedOn.Add(bone.gameObject);
+            for (Transform bone = model.transform.parent; bone != null && !model.activeInHierarchy; bone = bone.parent)
+            {
+                if (bone.gameObject.activeSelf)
+                    continue;
+                if (bone != view._bone && bone != view._alternativeHolsterBone)
+                    return;
+                bone.gameObject.SetActive(true);
+                if (!bonesTurnedOn.Contains(bone.gameObject))
+                    bonesTurnedOn.Add(bone.gameObject);
+            }
         }
 
         // Restores Tarkov's state: each model back in its pose on its bone, and hidden for your own player as Tarkov has it
