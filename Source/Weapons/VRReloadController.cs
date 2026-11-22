@@ -15,6 +15,7 @@ using UnityEngine;
 using Valve.VR;
 using FirearmController = EFT.Player.FirearmController;
 using TarkovVR.Source.Player.Body;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -26,10 +27,13 @@ namespace TarkovVR.Source.Weapons
     // B (Y when left-handed) drops the magazine straight out of the gun: one press with Manual Reload, a double tap without.
     public static partial class VRReloadController
     {
+        [Tunable("Reload & handles", TunableKind.Switch, "Manual reload master switch.")]
         public static bool enabled = true;
         public static float magazineGrabRadius = 0.08f;     // m from the palm to the gun's magazine to grab it, to a capsule from the magazine's center down to its bottom
         public static float magwellGripMargin = 0f;         // m above the bottom of a held magwell (magwellGripBottoms) where a palm still takes the magazine
         // The mag well track: a magazine in the well only slides along the well's axis, with the hand locked on it
+        [Tunable("Reload & handles", TunableKind.Tune, "The shortest magazine track (the M4's): how far a magazine slides in the well before it comes free, and from "
+            + "where it's caught to seated. Deeper magwells get their own, longer.", Unit = "m")]
         public static float railLength = 0.05f;             // m a magazine slides in the well: from seated until it comes free, or from the top to seated
         public static float magazineCatchDistance = 0.01f;  // m (Manual Reload) past this the mag catch no longer holds the magazine, whether B is held or not
         public static float railCaptureRadius = 0.04f;      // m from the magazine top to the track that still catches a magazine being put in
@@ -41,15 +45,24 @@ namespace TarkovVR.Source.Weapons
         public static float pistolCatchReach = 0.11f;       // m below seated where the track catches it (about its tip at the bottom of the grip)
         public static float pistolCatchRadius = 0.05f;      // m off the track that still catches it
         public static float railExitMargin = 0.02f;         // m past the top of the track before a magazine being put in comes off it
+        [Tunable("Reload & handles", TunableKind.Switch, "Each gun's magazine track as long as its magwell is deep (from its own mag-in animation): a magazine is caught "
+            + "at the magwell's mouth and has to clear the whole well coming out (SR-2M, AA-12, Uzi, MP9 about 12 cm). Off: "
+            + "the M4's 5 cm track on every rifle.")]
         public static bool magwellDepthTracks = true;       // a gun with a deeper magwell than the M4's gets a longer track (false = railLength on every gun)
         public static float railLateralEscape = 0.10f;      // m the controller moves sideways off the track before the hand lets go of it
         // s the rendered hand takes to go from a part of the gun back to the controller, eased in and out
+        [Tunable("Reload & handles", TunableKind.Tune, "How long a hand takes to get back to the controller after letting go of a part (eased in and out).", Unit = "s")]
         public static float handReleaseTime = 0.16f;
+        [Tunable("Reload & handles", TunableKind.Tune, "How long a hand takes to move onto a gun part's grip (eased in and out).", Unit = "s")]
         public static float handSnapTime = 0.12f;           // s a hand takes to move onto a part's grip, eased in and out
         // A hand locked on a part of the gun (the handle, a slide, the bolt, a magazine on the track, the MDR's deflector) starts in the
         // animation's pose. It then turns about the point it holds by a share of the controller's turn since the grab, easing toward a
         // ceiling instead of stopping at it, because the fingers are shaped around the part. A ceiling of 0 = rigid.
+        [Tunable("Reload & handles", TunableKind.Tune, "The most a hand locked onto a gun part turns about its grip, off the animation's pose it starts on. It eases "
+            + "toward this rather than stopping at it. 0 = rigid.", Unit = "°")]
         public static float handWiggleDegrees = 6f;         // deg, the ceiling
+        [Tunable("Reload & handles", TunableKind.Tune, "Share of your controller's turn since the grab that the locked hand follows while the turn is small (bigger "
+            + "turns ease toward the ceiling above). 1 = one to one.")]
         public static float handWiggleShare = 0.4f;         // of the controller's turn, while it's small
         public static float gripEaseRate = 10f;             // 1/s a free magazine settles into the animation's grip
         public static Vector3 chestPouchOffset = new Vector3(0f, -0.40f, 0.03f);    // chest pouch zone center from the eyes looking level, body frame, anchored at the neck
@@ -57,20 +70,35 @@ namespace TarkovVR.Source.Weapons
         public static Vector3 newMagazineHoldPosition = new Vector3(-0.10f, 0.02f, 0.11f);    // off hand local, used until a magazine is pulled off a gun
         public static Vector3 newMagazineHoldRotation = new Vector3(320f, 250f, 265f);        // off hand local euler, same
         public static float fingerBlendRate = 12f;          // 1/s ease of that finger pose in and out
+        [Tunable("Reload & handles", TunableKind.Tune, "How fast the fingers go from one held pose to the next (a grab's pre-shape to its grip, a magazine's pull grip "
+            + "to its insert grip).", Unit = "/s")]
         public static float fingerPoseSwitchRate = 14f;     // 1/s ease from one held finger pose to the next
         // When the hand reaches for a part of the gun (a charging handle, a bolt, the gun's magazine), the fingers shape toward its grip.
         // The shaping starts preGrabReach m outside the part's grab zone and reaches preGrabShape at its edge. 0 = none.
+        [Tunable("Reload & handles", TunableKind.Tune, "How far the fingers shape toward a gun part's grip as the hand reaches the edge of its grab zone (charging "
+            + "handle, bolt knob, the magazine on the gun). 0 = off.")]
         public static float preGrabShape = 0.6f;
+        [Tunable("Reload & handles", TunableKind.Tune, "How far outside a part's grab zone that shaping starts.", Unit = "m")]
         public static float preGrabReach = 0.12f;
         public static float dropAngularSpeed = 3f;          // rad/s tumble on a dropped magazine
         public static float soundHapticsStrength = 1f;
         public static float soundHapticsIdleStop = 0.5f;    // s after a sound ends before the audio tap is removed (the gun returns its audio source to the pool 1 s after)
+        [Tunable("Reload & handles", TunableKind.View, "Show the gun zones you reach for, each green while a hand that may use it is inside, each only while it can be "
+            + "used: magazine on the gun (blue capsule), chest pouch (yellow), top of the well while holding a magazine "
+            + "(blue), charging handle (orange capsule), side knob (orange), partly-out magazine (magenta), bolt and bolt "
+            + "catch (purple), jammed case at the port (yellow), MDR deflector (light blue), round load point (pink), a held "
+            + "shotgun shell's loading port (pink) and ejection port (orange). The handle zones only show on guns that take a "
+            + "detachable magazine.", Suggested = true)]
         public static bool debugZones = false;             // spheres: grab zone (blue), chest pouch (yellow), mag well seat radius (green)
+        [Tunable("Reload & handles", TunableKind.Log, "Log lines for magazines, handles, bolts and malfunctions.", Suggested = true)]
         public static bool debugLog = false;
         private static void LogAction(string message) { if (debugLog) Plugin.MyLog.LogInfo(message); }
         // As a FIKA client, a move runs in this game only when the host answers, which can be any time later (ModSupport/FikaHostWait).
         // None of this applies when hosting or in single player.
+        [Tunable("Reload & handles", TunableKind.Tune, "Co-op, joined: how long a magazine move may wait for the host's answer before it's given up (otherwise 2 s).", Unit = "s")]
         public static float hostWaitLimit = 10f;            // s a move may wait on the host's answer before it's given up (2 s otherwise)
+        [Tunable("Reload & handles", TunableKind.Log, "Co-op, joined to someone else's game: one line per magazine move (sent, landed after N ms, finished; given up; "
+            + "refused; Tarkov started an operation we weren't waiting for). Hosting: nothing.")]
         public static bool coopLog = true;                  // one line per move: sent, landed after N ms, finished / given up / Tarkov started another
         private static void CoopLog(string message) { if (coopLog) Plugin.MyLog.LogInfo("[VRReload] co-op: " + message); }
         private static bool CoopClient => ModSupport.CoopHost.IsClient;
@@ -329,7 +357,6 @@ namespace TarkovVR.Source.Weapons
 
         private static readonly List<Magazine> reachableMagazines = new List<Magazine>();
         private static readonly List<Renderer> magazineRenderers = new List<Renderer>();
-        private static GameObject grabZoneViz, pouchZoneViz, wellZoneViz;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Called every frame from the top of HandsInteractionController.Update
@@ -467,8 +494,6 @@ namespace TarkovVR.Source.Weapons
 
             bool reaching = false;
             OffHandAtChargingHandle = false;
-            SetZoneViz(ref Malfunctions.jamPortZoneViz, false, Vector3.zero, 0f, Color.clear);   // InJamPortZone shows it again where it applies
-            SetZoneViz(ref Deflector.deflectorZoneViz, false, Vector3.zero, 0f, Color.clear); // InDeflectorZone too
             if (!handBusy && CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
             {
                 // A belt gun's scope latch, cover and belt first (VRReloadController.Belt): the trigger there is theirs
@@ -3280,17 +3305,8 @@ namespace TarkovVR.Source.Weapons
             bool show = debugZones && TryGetMagazineGun(out firearmController, out weapon, out magazineSlot);
             if (!show)
             {
-                SetZoneViz(ref grabZoneViz, false, Vector3.zero, 0f, Color.clear);
-                SetZoneViz(ref pouchZoneViz, false, Vector3.zero, 0f, Color.clear);
-                SetZoneViz(ref wellZoneViz, false, Vector3.zero, 0f, Color.clear);
-                SetZoneViz(ref PartlyOut.belowWellZoneViz, false, Vector3.zero, 0f, Color.clear);
                 // A semi-auto shotgun's bolt handle has its zone too (VRReloadController.Shotgun)
-                if (!Shotgun.ShowShotgunHandleZone())
-                {
-                    SetZoneViz(ref ChargingHandle.handleZoneViz, false, Vector3.zero, 0f, Color.clear);
-                    SetZoneViz(ref ChargingHandle.otherKnobZoneViz, false, Vector3.zero, 0f, Color.clear);
-                    SetZoneViz(ref HandleParts.sideHandleZoneViz, false, Vector3.zero, 0f, Color.clear);
-                }
+                Shotgun.ShowShotgunHandleZone();
                 return;
             }
 
@@ -3299,28 +3315,28 @@ namespace TarkovVR.Source.Weapons
             PartlyOut.UpdateBelowWellViz(firearmController, magazineSlot);
             bool inGrabZone = InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
             if (!HoldingMagazine && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom, out _))
-                SetCapsuleZoneViz(ref grabZoneViz, magazineCenter, magazineBottom, magazineGrabRadius, inGrabZone ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.4f, 1f, 0.3f));
-            else
-                SetZoneViz(ref grabZoneViz, false, Vector3.zero, 0f, Color.clear);
+                SetCapsuleZoneViz(magazineCenter, magazineBottom, magazineGrabRadius, inGrabZone ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.4f, 1f, 0.3f));
 
             bool hasPouchCenter = TryGetChestPouchCenter(out Vector3 pouchCenter);
-            SetZoneViz(ref pouchZoneViz, hasPouchCenter, pouchCenter, chestPouchRadius,
+            SetZoneViz(hasPouchCenter, pouchCenter, chestPouchRadius,
                 InChestPouchZone(palm) ? new Color(0f, 1f, 0f, 0.25f) : new Color(1f, 0.9f, 0f, 0.25f));
 
             // The top of the track while holding a magazine: green on it, blue off it
             bool showTrack = HoldingMagazine && magazineWell != null;
             Vector3 trackTop = showTrack ? magazineWell.position + (heldRockIn != null ? RockInMagazines.HookAxisWorld() : RailAxisWorld()) * InsertTrackLength : Vector3.zero;
-            SetZoneViz(ref wellZoneViz, showTrack, trackTop, railCaptureRadius, onRail ? new Color(0f, 1f, 0.4f, 0.4f) : new Color(0f, 0.4f, 1f, 0.4f));
+            SetZoneViz(showTrack, trackTop, railCaptureRadius, onRail ? new Color(0f, 1f, 0.4f, 0.4f) : new Color(0f, 0.4f, 1f, 0.4f));
         }
 
-        private static void SetCapsuleZoneViz(ref GameObject capsule, Vector3 start, Vector3 end, float radius, Color color)
+        // The debugZones shapes (drawn with SPT-VR-DevTools installed; DebugDraw is immediate mode, so a zone not drawn this frame is gone)
+        private static void SetCapsuleZoneViz(Vector3 start, Vector3 end, float radius, Color color)
         {
-            DebugShapes.Capsule(ref capsule, "VRMagazineZone", start, end, radius, color);
+            DebugDraw.Capsule(start, end, radius, color);
         }
 
-        private static void SetZoneViz(ref GameObject sphere, bool show, Vector3 position, float radius, Color color)
+        private static void SetZoneViz(bool show, Vector3 position, float radius, Color color)
         {
-            DebugShapes.Sphere(ref sphere, "VRMagazineZone", show, position, radius, color);
+            if (show)
+                DebugDraw.Sphere(position, radius, color);
         }
     }
 }

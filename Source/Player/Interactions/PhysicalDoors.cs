@@ -11,6 +11,7 @@ using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
 using TarkovVR.Source.Player.Body;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -52,9 +53,12 @@ namespace TarkovVR.Source.Player.Interactions
         // character controller pushes the body out of a door's colliders at any speed, which drags the shoulder off the held handle.
         // true = the body walking into a door that's free to swing (not latched, not locked, no hand on it) pushes it out of the way,
         // as the gun and the free hands do. A latched or locked door still stops the body.
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "Walking into a door that's free to swing (not latched, not locked, no hand on it) pushes it open, like the gun "
+            + "and your hands do. Off: the body only gets stopped by doors, as before.")]
         public static bool bodyPushesDoors = true;
         // m ahead of the body's step at which the door already gives. The character controller stops the body at a door's surface,
         // so it would never sink into one while walking with the stick.
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How far ahead of your step a door already gives. More = doors move earlier, before you touch them.", Unit = "m")]
         public static float bodyContactMargin = 0.03f;
         public static float bodyPushMaxTurn = 30f;      // deg a door turns for the body in one frame at most
         // A released door coasts on its hinges, slowed by their friction (a steady deceleration) and air drag (growing with speed squared)
@@ -260,8 +264,6 @@ namespace TarkovVR.Source.Player.Interactions
             for (int i = 0; i < keyHolds.Length; i++)
             {
                 UpdateKeyLatch(keyHolds[i]);
-                if (!keyDebugViz || keyHolds[i].state != KeyState.InHand)
-                    HideKeyViz(keyHolds[i]);
             }
         }
 

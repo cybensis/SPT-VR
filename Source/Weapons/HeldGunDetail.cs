@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using EFT;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -12,9 +13,13 @@ namespace TarkovVR.Source.Weapons
     internal static class HeldGunDetail
     {
         // false = every part is released back to Unity's LOD choice
+        [Tunable("Visuals", TunableKind.Switch, "Whatever is in your hands (gun, knife, grenade) always shows its detailed model, so iron sights don't turn "
+            + "coarse when you hold the gun away from your face. Off: the game picks the model by distance, as before.")]
         public static bool enabled = true;
         // Re-scan for attachments added / taken off while held; the hands change itself is caught every frame
+        [Tunable("Visuals", TunableKind.Tune, "How often it looks for attachments put on or taken off while you hold the gun.", Unit = "s")]
         public static float rescanInterval = 0.5f;
+        [Tunable("Visuals", TunableKind.Log, "A line whenever parts of the held item are put on full detail or let go.")]
         public static bool debugLog = false;
 
         private static Transform heldRoot;

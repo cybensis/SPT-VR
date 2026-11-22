@@ -8,6 +8,7 @@ using TarkovVR.Source.Settings;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
 using TarkovVR.Source.Player.Body;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -181,7 +182,6 @@ namespace TarkovVR.Source.Weapons
         private static ShotgunData heldShell;               // the gun's data while the held round is a shell
         private static Shotgun.ShellPath shellPath;                 // the path it's on, null while it's in the hand
         private static bool shellCommitted;                 // the shell is in: the inventory move ran
-        private static GameObject tubeZoneViz, portZoneViz;
 
         // From UpdateHeldRound while the round held is a shell
         private static void UpdateHeldShell(bool gripReleased, bool gunHandGripReleased)
@@ -209,8 +209,6 @@ namespace TarkovVR.Source.Weapons
                 Shotgun.UpdateShellZones(firearmController, seat: true);
                 return;
             }
-            SetZoneViz(ref tubeZoneViz, false, Vector3.zero, 0f, Color.clear);
-            SetZoneViz(ref portZoneViz, false, Vector3.zero, 0f, Color.clear);
             Shotgun.UpdateShellOnPath(firearmController, released);
         }
 
@@ -265,19 +263,29 @@ namespace TarkovVR.Source.Weapons
 
         public static class Shotgun
         {
+            [Tunable("Shotguns", TunableKind.Tune, "How close the held shell must come to where a port's path starts to go onto it (debugZones: pink = loading "
+                + "port, orange = ejection port).", Unit = "m")]
             public static float shellCaptureRadius = 0.06f;     // m, how close the held shell must be to a path's start to go onto that path
+            [Tunable("Shotguns", TunableKind.Tune, "Share of the path past which the shell is in and goes the rest of the way itself.")]
             public static float shellCommit = 0.45f;            // fraction of the path after which the shell is in and goes the rest on its own
+            [Tunable("Shotguns", TunableKind.Tune, "How far your hand can be off the path before a shell that isn't in yet comes back out into the hand.", Unit = "m")]
             public static float shellLetGoDistance = 0.1f;      // m the hand can be off the path before a shell not yet in comes back out
+            [Tunable("Shotguns", TunableKind.Tune, "How fast it goes the rest of the way once it's in.", Unit = "m/s")]
             public static float shellFinishSpeed = 0.35f;       // m/s for the rest of the way once it's in
+            [Tunable("Shotguns", TunableKind.Tune, "The fastest the shell follows your push along the path (no jumps).", Unit = "m/s")]
             public static float shellFollowSpeed = 1.2f;        // m/s, the fastest the shell follows the hand along the path (no jumps)
+            [Tunable("Shotguns", TunableKind.Tune, "How long the shell takes to move from your hand onto the path.", Unit = "s")]
             public static float shellSnapTime = 0.08f;          // s the shell eases from the hand onto the path
             // m the support hand comes back before the pump moves
+            [Tunable("Shotguns", TunableKind.Tune, "How far the support hand comes back before the pump moves (bigger = harder to pull by accident).", Unit = "m")]
             public static float pumpDeadzone = 0.035f;
+            [Tunable("Shotguns", TunableKind.Tune, "How quickly the closed pump's rest point follows a slow drift of your hands, so it never creeps open.", Unit = "s")]
             public static float pumpRestFollowTime = 0.4f;      // s the closed pump's rest follows a slow drift of the hands (no creeping open)
             // After a shot the pump is worked by hand: Tarkov's pump cycle is skipped (BoltActionPatches), the fired shell stays in, and the
             // trigger is dead until the pump has been all the way back.
             // The support hand rides the pump: Tarkov's IK holds it on the foregrip's grip pose, which isn't one of the stroke's bones, so
             // while the pump is open the left arm aims at our point on the pump instead.
+            [Tunable("Shotguns", TunableKind.Tune, "Share of the stroke that counts as all the way back (throws out a chambered shell, opens the ejection port).")]
             public static float pumpFullBack = 0.92f;           // fraction of the stroke that counts as all the way back
             // Action lock: closed on a cocked hammer, the pump stays shut until a shot or a dry fire drops the hammer, or the slide release
             // (the mag release button, B on the gun hand) frees it, so a live shell isn't pumped out by accident. Shoot, pump, shoot needs no
@@ -286,7 +294,10 @@ namespace TarkovVR.Source.Weapons
             public static float pumpLockFeel = 0.01f;           // m past the deadzone the hand pulls against the lock before it's felt
             // A semi-auto's shell into the tube with the bolt closed on an empty chamber stays in the tube until the bolt handle is racked
             // (WaitingForRack, like a magazine put in on a closed bolt). false = it goes straight into the chamber.
+            [Tunable("Shotguns", TunableKind.Switch, "Semi-autos: a shell pushed into the tube with the bolt closed on an empty chamber stays in the tube until you "
+                + "rack the bolt handle. Off: it goes straight into the chamber.")]
             public static bool semiShellWaitsForHandle = true;
+            [Tunable("Shotguns", TunableKind.Log, "Log lines for shells (taken, onto a path, in), pump strokes, the gun's clip family and its sound names.")]
             public static bool shotgunDebugLog = true;          // grabs, paths, strokes
             public static bool ShellInOffHand => HoldingShell && !roundInGunHand;
             public static bool InsertingShell => HoldingShell && shellPath != null;
@@ -495,8 +506,8 @@ namespace TarkovVR.Source.Weapons
                 Vector3 tubeStart = tubeRoom ? FromFrame(frame, data.tube.keys[0].shellPosition) : Vector3.zero;
                 bool atPort = portOpen && (shell - portStart).sqrMagnitude <= shellCaptureRadius * shellCaptureRadius;
                 bool atTube = tubeRoom && (shell - tubeStart).sqrMagnitude <= shellCaptureRadius * shellCaptureRadius;
-                SetZoneViz(ref portZoneViz, debugZones && portOpen, portStart, shellCaptureRadius, atPort ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.6f, 0.1f, 0.3f));
-                SetZoneViz(ref tubeZoneViz, debugZones && tubeRoom, tubeStart, shellCaptureRadius, atTube ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.5f, 0.8f, 0.3f));
+                SetZoneViz(debugZones && portOpen, portStart, shellCaptureRadius, atPort ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.6f, 0.1f, 0.3f));
+                SetZoneViz(debugZones && tubeRoom, tubeStart, shellCaptureRadius, atTube ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.5f, 0.8f, 0.3f));
                 if (!seat)
                     return;
                 if (atPort && (!atTube || (shell - portStart).sqrMagnitude <= (shell - tubeStart).sqrMagnitude))

@@ -1,5 +1,6 @@
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -10,20 +11,33 @@ namespace TarkovVR.Source.Weapons
     // the gun and the hands on it move, the controller doesn't.
     internal static class GunJolt
     {
+        [Tunable("Reload & handles", TunableKind.Switch, "A part hitting its stop jolts the gun with its momentum: a magazine seated, a bolt or slide slammed home, a "
+            + "bolt-action bolt pushed home, a pump closed. The gun rocks in your hand on the hold below and settles.")]
         public static bool enabled = true;
+        [Tunable("Reload & handles", TunableKind.Tune, "How big the jolts are: 1 = the parts' real masses and speeds, 2 = twice that, 0 = none.")]
         public static float joltGain = 1f;              // scale on the physical response; 1 = the real masses and speeds
         // The hand's hold: how stiffly the gun is kept at the controller pose, in position and in turn about the grip. It is a stiffness,
         // so a light gun comes back quicker and moves further for the same knock (a 3.5 kg rifle: 3.5 Hz, and 3 Hz turning)
+        [Tunable("Reload & handles", TunableKind.Tune, "How stiffly your hand holds the gun in place, against its weight: a 3.5 kg rifle comes back at 3.5 Hz, a "
+            + "pistol quicker. Lower = a softer hold that gives further.", Unit = "N/m")]
         public static float holdStiffness = 1700f;      // N/m
+        [Tunable("Reload & handles", TunableKind.Tune, "How quickly the jolt dies out: 1 = straight back, lower = it rocks a couple of times.")]
         public static float holdDamping = 0.45f;        // damping ratio (1 = it comes straight back, lower = it rocks)
+        [Tunable("Reload & handles", TunableKind.Tune, "The same for the gun turning about the grip (a 3.5 kg rifle: 3 Hz).", Unit = "N m/rad")]
         public static float turnStiffness = 90f;        // N m/rad, about the grip across the bore
+        [Tunable("Reload & handles", TunableKind.Tune, "How quickly the turn dies out.")]
         public static float turnDamping = 0.45f;
+        [Tunable("Reload & handles", TunableKind.Tune, "The stiffest the hold gets (a pistol turning).", Unit = "Hz")]
         public static float maxHoldFrequency = 25f;     // Hz, cap on either spring's frequency (reached by a pistol's turn)
         // The gun is modelled as a rod along its bore: how far the stock runs behind the grip, and how hard it is to roll about the bore
         public static float stockBehindGrip = 0.25f;    // m (pistols: none)
         public static float boreRadius = 0.05f;         // m, the radius of gyration about the bore
+        [Tunable("Reload & handles", TunableKind.Tune, "The most a jolt moves the grip.", Unit = "m")]
         public static float maxDistance = 0.04f;        // m, the most the jolt may move the grip
+        [Tunable("Reload & handles", TunableKind.Tune, "The most a jolt turns the gun.", Unit = "°")]
         public static float maxTurn = 6f;               // deg, the most it may turn the gun
+        [Tunable("Reload & handles", TunableKind.Log, "A [GunJolt] line per jolt: what hit, the impulse, how far from the grip, and the push and spin it gave the "
+            + "gun.")]
         public static bool debugLog = false;            // one line per jolt: the impulse, where, and the gun's push and turn from it
 
         // The jolt's state, in the gun bone's frame: the grip's move and the gun's turn about it (a rotation vector)

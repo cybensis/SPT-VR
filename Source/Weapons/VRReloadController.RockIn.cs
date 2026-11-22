@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -157,6 +158,7 @@ namespace TarkovVR.Source.Weapons
 
             // A belt box going in is caught once hooked: its well point near where it sits at the full rock (around the hinge, which is off
             // the well) and turned about that way. AK magazines keep their own catch along the track.
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "How close to its hooked spot a box going in has to be brought to catch on the hinge.", Unit = "m")]
             public static float rockHookCatchRadius = 0.06f;   // m from the box's well point to its hooked spot
             internal static bool HookedOnPivot(Transform propTransform)
             {

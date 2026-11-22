@@ -3,6 +3,7 @@ using Diz.LanguageExtensions;
 using EFT.InventoryLogic;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -15,11 +16,16 @@ namespace TarkovVR.Source.Weapons
     {
         public static class MagazineKnockOut
         {
+            [Tunable("Reload & handles", TunableKind.Tune, "How close the catch must be to the new magazine's body to count as touching it (debugZones shows it, orange).", Unit = "m")]
             public static float knockContactRadius = 0.03f;     // m from the catch to the held magazine's body that counts as touching it
+            [Tunable("Reload & handles", TunableKind.Tune, "How fast the new magazine must move forward into the catch (against the gun) to knock. Lower = easier.", Unit = "m/s")]
             public static float knockSpeed = 0.35f;             // m/s the held magazine must move forward (toward the muzzle) against the gun
+            [Tunable("Reload & handles", TunableKind.Tune, "Share of your push the old magazine flies off with.")]
             public static float knockTransfer = 0.9f;           // share of that push the old magazine leaves with
             public static float knockMaxSpeed = 4f;             // m/s cap on the push it's given
             public static float knockDrop = 0.3f;               // m/s down on top (it falls out of the well as the catch lets go)
+            [Tunable("Reload & handles", TunableKind.Tune, "How hard it rocks off its hinge as it goes (times the push over the catch's lever; capped at knockMaxSpin 7 "
+                + "rad/s).")]
             public static float knockSpin = 1f;                 // its rock off the hinge = the push over the catch's lever to the hinge, times this
             public static float knockMaxSpin = 7f;              // rad/s cap (Unity's own default cap on a body's spin)
 
@@ -30,7 +36,6 @@ namespace TarkovVR.Source.Weapons
             private static float knockCatchLastTime = -1f;
             private static GameObject knockBodyFor;
             private static MeshFilter knockBody;                // the held magazine's body (its biggest mesh)
-            private static GameObject knockZoneViz;
 
             // Runs every Tick, after the grabs: checks the held new magazine against the gun's catch
             internal static void TickKnockOut()
@@ -81,7 +86,7 @@ namespace TarkovVR.Source.Weapons
                 }
                 finally
                 {
-                    SetZoneViz(ref knockZoneViz, showZone, zoneAt, knockContactRadius, new Color(1f, 0.5f, 0f, 0.35f));
+                    SetZoneViz(showZone, zoneAt, knockContactRadius, new Color(1f, 0.5f, 0f, 0.35f));
                 }
             }
 

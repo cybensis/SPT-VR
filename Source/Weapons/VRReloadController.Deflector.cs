@@ -4,6 +4,7 @@ using EFT.InventoryLogic;
 using TarkovVR.Source.Player.Interactions;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -90,7 +91,6 @@ namespace TarkovVR.Source.Weapons
             private static Quaternion deflectorClosedLocalRotation;
             private static Vector3 deflectorFreeEndLocal;           // its free end, in its own frame
             private static Transform deflectorGrab;                 // our transform on that end, which the hand latches onto
-            internal static GameObject deflectorZoneViz;
             public static bool DeflectorInGunHand => HoldingDeflector && deflectorInGunHand;
             internal static bool deflectorInGunHand;
             internal static bool deflectorOnRightArm;
@@ -100,6 +100,7 @@ namespace TarkovVR.Source.Weapons
             private static Quaternion controllerRotationAtDeflectorGrabInGun;
             // The MDR's own sounds. CoverOpen = mdr_jam_cover_take (the latch letting go), played as it leaves shut. CoverClose =
             // mdr_jam_cover_putinplace (~1 s of swing and click), played as it starts back.
+            [Tunable("Malfunctions", TunableKind.Tune, "MDR deflector: how far it swings back from the most it was open before its closing sound plays.", Unit = "°")]
             public static float deflectorCloseSoundTurn = 4f;      // deg back from its widest opening that starts the close sound
             private static bool deflectorOpenSounded, deflectorCloseSounded;
             private static float deflectorPeakAngle, deflectorCloseSoundAngle;
@@ -185,7 +186,7 @@ namespace TarkovVR.Source.Weapons
                 Vector3 touch = DeflectorGunFrame(out Vector3 gunPosition, out Quaternion gunRotation) ? gunPosition + gunRotation * DEFLECTOR_TOUCH_IN_GUN : deflectorGrab.position;
                 Vector3 freeEnd = deflectorGrab.position;
                 bool atIt = HandTouchesCapsule(gunHand, touch, touch, deflectorGrabRadius) || HandTouchesCapsule(gunHand, freeEnd, freeEnd, deflectorGrabRadius);
-                SetZoneViz(ref deflectorZoneViz, debugZones, touch, deflectorGrabRadius, atIt ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.6f, 1f, 0.3f));
+                SetZoneViz(debugZones, touch, deflectorGrabRadius, atIt ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.6f, 1f, 0.3f));
                 return atIt;
             }
 

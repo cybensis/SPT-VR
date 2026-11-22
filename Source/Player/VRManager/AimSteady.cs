@@ -2,6 +2,7 @@ using EFT.InventoryLogic;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -14,20 +15,44 @@ namespace TarkovVR.Source.Player.VRManager
     // does), so a pan after a moving target is steadied like a still hand, without lag; only turning away from that steady turn opens it.
     public static class AimSteady
     {
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "Aim Steadying (VR > Weapons): through sights, hand shake is smoothed while your hand is nearly still, not "
+            + "while it moves; stronger with the zoom and holding breath. Holding breath it also steadies a steady pan "
+            + "(following a moving target). Off: the old hold-breath smoothing (Hold Breath Sensitivity).")]
         public static bool enabled = true;              // false = a plain slerp while holding breath ("Hold Breath Sensitivity" setting)
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How hard a still hand is smoothed through a 1x sight (divided by the zoom). Lower = steadier, but small aim "
+            + "corrections settle slower.", Unit = "Hz")]
         public static float stillCutoff = 4f;           // Hz a still hand is filtered at through a 1x sight (/ the magnification); lower = steadier, slower to settle
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "The heaviest it ever smooths (a high zoom holding breath).", Unit = "Hz")]
         public static float minCutoff = 0.15f;          // Hz floor (a high zoom)
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How quickly the smoothing gets out of the way as you move. Higher = less lag on a move, more shake left. The "
+            + "most it lags in the sight is about 0.4° at 0.4.", Unit = "Hz per °/s")]
         public static float speedResponse = 0.4f;       // Hz added per deg/s the sight's view turns: higher = less lag moving, more shake left
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How smoothed the hand's turn rate is before it opens the filter. Lower = shake opens it less, a real move a "
+            + "little later.", Unit = "Hz")]
         public static float speedCutoff = 1f;           // Hz the turn rate is smoothed at before it opens the filter (lower = shake opens it less, a move later)
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "Holding breath: x the still smoothing cutoff. Lower = steadier while holding breath.")]
         public static float breathStillScale = 0.25f;   // x the still cutoff while holding breath
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "Holding breath: x how quickly it gets out of the way. Lower = steadier, more lag if you move while holding "
+            + "breath.")]
         public static float breathSpeedScale = 0.25f;   // x the speed response while holding breath (lags a move more)
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "Holding breath, the steadying follows your hand's steady turn: tracking a moving target is steadied like a "
+            + "still aim, with no lag behind your hand. 0 = only a still hand is steadied (a pan trails and shakes), as "
+            + "before; between = part of it.")]
         public static float breathFollowTurn = 1f;      // x the hand's steady turn carried while holding breath: 1 = a steady pan steadied like a still hand, 0 = only a still hand (a pan trails)
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How smoothed the steady turn it follows is. Lower = less of your sway carried along, but a change of pace (the "
+            + "target speeding up) is taken up later.", Unit = "Hz")]
         public static float steadyTurnCutoff = 0.5f;    // Hz the steady turn is low-passed at: lower = less sway carried, a change of pace picked up later
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "Holding breath: how quickly the aim catches up when it ends up off your hand (in the sight), e.g. after the "
+            + "target stops or turns. Higher = less overshoot, more shake left.", Unit = "Hz per °")]
         public static float breathErrorResponse = 1f;   // Hz added per deg the gun is off the hand in the sight, while holding breath: catches up after a stop / turn (less overshoot), more shake left
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "Lungs left (0-1) below which the hold-breath steadying fades out.")]
         public static float breathFadeBelow = 0.4f;     // lungs (0..1) below which the hold-breath steadying fades out
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "x the steadying while you are out of breath.")]
         public static float exhaustedStrength = 0.5f;   // x the steadying while out of breath
         public static float easeTime = 0.2f;            // s it fades in / out as you aim / hold breath
         public static float maxMagnification = 40f;
+        [Tunable("Sling, stock & weight", TunableKind.Log, "An [AimSteady] line a second while aiming: the zoom, breath, the cutoffs, how fast your hand turns in the "
+            + "sight and how far the steadied aim is off it.", Suggested = true)]
         public static bool debugLog = false;            // logs a line a second: magnification, breath, the cutoffs, the hand's turn rate
 
         private static Quaternion filtered = Quaternion.identity;   // in the rig frame

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -17,6 +18,7 @@ namespace TarkovVR.Source.Player.Interactions
         // A hull is each part's furthest vertex in this many directions spread over a sphere. A hull of n points has at most 2n-4 faces,
         // and PhysX cooks at most 255 polygons (more gives its "partial hull" warning on every grab), so 100 gives at most 196.
         // The directions are ~20 deg apart: half a millimetre off on a 6 cm bottle.
+        [Tunable("Loot & hands", TunableKind.Tune, "Points per item shape (keep it 127 or under: PhysX's face limit).")]
         public static int hullDirections = 100;
         public static int preThinPoints = 4000;          // points the grid thinning cuts down to first, so the direction search stays cheap
         public static float hullCellSize = 0.003f;       // m: the thinning grid's first cell

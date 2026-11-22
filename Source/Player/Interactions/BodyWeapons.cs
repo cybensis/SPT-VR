@@ -10,6 +10,7 @@ using TarkovVR.Source.Misc;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -23,14 +24,21 @@ namespace TarkovVR.Source.Player.Interactions
     public static class BodyWeapons
     {
         public static bool enabled = true;
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "Grabbing another gun skips Tarkov's put-away and draw. Off: both play out.")]
         public static bool fastSwitch = true;           // false = Tarkov's put-away and draw animations play out
         public static float grabRadius = 0.13f;         // m, from the RightHand rig transform to a body gun's grip (like ChestHang.regrabRadius)
         public static float gunGrabRadius = 0.06f;      // m, from any point of the hand (palm, fingertips) to a gun's barrel line: grabbing anywhere on it takes it
         public static float switchTimeout = 3f;         // s before a switch that never lands is given up
+        [Tunable("Sling, stock & weight", TunableKind.Log, "A line per grip press of either hand: whether that hand may take a gun now and why not, and each gun on your "
+            + "body's distance and reach (under 1 = in reach).", Suggested = true)]
         public static bool debugLog = false;            // logs every grip press: the zones, each slot's gun and grip distance, why a gun was or wasn't taken
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "Right-handed mode: your left hand's grip takes a gun off your body (chest, shoulder, hip) and holds it "
+            + "left-handed, as it does the slung gun. Off: only the right hand takes them, as before.")]
         public static bool leftHandTakes = true;        // right-handed mode: the left hand takes a gun off the body too, and holds it left-handed
         // true = the grabbed gun's draw is skipped the moment Tarkov starts it (BodyWeaponPatches.SkipDraw), before the animator plays a frame.
         // UpdateSwitch's skip comes a frame later, when the draw's swing-up and sound have already started.
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "The gun you grab off your body skips Tarkov's take-out the moment it starts. Off: skipped a frame later, as "
+            + "before.")]
         public static bool skipDrawAtSpawn = true;
         private static Item lastSwitchItem;
 

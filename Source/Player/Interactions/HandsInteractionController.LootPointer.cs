@@ -8,6 +8,7 @@ using UnityEngine.Rendering;
 using Valve.VR;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Weapons;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -125,6 +126,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static int lootLayerMask = 0;
         private int currentLootMask;
         // Logs overlap/candidate counts once a second.
+        [Tunable("Loot & hands", TunableKind.View, "Draw the palm cone and log each grab.", Suggested = true)]
         public static bool debugLootPointer = false;
         private float lastPointerLog;
         private int lastOverlapCount;
@@ -169,7 +171,6 @@ namespace TarkovVR.Source.Player.Interactions
         private readonly Dictionary<Transform, Quaternion> fingerOutRot = new Dictionary<Transform, Quaternion>();
 
         // Cone-aim debug gizmo (shown while debugLootPointer is on).
-        private GameObject coneOriginViz, coneDirViz, coneEndViz;
 
         //--- Per-frame entry ---------------------------------------------------------
         // Runs the pointer for both hands (the dominant hand only while it's off the gun: empty hands / gun slung or
@@ -653,7 +654,6 @@ namespace TarkovVR.Source.Player.Interactions
 
         private void ClearDots()
         {
-            DestroyConeViz();
             lastMains[0] = null;
             lastMains[1] = null;
             if (lootDots.Count == 0)
@@ -670,33 +670,12 @@ namespace TarkovVR.Source.Player.Interactions
         private void UpdateConeViz(Vector3 palm, Vector3 aim)
         {
             if (!debugLootPointer)
-            {
-                DestroyConeViz();
                 return;
-            }
             Color axisC = new Color(0.2f, 0.9f, 1f, 0.9f);
-            if (coneOriginViz == null) coneOriginViz = CreateMarker(PrimitiveType.Sphere, axisC);
-            if (coneDirViz == null) coneDirViz = CreateMarker(PrimitiveType.Cube, axisC);
-            if (coneEndViz == null) coneEndViz = CreateMarker(PrimitiveType.Sphere, new Color(1f, 0.45f, 0.1f, 0.9f));
-
-            coneOriginViz.transform.position = palm;
-            coneOriginViz.transform.localScale = Vector3.one * 0.02f;
-
             Vector3 direction = aim.sqrMagnitude > 1e-6f ? aim : Vector3.forward;
-            coneDirViz.transform.position = palm + direction * (coneRange * 0.5f);
-            coneDirViz.transform.rotation = Quaternion.LookRotation(direction);
-            coneDirViz.transform.localScale = new Vector3(0.004f, 0.004f, coneRange);
-
-            coneEndViz.transform.position = palm + direction * coneRange;
-            coneEndViz.transform.localScale = Vector3.one * 0.03f;
-        }
-
-        private void DestroyConeViz()
-        {
-            if (coneOriginViz != null) Destroy(coneOriginViz);
-            if (coneDirViz != null) Destroy(coneDirViz);
-            if (coneEndViz != null) Destroy(coneEndViz);
-            coneOriginViz = coneDirViz = coneEndViz = null;
+            DebugDraw.Sphere(palm, 0.01f, axisC, onTop: true);
+            DebugDraw.Line(palm, palm + direction * coneRange, 0.004f, axisC, onTop: true);
+            DebugDraw.Sphere(palm + direction * coneRange, 0.015f, new Color(1f, 0.45f, 0.1f, 0.9f), onTop: true);
         }
 
         //--- Cone aim transforms (one per hand) --------------------------------------

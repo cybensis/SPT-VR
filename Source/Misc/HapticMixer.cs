@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using TarkovVR.Source.Controls;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Misc
 {
@@ -11,6 +12,7 @@ namespace TarkovVR.Source.Misc
     // changes or the last one is about to run out.
     public static class HapticMixer
     {
+        [Tunable("Haptics", TunableKind.Switch, "One mixed buzz per controller. Off: each buzz replaces the last.")]
         public static bool enabled = true;          // false = each one goes straight to the controller, the last replacing the rest
         public static float sendLength = 0.04f;     // s, longest a sent vibration lasts; resent before it runs out while something plays
         public static float resendAmplitude = 0.06f; // resend when the mixed amplitude moves this much...
@@ -19,7 +21,9 @@ namespace TarkovVR.Source.Misc
         public static float layerBlend = 0.35f;     // how much the weaker ones add on top of the strongest
         public static float pulseFade = 0.5f;       // fraction of a pulse spent fading out, so a knock dies away instead of stopping dead (0 = flat)
         // For a hand holding the object being worked on (the gun while the other hand works on it, the can the other hand opens)
+        [Tunable("Haptics", TunableKind.Tune, "How strongly a hand on the gun feels what the other hand does to it.")]
         public static float throughGain = 0.5f;     // it feels the vibration at this strength...
+        [Tunable("Haptics", TunableKind.Tune, "How much lower that felt-through buzz is pitched.")]
         public static float throughPitch = 0.7f;    // ...and at this fraction of the pitch: a solid body carries the thump, not the fine texture
         public static float lowestPitch = 45f;      // Hz; lower barely moves the controller's motor
 

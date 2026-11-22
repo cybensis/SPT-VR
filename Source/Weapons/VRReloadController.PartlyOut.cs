@@ -40,7 +40,6 @@ namespace TarkovVR.Source.Weapons
             private static float partlyOutPosition;
             private static float partlyOutTarget;
             internal static bool railStartedPartlyOut;           // the hand took it while partly out, so pushing it back up seats it
-            internal static GameObject belowWellZoneViz;
 
             internal static bool TryGetBelowWellCapsule(FirearmController firearmController, Slot magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom, out Vector3 zoneEnd)
             {
@@ -176,11 +175,10 @@ namespace TarkovVR.Source.Weapons
                 if (!MagazineSlidesOntoHand || !MagazinePartlyOut || HoldingGunMagazine
                     || !TryGetBelowWellCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom, out Vector3 zoneEnd))
                 {
-                    SetZoneViz(ref belowWellZoneViz, false, Vector3.zero, 0f, Color.clear);
                     return;
                 }
                 bool inReach = OffHandTouchesCapsule(magazineCenter, zoneEnd, belowWellRadius);
-                SetCapsuleZoneViz(ref belowWellZoneViz, magazineCenter, zoneEnd, belowWellRadius, inReach ? new Color(0f, 1f, 0f, 0.25f) : new Color(1f, 0f, 1f, 0.25f));
+                SetCapsuleZoneViz(magazineCenter, zoneEnd, belowWellRadius, inReach ? new Color(0f, 1f, 0f, 0.25f) : new Color(1f, 0f, 1f, 0.25f));
             }
         }
     }

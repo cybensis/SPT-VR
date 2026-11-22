@@ -7,6 +7,7 @@ using TarkovVR.Source.Player.Interactions;
 using UnityEngine;
 using GrenadeHandsController = EFT.Player.GrenadeHandsController;
 using TarkovVR.Source.Player.Body;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -23,17 +24,28 @@ namespace TarkovVR.Source.Weapons
     // after the animator has written it, and restored when the grenade leaves the hands (its model goes back to Tarkov's pool).
     public static class GrenadeHold
     {
+        [Tunable("Grenades", TunableKind.Tune, "How close the off hand's index finger must be to the ring to hook it.", Unit = "m")]
         public static float ringReachRadius = 0.05f;        // m from the off hand's index middle joint to the ring's hook point, to hook it
+        [Tunable("Grenades", TunableKind.Tune, "How far the pin slides along its pull before it's out.", Unit = "m")]
         public static float pinFreeDistance = 0.03f;        // m the pin slides along its pull before it's out (a real pin's prongs)
+        [Tunable("Grenades", TunableKind.Tune, "How far off the pull line the hand can go before the finger slips off the ring.", Unit = "m")]
         public static float ringLateralEscape = 0.12f;      // m the off controller may stray off the pull line before the finger slips out
+        [Tunable("Grenades", TunableKind.Tune, "Speed Tarkov's pin-pull clip is played through at once the pin is out (it's an animation of a pull already "
+            + "done).")]
         public static float animatorRushSpeed = 30f;        // Tarkov's pin-pull clip (1.33 s on every grenade) played through at this speed
+        [Tunable("Grenades", TunableKind.Tune, "How long that lasts (the clip is 1.33 s on every grenade).", Unit = "s")]
         public static float animatorRushTime = 0.07f;       // s
         public static float drawRushTime = 0.05f;           // s of the same rush for the draw clip a slot grab skips (its clip still plays out)
+        [Tunable("Grenades", TunableKind.Tune, "Re-pinning: how far the ring on the finger must first go from the grenade before bringing it back latches it "
+            + "on the pin's hole.", Unit = "m")]
         public static float repinArmDistance = 0.08f;       // m the ring on the finger must first move away from the grenade before bringing it back re-pins
+        [Tunable("Grenades", TunableKind.Tune, "Re-pinning: pulling back out this far while pushing the pin in leaves it out (the ring stays on the finger).", Unit = "m")]
         public static float repinBackOut = 0.02f;           // m of pulling back out while pushing the pin in that lets go (the ring stays on the finger)
         // In the left hand (a grenade it took off the chest) the grenade itself is mirrored, not only the hold, so its pin and ring face
         // the right hand that pulls them. The hand positioner it hangs from is scaled -1 on its x (the controller's left-right), so the
         // hand, grenade and ring are the mirror of the right-hand hold.
+        [Tunable("Grenades", TunableKind.Tune, "How close any point of the other hand must be to the held grenade's middle for its grip to take the grenade "
+            + "over.", Unit = "m")]
         public static float swapRadius = 0.08f;             // m from any point of the other hand to the grenade's middle for its grip to take the grenade over
         // While the pin is out (and while it goes back in), the hand keeps the turn it had when the pull began (KeepHandTurn).
         // The hand follows Tarkov's grip marker, and the armed clip turns that marker.

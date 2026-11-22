@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Text;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -805,6 +806,7 @@ namespace TarkovVR.Source.Player.Interactions
         // Call from UnityExplorer while eating, after tuning the holders live. Prints a factory
         // line ready to paste into Defs (grips from the tuned holders, timings from the live knobs).
         // For Wrapper foods, open the wrapper first.
+        [Tunable("Eating", TunableKind.Action, "While eating: print the tuned food line to paste into the food list.")]
         public static void DumpFoodDef()
         {
             if (!active || def == null) { Plugin.MyLog.LogWarning("[ManualEat] DumpFoodDef: no food is being eaten."); return; }

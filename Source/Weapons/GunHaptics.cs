@@ -5,6 +5,7 @@ using TarkovVR.Source.Misc;
 using TarkovVR.Source.Player.Interactions;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -21,17 +22,22 @@ namespace TarkovVR.Source.Weapons
         }
 
         // Recoil kick on every shot: a sharp snap, then the shove
+        [Tunable("Haptics", TunableKind.Switch, "A kick in the hands on every shot.")]
         public static bool recoilKick = true;
+        [Tunable("Haptics", TunableKind.Tune, "Kick strength for the softest-recoiling guns.")]
         public static float recoilLightest = 0.55f;     // kick strength for the softest-recoiling guns...
+        [Tunable("Haptics", TunableKind.Tune, "Kick strength for the hardest-recoiling guns.")]
         public static float recoilHeaviest = 1f;        // ...and the hardest
         public static float recoilSoftForce = 150f;     // RecoilForceBack mapped onto that range
         public static float recoilHardForce = 700f;
+        [Tunable("Haptics", TunableKind.Tune, "How much of the kick the hand on the handguard feels.")]
         public static float recoilSupportGain = 0.7f;   // share for the hand on the handguard
         public static float recoilSnapPitch = 160f;
         public static float recoilSnapLength = 0.012f;
         public static float recoilShovePitch = 70f;
         public static float recoilShoveLength = 0.06f;
         public static float recoilShoveGain = 0.85f;
+        [Tunable("Haptics", TunableKind.Log, "Each shot's recoil force and the kick it gave.", Suggested = true)]
         public static bool recoilDebugLog = false;      // the gun's recoil force and the kick, every shot
 
         private static bool GunHeld => VRGlobals.player != null && VRGlobals.player.HandsController is EFT.Player.FirearmController;

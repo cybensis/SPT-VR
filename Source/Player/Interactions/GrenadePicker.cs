@@ -3,6 +3,7 @@ using EFT.InventoryLogic;
 using EFT.UI.DragAndDrop;
 using TarkovVR.Source.Controls;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -12,6 +13,7 @@ namespace TarkovVR.Source.Player.Interactions
     // Only works with the pin in.
     public static class GrenadePicker
     {
+        [Tunable("Grenades", TunableKind.Tune, "How far above the holding controller that radial floats (it turns to face you).", Unit = "m")]
         public static float aboveHand = 0.12f;      // m, how high the menu floats over the holding controller (it faces you)
 
         private static GameObject menu;

@@ -1,0 +1,320 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>SPT-VR Debug Lines</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a field-manual reference - sticky search bar, then one ruled list per area; each line carries its own value control and copy button */
+:root {
+  --bg: #f4f5f1;
+  --panel: #ffffff;
+  --fg: #1d221d;
+  --muted: #5f675d;
+  --rule: #d9ddd3;
+  --code-bg: #eceee8;
+  --accent: #a2600c;
+  --accent-soft: #f6e8d4;
+  --focus: #2d6fb8;
+  --tag-test: #9a4d06;  --tag-test-bg: #fbe6cf;
+  --tag-switch: #3c4a3a; --tag-switch-bg: #e3e8de;
+  --tag-log: #255d96;   --tag-log-bg: #dde9f6;
+  --tag-tune: #5f675d;  --tag-tune-bg: #eceee8;
+  --tag-action: #2b6e3f; --tag-action-bg: #dcefe1;
+  --font-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151815; --panel: #1c201c; --fg: #e3e6df; --muted: #9aa294; --rule: #2e342d; --code-bg: #232823;
+    --accent: #e3a148; --accent-soft: #3a2d1a; --focus: #7fb0ea;
+    --tag-test: #f2b469; --tag-test-bg: #3d2b15;
+    --tag-switch: #c4cdbd; --tag-switch-bg: #2a3029;
+    --tag-log: #9cc4ee; --tag-log-bg: #1d2d40;
+    --tag-tune: #aab2a4; --tag-tune-bg: #262b25;
+    --tag-action: #8fd2a3; --tag-action-bg: #1c3324;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151815; --panel: #1c201c; --fg: #e3e6df; --muted: #9aa294; --rule: #2e342d; --code-bg: #232823;
+  --accent: #e3a148; --accent-soft: #3a2d1a; --focus: #7fb0ea;
+  --tag-test: #f2b469; --tag-test-bg: #3d2b15;
+  --tag-switch: #c4cdbd; --tag-switch-bg: #2a3029;
+  --tag-log: #9cc4ee; --tag-log-bg: #1d2d40;
+  --tag-tune: #aab2a4; --tag-tune-bg: #262b25;
+  --tag-action: #8fd2a3; --tag-action-bg: #1c3324;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--panel); }
+.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--panel); border-bottom: 1px solid var(--rule); }
+header.bar .wrap { padding-block: 12px 10px; display: grid; gap: 10px; }
+.titlerow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 24px; letter-spacing: 0.02em; margin: 0; text-wrap: balance; }
+.howto { color: var(--muted); font-size: 13px; margin: 0; min-width: 0; }
+.howto b { color: var(--fg); font-weight: 600; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+input[type="search"] { flex: 1 1 220px; min-width: 0; font: inherit; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg); color: var(--fg); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 12px var(--font-body); padding: 4px 10px; border-radius: 999px; border: 1px solid var(--rule); background: var(--bg); color: var(--muted); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
+.changed { margin-left: auto; display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+button { font: inherit; cursor: pointer; }
+.btn { font: 500 12px var(--font-body); padding: 5px 10px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: var(--panel); }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+main .wrap { padding-block: 16px 48px; display: grid; gap: 28px; }
+section h2 { font-family: var(--font-display); font-weight: 600; font-size: 19px; letter-spacing: 0.03em; text-transform: uppercase; margin: 0 0 2px; color: var(--accent); }
+section .blurb { color: var(--muted); font-size: 13px; margin: 0 0 8px; max-width: 70ch; }
+.list { border-top: 1px solid var(--rule); }
+.row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding-block: 10px; border-bottom: 1px solid var(--rule); }
+.row.is-changed { background: linear-gradient(90deg, var(--accent-soft), transparent 70%); }
+.head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.tag { font: 600 10.5px var(--font-body); letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+.tag.test { color: var(--tag-test); background: var(--tag-test-bg); }
+.tag.switch { color: var(--tag-switch); background: var(--tag-switch-bg); }
+.tag.log { color: var(--tag-log); background: var(--tag-log-bg); }
+.tag.tune { color: var(--tag-tune); background: var(--tag-tune-bg); }
+.tag.action { color: var(--tag-action); background: var(--tag-action-bg); }
+.name { font: 500 13.5px var(--font-mono); overflow-wrap: anywhere; min-width: 0; }
+.name .cls { color: var(--muted); }
+.default { margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.what { margin: 0; max-width: 72ch; }
+.line { display: flex; gap: 8px; align-items: stretch; min-width: 0; flex-wrap: wrap; }
+.value { flex: 0 0 auto; display: flex; align-items: center; }
+.value .vec { display: flex; gap: 4px; }
+.value .vec input[type="number"] { width: 5.2em; }
+.value select, .value input[type="number"] { font: 13px var(--font-mono); padding: 5px 6px; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); color: var(--fg); width: 9.5em; }
+.toggle { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.toggle button { border: 0; padding: 5px 10px; font: 12.5px var(--font-mono); background: var(--panel); color: var(--muted); }
+.toggle button[aria-pressed="true"] { background: var(--fg); color: var(--panel); }
+code.cmd { flex: 1 1 320px; min-width: 0; display: block; font: 12.5px/1.5 var(--font-mono); background: var(--code-bg); border-radius: 6px; padding: 6px 9px; overflow-x: auto; white-space: pre; }
+.copy { flex: 0 0 auto; }
+.empty { color: var(--muted); padding: 24px 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="bar">
+  <div class="wrap">
+    <div class="titlerow">
+      <h1>SPT-VR Debug Lines</h1>
+      <p class="howto">UnityExplorer → <b>C# Console</b> → paste a line → <b>Compile</b>. Values last until the game restarts.</p>
+    </div>
+    <div class="controls">
+      <input type="search" id="search" placeholder="Search: handle, sling, grasp, log…" aria-label="Search lines">
+      <div class="chips" id="chips" role="group" aria-label="Areas"></div>
+      <div class="changed"><span id="changedCount">0 edited</span><button class="btn ghost" id="copyChanged" disabled>Copy edited</button></div>
+    </div>
+  </div>
+</header>
+<main><div class="wrap" id="sections"></div></main>
+
+<script>
+// Generated by Tools/debug_panel/gen_debug_panel.py from the [Tunable] markers in the source (and DevTools/FikaSyncKnobs.cs).
+// Internal classes can't be named from the console, so their lines reach the field through HarmonyLib.AccessTools.
+const SECTIONS = /*SECTIONS*/;
+
+const TAG_NAMES = { test: "Test", switch: "Switch", log: "Log", tune: "Tune", action: "Action" };
+const state = new Map();   // row key -> current value
+const edited = new Set();  // rows whose value you changed here (what "Copy edited" copies)
+
+function key(row) { return row.cls + ":" + row.f; }
+function shortClass(cls) { return cls.split(",")[0].split(/[.+]/).pop(); }
+function literal(row, value) {
+  if (row.t === "bool") return value ? "true" : "false";
+  if (row.t === "enum") return row.enumType + "." + value;
+  if (row.t === "int") return String(Math.round(Number(value)));
+  if (row.t === "vec3") return "new UnityEngine.Vector3(" + value.map(n => (Number.isFinite(Number(n)) ? String(Number(n)) : "0") + "f").join(", ") + ")";
+  const n = Number(value);
+  let text = Number.isFinite(n) ? String(n) : "0";
+  return text + "f";
+}
+function lineFor(row, value) {
+  if (row.t === "action") return `HarmonyLib.AccessTools.Method("${row.cls}:${row.f}").Invoke(null, null);`;
+  if (row.internal) return `HarmonyLib.AccessTools.Field(HarmonyLib.AccessTools.TypeByName("${row.cls}"), "${row.f}").SetValue(null, ${literal(row, value)});`;
+  return `${row.cls}.${row.f} = ${literal(row, value)};`;
+}
+function isChanged(row) {
+  return row.t !== "action" && edited.has(key(row));
+}
+function defaultText(row) {
+  if (row.t === "action") return "";
+  const unit = row.unit ? (row.unit === "°" || row.unit === "/s" ? row.unit : " " + row.unit) : "";
+  if (row.t === "vec3") return "default (" + row.d.join(", ") + ")" + unit;
+  return "default " + (row.t === "bool" ? (row.d ? "true" : "false") : row.d + unit);
+}
+
+function copyText(text, button) {
+  const done = () => { const old = button.textContent; button.textContent = "Copied"; setTimeout(() => { button.textContent = old; }, 1200); };
+  const fallback = () => {
+    const area = document.createElement("textarea");
+    area.value = text; area.setAttribute("readonly", ""); area.style.position = "fixed"; area.style.opacity = "0";
+    document.body.appendChild(area); area.select();
+    try { document.execCommand("copy"); done(); } catch (e) { button.textContent = "Select & copy"; }
+    area.remove();
+  };
+  try {
+    navigator.clipboard.writeText(text).then(done, fallback);
+  } catch (e) { fallback(); }
+}
+
+function buildValueControl(row, onChange) {
+  const holder = document.createElement("div");
+  holder.className = "value";
+  const id = "v-" + key(row).replace(/[^A-Za-z0-9]/g, "-");
+  if (row.t === "bool") {
+    const group = document.createElement("div");
+    group.className = "toggle"; group.setAttribute("role", "group"); group.setAttribute("aria-label", row.f);
+    [true, false].forEach(option => {
+      const button = document.createElement("button");
+      button.type = "button"; button.textContent = option ? "true" : "false"; button.id = id + "-" + option;
+      button.setAttribute("aria-pressed", String(state.get(key(row)) === option));
+      button.addEventListener("click", () => {
+        state.set(key(row), option);
+        edited.add(key(row));
+        group.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b === button)));
+        onChange();
+      });
+      group.appendChild(button);
+    });
+    holder.appendChild(group);
+  } else if (row.t === "enum") {
+    const select = document.createElement("select");
+    select.id = id; select.setAttribute("aria-label", row.f);
+    row.options.forEach(option => { const o = document.createElement("option"); o.value = option; o.textContent = option; select.appendChild(o); });
+    select.value = state.get(key(row));
+    select.addEventListener("change", () => { state.set(key(row), select.value); edited.add(key(row)); onChange(); });
+    holder.appendChild(select);
+  } else if (row.t === "float" || row.t === "int") {
+    const input = document.createElement("input");
+    input.type = "number"; input.id = id; input.setAttribute("aria-label", row.f);
+    input.step = row.t === "int" ? "1" : "any";
+    input.value = state.get(key(row));
+    input.addEventListener("input", () => { state.set(key(row), input.value === "" ? row.d : input.value); edited.add(key(row)); onChange(); });
+    holder.appendChild(input);
+  } else if (row.t === "vec3") {
+    const group = document.createElement("div");
+    group.className = "vec"; group.setAttribute("role", "group"); group.setAttribute("aria-label", row.f);
+    ["x", "y", "z"].forEach((axis, index) => {
+      const input = document.createElement("input");
+      input.type = "number"; input.step = "any"; input.id = id + "-" + axis; input.setAttribute("aria-label", row.f + " " + axis);
+      input.value = state.get(key(row))[index];
+      input.addEventListener("input", () => {
+        const value = state.get(key(row)).slice();
+        value[index] = input.value === "" ? row.d[index] : input.value;
+        state.set(key(row), value); edited.add(key(row)); onChange();
+      });
+      group.appendChild(input);
+    });
+    holder.appendChild(group);
+  }
+  return holder;
+}
+
+function render() {
+  const container = document.getElementById("sections");
+  SECTIONS.forEach(section => {
+    const sectionEl = document.createElement("section");
+    sectionEl.dataset.section = section.id;
+    sectionEl.innerHTML = `<h2>${section.title}</h2><p class="blurb">${section.blurb}</p>`;
+    const list = document.createElement("div");
+    list.className = "list";
+    section.rows.filter(row => !row.skip).forEach(row => {
+      // Debug logs and the test switch open on the value you'd set; everything else on its default
+      const start = row.set !== undefined ? row.set : row.d;
+      state.set(key(row), Array.isArray(start) ? start.slice() : start);
+      const rowEl = document.createElement("div");
+      rowEl.className = "row";
+      rowEl.dataset.search = (row.cls + " " + row.f + " " + row.what + " " + section.title + " " + TAG_NAMES[row.tag]).toLowerCase();
+      const head = document.createElement("div");
+      head.className = "head";
+      head.innerHTML = `<span class="tag ${row.tag}">${TAG_NAMES[row.tag]}</span><span class="name"><span class="cls">${shortClass(row.cls)}.</span>${row.f}${row.t === "action" ? "()" : ""}</span><span class="default">${defaultText(row)}</span>`;
+      const what = document.createElement("p");
+      what.className = "what"; what.textContent = row.what;
+      const line = document.createElement("div");
+      line.className = "line";
+      const code = document.createElement("code");
+      code.className = "cmd";
+      const copy = document.createElement("button");
+      copy.type = "button"; copy.className = "btn copy"; copy.textContent = "Copy";
+      const refresh = () => {
+        code.textContent = lineFor(row, state.get(key(row)));
+        rowEl.classList.toggle("is-changed", isChanged(row));
+        updateChanged();
+      };
+      line.appendChild(buildValueControl(row, refresh));
+      line.appendChild(code);
+      line.appendChild(copy);
+      copy.addEventListener("click", () => copyText(code.textContent, copy));
+      rowEl.append(head, what, line);
+      list.appendChild(rowEl);
+      refresh();
+    });
+    sectionEl.appendChild(list);
+    container.appendChild(sectionEl);
+  });
+  const empty = document.createElement("p");
+  empty.className = "empty"; empty.id = "empty"; empty.hidden = true;
+  empty.textContent = "No line matches. Try a class name (ChestHang), a field (graspDebug) or a word like sling.";
+  container.appendChild(empty);
+}
+
+function changedRows() {
+  const rows = [];
+  SECTIONS.forEach(section => section.rows.forEach(row => { if (!row.skip && isChanged(row)) rows.push(row); }));
+  return rows;
+}
+function updateChanged() {
+  const rows = changedRows();
+  const label = document.getElementById("changedCount");
+  if (label) label.textContent = rows.length + " edited";
+  const button = document.getElementById("copyChanged");
+  if (button) button.disabled = rows.length === 0;
+}
+
+let activeSection = "all";
+function applyFilter() {
+  const query = document.getElementById("search").value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll("section[data-section]").forEach(sectionEl => {
+    const sectionMatches = activeSection === "all" || sectionEl.dataset.section === activeSection;
+    let visibleRows = 0;
+    sectionEl.querySelectorAll(".row").forEach(rowEl => {
+      const visible = sectionMatches && (!query || rowEl.dataset.search.includes(query));
+      rowEl.hidden = !visible;
+      if (visible) visibleRows++;
+    });
+    sectionEl.hidden = visibleRows === 0;
+    shown += visibleRows;
+  });
+  document.getElementById("empty").hidden = shown > 0;
+}
+
+function buildChips() {
+  const chips = document.getElementById("chips");
+  [{ id: "all", title: "All" }].concat(SECTIONS).forEach(section => {
+    const chip = document.createElement("button");
+    chip.type = "button"; chip.className = "chip"; chip.textContent = section.title; chip.id = "chip-" + section.id;
+    chip.setAttribute("aria-pressed", String(section.id === activeSection));
+    chip.addEventListener("click", () => {
+      activeSection = section.id;
+      chips.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", String(c === chip)));
+      applyFilter();
+    });
+    chips.appendChild(chip);
+  });
+}
+
+render();
+buildChips();
+document.getElementById("search").addEventListener("input", applyFilter);
+document.getElementById("copyChanged").addEventListener("click", event => {
+  const text = changedRows().map(row => lineFor(row, state.get(key(row)))).join("\n");
+  if (text) copyText(text, event.currentTarget);
+});
+updateChanged();
+</script>
+
+</body></html>

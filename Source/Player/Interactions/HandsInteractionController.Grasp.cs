@@ -2,6 +2,7 @@ using System;
 using EFT.Interactive;
 using RootMotion.FinalIK;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -14,10 +15,13 @@ namespace TarkovVR.Source.Player.Interactions
     // Runs inside each hand's finger pass, on the pose that pass just wrote, and keeps that pass's RecoverAnimated bookkeeping up to date.
     internal partial class HandsInteractionController
     {
+        [Tunable("Loot & hands", TunableKind.Log, "A line per grab: the shape and where it came from, pinch or palm, solve time, each finger's curl and contact.", Suggested = true)]
         public static bool graspDebug = false;                  // logs a line per grab: the shape, the grip, the solve time, each finger's contact
+        [Tunable("Loot & hands", TunableKind.Tune, "How long the fingers take to close on an item.", Unit = "s")]
         public static float graspCloseTime = 0.12f;             // s the fingers take to close on it
         public static float graspOpenTime = 0.1f;               // s to open again on letting go
         public static float graspRetargetTime = 0.06f;          // s a re-solved grip eases over (a hull arriving, the item knocked in the hand)
+        [Tunable("Loot & hands", TunableKind.Tune, "Knuckle bend at a full fist.", Unit = "°")]
         public static float graspMaxCurlDeg = 95f;              // the knuckle's bend in a full fist (the middle joint the same, the tip 0.7 of it)
         public static float graspNoContactCurlDeg = 70f;        // a finger that never reaches the item stops here (relaxed, not a fist)
         public static float graspOpenDeg = 10f;                 // how far a finger may open past its rest pose for an item already against it

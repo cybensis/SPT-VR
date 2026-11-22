@@ -5,6 +5,7 @@ using UnityEngine;
 using Valve.VR;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Body;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -232,19 +233,13 @@ namespace TarkovVR.Source.Player.Interactions
         // bright green dots are the palm probe points. Only the zones the current phase can trigger are drawn:
         // blue = open, yellow = take, red = mouth. A Bag's shake check is drawn as the take sphere at its real
         // hand-to-hand radius (shakeNearDistance).
+        [Tunable("Eating", TunableKind.View, "Show the open (blue), take (yellow) and mouth (red) zones; green when satisfied.", Suggested = true)]
         public static bool debugZones = false;
-
-        private static GameObject zoneOpenViz, zoneTakeViz, zoneEatViz;
-        private static GameObject zoneOpenDot, zoneTakeDot, zoneEatDot;
-        private static GameObject probeHandViz, probeEatViz;
 
         private static void UpdateZoneViz()
         {
             if (!debugZones || manualDone || style == null)
-            {
-                DestroyZoneViz();
                 return;
-            }
             EatStyle s = style;
             Transform head = GetHead();
             Transform openAnchor = HandT(Other(s.openHand)); // the held item rides this hand
@@ -275,70 +270,37 @@ namespace TarkovVR.Source.Player.Interactions
                 : ZoneReached(s.takeHand, Other(s.takeHand), takeZoneOffset, scoopDistance));
             bool eatLit = showEat && EatZoneReached(s.eatHand);
 
-            SetZoneViz(ref zoneOpenViz, "VRZoneOpen", showOpen && openAnchor != null,
+            SetZoneViz(showOpen && openAnchor != null,
                 openC, openDistance, ZoneColor(new Color(0.25f, 0.55f, 1f, 0.25f), openLit));
-            SetZoneViz(ref zoneTakeViz, "VRZoneTake", showTake && takeAnchor != null,
+            SetZoneViz(showTake && takeAnchor != null,
                 takeC, takeRadius, ZoneColor(new Color(1f, 0.85f, 0.2f, 0.25f), takeLit));
-            SetZoneViz(ref zoneEatViz, "VRZoneEat", showEat && head != null,
+            SetZoneViz(showEat && head != null,
                 eatC, eatDistance, ZoneColor(new Color(1f, 0.25f, 0.25f, 0.25f), eatLit));
 
             // Zone center dots (opaque, zone-colored)
-            SetZoneViz(ref zoneOpenDot, "VRZoneOpenDot", showOpen && openAnchor != null, openC, 0.01f, new Color(0.25f, 0.55f, 1f, 0.95f));
-            SetZoneViz(ref zoneTakeDot, "VRZoneTakeDot", showTake && takeAnchor != null, takeC, 0.01f, new Color(1f, 0.85f, 0.2f, 0.95f));
-            SetZoneViz(ref zoneEatDot, "VRZoneEatDot", showEat && head != null, eatC, 0.01f, new Color(1f, 0.25f, 0.25f, 0.95f));
+            SetZoneViz(showOpen && openAnchor != null, openC, 0.01f, new Color(0.25f, 0.55f, 1f, 0.95f));
+            SetZoneViz(showTake && takeAnchor != null, takeC, 0.01f, new Color(1f, 0.85f, 0.2f, 0.95f));
+            SetZoneViz(showEat && head != null, eatC, 0.01f, new Color(1f, 0.25f, 0.25f, 0.95f));
 
             // Probe points (what must enter a sphere): the acting palm for open and take, and the
             // eating palm plus EatProbeOffset for the mouth.
             Hand probeHand = showTake ? takeProbeHand : s.openHand;
             Transform probeT = HandT(probeHand);
-            SetZoneViz(ref probeHandViz, "VRZoneProbeHand", (showOpen || showTake) && probeT != null,
+            SetZoneViz((showOpen || showTake) && probeT != null,
                 probeT != null ? ProbePoint(probeHand) : Vector3.zero, 0.015f, new Color(0.2f, 1f, 0.3f, 0.9f));
             Transform eatHand = HandT(s.eatHand);
-            SetZoneViz(ref probeEatViz, "VRZoneProbeEat", showEat && eatHand != null,
+            SetZoneViz(showEat && eatHand != null,
                 eatHand != null ? eatHand.TransformPoint(PalmOffsetLocal(s.eatHand) + EatProbeOffset(s.eatHand)) : Vector3.zero, 0.015f, new Color(0.2f, 1f, 0.3f, 0.9f));
         }
 
         // The zone sphere's color: its base color, or a stronger green while the trigger condition is met.
         private static Color ZoneColor(Color baseC, bool lit) => lit ? new Color(0.3f, 1f, 0.4f, 0.45f) : baseC;
 
-        // Creates or positions one debug sphere. Its scale is the diameter (the primitive is unit-sized).
-        // The color is set on every call because the lit state changes from frame to frame.
-        private static void SetZoneViz(ref GameObject go, string name, bool show, Vector3 position, float radius, Color color)
+        // One debug sphere this frame (DebugDraw, immediate mode: drawn with SPT-VR-DevTools installed)
+        private static void SetZoneViz(bool show, Vector3 position, float radius, Color color)
         {
-            if (!show) { if (go != null) go.SetActive(false); return; }
-            if (go == null)
-            {
-                go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                go.name = name;
-                UnityEngine.Object.Destroy(go.GetComponent<Collider>()); // visual only, no physics
-                Renderer partRenderer = go.GetComponent<Renderer>();
-                partRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                partRenderer.receiveShadows = false;
-                // A shader that supports alpha; Sprites/Default ships with every Unity build.
-                Shader sh = Shader.Find("Sprites/Default");
-                if (sh == null) sh = Shader.Find("Legacy Shaders/Transparent/Diffuse");
-                if (sh == null) sh = Shader.Find("Standard");
-                partRenderer.material = new Material(sh) { color = color };
-            }
-            go.SetActive(true);
-            go.transform.position = position;
-            go.transform.localScale = Vector3.one * (radius * 2f);
-            go.GetComponent<Renderer>().material.color = color;
-        }
-
-        private static void DestroyZoneViz()
-        {
-            if (zoneOpenViz != null) UnityEngine.Object.Destroy(zoneOpenViz);
-            if (zoneTakeViz != null) UnityEngine.Object.Destroy(zoneTakeViz);
-            if (zoneEatViz != null) UnityEngine.Object.Destroy(zoneEatViz);
-            if (zoneOpenDot != null) UnityEngine.Object.Destroy(zoneOpenDot);
-            if (zoneTakeDot != null) UnityEngine.Object.Destroy(zoneTakeDot);
-            if (zoneEatDot != null) UnityEngine.Object.Destroy(zoneEatDot);
-            if (probeHandViz != null) UnityEngine.Object.Destroy(probeHandViz);
-            if (probeEatViz != null) UnityEngine.Object.Destroy(probeEatViz);
-            zoneOpenViz = zoneTakeViz = zoneEatViz = null;
-            zoneOpenDot = zoneTakeDot = zoneEatDot = null;
-            probeHandViz = probeEatViz = null;
+            if (show)
+                DebugDraw.Sphere(position, radius, color);
         }
 
         // The physical controller for a hand role: dominant is the right controller in normal mode and the

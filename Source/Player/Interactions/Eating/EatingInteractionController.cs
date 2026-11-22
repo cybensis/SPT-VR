@@ -315,7 +315,6 @@ namespace TarkovVR.Source.Player.Interactions
         {
             try { controller?.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed); } catch { }
             UnsubscribePinAfterIk();
-            DestroyZoneViz();
             TarkovVR.Source.Misc.AudioHaptics.Stop(); // stop the audio haptics pump and tap (the controller object is pooled)
             RestoreProps();
             ReleaseArms();

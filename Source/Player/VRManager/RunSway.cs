@@ -1,6 +1,7 @@
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -12,16 +13,26 @@ namespace TarkovVR.Source.Player.VRManager
     // drift so it can't be timed. All of it scales with running speed.
     internal static class RunSway
     {
+        [Tunable("Moving", TunableKind.Switch, "The gun sways while you sprint (only with Disable Run Animation on), so it's hard to aim on the run. Off: the "
+            + "gun stays as steady as when you stand.")]
         public static bool enabled = true;
+        [Tunable("Moving", TunableKind.Tune, "Times every sway amount below. 0.5 = half the sway, 2 = double.")]
         public static float strength = 1f;              // x every amplitude below
+        [Tunable("Moving", TunableKind.Tune, "The nose bobbing up and down with each footstep.", Unit = "°")]
         public static float pitchDegrees = 2f;          // nose up / down, each step
+        [Tunable("Moving", TunableKind.Tune, "Swinging side to side with each stride.", Unit = "°")]
         public static float yawDegrees = 2.5f;          // side to side, each stride
+        [Tunable("Moving", TunableKind.Tune, "Rolling with each stride.", Unit = "°")]
         public static float rollDegrees = 3f;           // rolling, each stride
+        [Tunable("Moving", TunableKind.Tune, "How much of the sway is irregular drift rather than the steady rhythm of your steps (0 = all rhythm, easy to "
+            + "time; 1 = all drift).")]
         public static float driftShare = 0.35f;         // part of each axis that's irregular drift instead of the gait
         public static float driftFrequency = 0.9f;      // Hz of the drift
         public static float slowStepFrequency = 2.2f;   // Hz: steps per second at a slow run...
         public static float fastStepFrequency = 2.9f;   // ...and at fullSwaySpeed
+        [Tunable("Moving", TunableKind.Tune, "Running speed for the full sway and the fastest step rhythm; slower runs sway less.", Unit = "m/s")]
         public static float fullSwaySpeed = 5.5f;       // m/s across the ground for the full sway and the fast step rate
+        [Tunable("Moving", TunableKind.Tune, "The sway times this with your support hand on the gun.")]
         public static float twoHandedScale = 0.8f;      // x the sway while the support hand is on the gun
         public static float fadeInTime = 0.3f;          // s to the full sway once you sprint
         public static float fadeOutTime = 0.25f;        // s back to none when you stop

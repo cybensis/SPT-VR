@@ -3,6 +3,7 @@ using EFT.InventoryLogic;
 using TarkovVR.Source.Misc;
 using TarkovVR.Source.Settings;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -20,26 +21,41 @@ namespace TarkovVR.Source.Player.VRManager
         // Influence = reach x height x posture, each fading from full to zero.
         // Reach (m): the butt's horizontal distance from the line straight down from the neck. A butt in the shoulder pocket sits
         // ~15-18 cm out; a gun held out at arm's length has it 30+ cm ahead.
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "The stock is fully on while the butt is this close (sideways or forward) to the line straight down from your "
+            + "neck. A butt in the shoulder pocket sits about 15–18 cm out.", Unit = "m")]
         public static float fullInfluenceReach = 0.20f;
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "…and fully off from this far out (a gun held out at arm's length has its butt 30 cm or more ahead).", Unit = "m")]
         public static float zeroInfluenceReach = 0.30f;
         // Height (m): how far the butt sits below the neck point. Full between these, fading over heightFade outside them.
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "The highest (negative = above the neck point).", Unit = "m")]
         public static float minBelowNeck = -0.05f;
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "The lowest the butt can sit under your neck and still be fully on (it fades out over heightFade below that).", Unit = "m")]
         public static float maxBelowNeck = 0.40f;
         public static float heightFade = 0.08f;
         // Posture (deg): the gun must point away from you along its line. Measured as the angle between the gun and the line from the neck
         // to a point 1 m down the gun.
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "The gun must point away from you along its line: fully on under this angle…", Unit = "°")]
         public static float fullInfluenceAngle = 25f;
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "…fully off past this one.", Unit = "°")]
         public static float zeroInfluenceAngle = 40f;
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How fast the stock can come on or off at most, so a quick hand move can't jerk the aim.", Unit = "1/s")]
         public static float influenceRate = 6f;      // 1/s, the fastest the influence can change (so a fast hand move can't jerk the aim)
 
         // s, how slowly the resting pivot follows the gun's real butt. Longer = steadier aim, but slower to follow a re-shoulder.
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How slowly the point the gun pivots on follows where the gun's butt really is. Longer = steadier aim (your "
+            + "rear hand's shake filtered out), slower to follow when you re-shoulder.", Unit = "s")]
         public static float pivotFollowTime = 0.35f;
 
         public static float integralStockMinLength = 0.12f; // m behind the grip for a gun without a stock slot to count as stocked
         public static float stockLengthFallback = 0.17f;    // m grip -> buttplate when the measurement finds nothing
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "The weight feel's spring times this with the stock fully on (a braced gun moves less).")]
         public static float braceStiffness = 1.6f;   // WeaponWeightFeel spring x this at full influence (braced = tighter)
         public static bool seatHaptic = false;       // a thunk on the hands on the gun when the stock is fully on
+        [Tunable("Sling, stock & weight", TunableKind.Log, "One line a second: how far the stock is on, where the butt is (out from under your neck, below it), the "
+            + "posture angle, the stock length and why the gun counts as stocked or not.", Suggested = true)]
         public static bool debugLog = false;         // 1/sec state line
+        [Tunable("Sling, stock & weight", TunableKind.View, "Spheres: the zone where the stock is fully on (blue, turning green as it comes on; grey on a gun without a "
+            + "stock), the gun's butt (yellow) and the point the gun pivots on (green).", Suggested = true)]
         public static bool debugViz = false;         // spheres: full-influence zone (blue), the gun's butt (yellow), the resting pivot (green)
 
         private static float influence;
@@ -66,7 +82,6 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 // Detached = the rear hand is off the gun (slung / support-held), so there is no stock butt
                 ResetState();
-                HideViz();
                 return rearWorld;
             }
 
@@ -148,8 +163,6 @@ namespace TarkovVR.Source.Player.VRManager
             Vector3 aimBase = engaged ? Vector3.Lerp(rearHand, pivot, influence) : rearHand;
             if (debugViz && rig != null)
                 DrawViz(rig, neck, butt, pivot, stocked);
-            else
-                HideViz();
             return rig != null ? rig.TransformPoint(aimBase) : aimBase;
         }
 
@@ -327,31 +340,15 @@ namespace TarkovVR.Source.Player.VRManager
 
 
         //--- Debug spheres ------------------------------------------------------------------------------------------------------------
-        private static GameObject zoneSphere;
-        private static GameObject buttSphere;
-        private static GameObject pivotSphere;
-
         private static void DrawViz(Transform rig, Vector3 neck, Vector3 butt, Vector3 pivot, bool stocked)
         {
             // The full-influence zone, drawn at the butt's height under the neck. The zone is really a column; a sphere there shows the same.
             Vector3 zoneCentre = new Vector3(neck.x, butt.y, neck.z);
             Color zoneColor = !stocked ? new Color(0.5f, 0.5f, 0.5f, 0.15f)
                 : Color.Lerp(new Color(0.2f, 0.4f, 1f, 0.15f), new Color(0.2f, 1f, 0.3f, 0.25f), influence);
-            SetSphere(ref zoneSphere, rig.TransformPoint(zoneCentre), fullInfluenceReach, zoneColor);
-            SetSphere(ref buttSphere, rig.TransformPoint(butt), 0.02f, new Color(1f, 0.85f, 0.1f, 0.9f));
-            SetSphere(ref pivotSphere, rig.TransformPoint(pivot), 0.015f, engaged ? new Color(0.1f, 1f, 0.2f, 0.9f) : new Color(0.1f, 1f, 0.2f, 0f));
-        }
-
-        private static void HideViz()
-        {
-            if (zoneSphere != null) zoneSphere.SetActive(false);
-            if (buttSphere != null) buttSphere.SetActive(false);
-            if (pivotSphere != null) pivotSphere.SetActive(false);
-        }
-
-        private static void SetSphere(ref GameObject sphere, Vector3 position, float radius, Color color)
-        {
-            DebugShapes.Sphere(ref sphere, "ShoulderStockViz", true, position, radius, color);
+            DebugDraw.Sphere(rig.TransformPoint(zoneCentre), fullInfluenceReach, zoneColor);
+            DebugDraw.Sphere(rig.TransformPoint(butt), 0.02f, new Color(1f, 0.85f, 0.1f, 0.9f));
+            DebugDraw.Sphere(rig.TransformPoint(pivot), 0.015f, engaged ? new Color(0.1f, 1f, 0.2f, 0.9f) : new Color(0.1f, 1f, 0.2f, 0f));
         }
 
         // The stock coming fully on: a pulse to every hand on the gun (GunHaptics)

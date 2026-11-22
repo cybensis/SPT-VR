@@ -8,6 +8,7 @@ using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -163,8 +164,11 @@ namespace TarkovVR.Source.Weapons
             public static float releaseButtonTime = 0.06f;      // s for the button to go all the way in or out (Tarkov's mag-out: ~0.1)
             // When a pistol magazine is seated with the grip still held, the hand moves on into the two-handed grip: it is eased from the
             // magazine onto EFT's support pose, then switched to two-handing as if the grip were pressed there (VRPlayerManager.TakeSupportGrip)
+            [Tunable("Reload & handles", TunableKind.Switch, "A pistol's magazine seated with the grip still held: the hand moves on into the two-handed grip.")]
             public static bool pistolSupportAfterSeat = true;
+            [Tunable("Reload & handles", TunableKind.Tune, "How long the grip stays held on the seated magazine before the hand moves on.", Unit = "s")]
             public static float pistolSupportDelay = 0.15f;     // s the grip stays held on the seated magazine before the hand moves on
+            [Tunable("Reload & handles", TunableKind.Tune, "The longest that move takes (it hands over as soon as the hand is there).", Unit = "s")]
             public static float pistolSupportMoveTime = 0.3f;   // s the move takes at most (it switches as soon as the hand arrives)
             public static float boltReleaseTime = 0.08f;        // s for the bolt to run forward (Tarkov: the paddle 0.07, then the bolt 0.13)
             public static float boltSlapRadius = 0.07f;         // m from the palm to the bolt catch that counts as a hit
@@ -208,7 +212,6 @@ namespace TarkovVR.Source.Weapons
             private static FirearmController boltCatchFor;
             private static Transform boltCatchPart;
             private static bool palmWasAtBoltCatch;
-            private static GameObject boltCatchZoneViz;
 
             //------------------------------------------------------------------------------------------------------------------------------------------------------------
             // The mag release button
@@ -843,7 +846,7 @@ namespace TarkovVR.Source.Weapons
                     }
                 }
                 palmWasAtBoltCatch = atCatch;
-                SetZoneViz(ref boltCatchZoneViz, debugZones && hasCatchPoint, catchPoint, boltSlapRadius,
+                SetZoneViz(debugZones && hasCatchPoint, catchPoint, boltSlapRadius,
                     atCatch ? new Color(0f, 1f, 0f, 0.3f) : new Color(0.7f, 0f, 1f, 0.3f));
             }
 

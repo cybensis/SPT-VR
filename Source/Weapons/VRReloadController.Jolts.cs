@@ -1,13 +1,16 @@
 using EFT.InventoryLogic;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
     // A part the hands work jolts the gun (GunJolt) when it hits its stop, with its momentum: the part's mass times its speed
     public static partial class VRReloadController
     {
+        [Tunable("Reload & handles", TunableKind.Tune, "Of the handle's slam jolt when an empty magazine stops the bolt on the catch instead.", Suggested = true)]
         public static float heldOnCatchJolt = 0.35f;        // of the slam when an empty magazine's follower stops the bolt on the catch
+        [Tunable("Reload & handles", TunableKind.Tune, "Of a full pull: a handle let go from this far back or more springs home with a sound and a small jolt.", Suggested = true)]
         public static float partPullSoundMin = 0.15f;       // of a full pull: a handle let go from this far back or more springs home (sound, jolt)
 
         // How far back the charging handle still was when let go, 1 = all the way. The carrier follows the handle, so one ridden
@@ -60,20 +63,31 @@ namespace TarkovVR.Source.Weapons
             // Glock's 0.23). A self-loading action is built for its cartridge, so the bolt carrier or slide mass scales with the default
             // round's momentum (an M4's carrier 0.3 kg, an AKM's 0.45, a 9 mm slide 0.17). Tarkov's shotgun pellets weigh almost nothing,
             // so shotguns get a fixed mass.
+            [Tunable("Reload & handles", TunableKind.Tune, "A self-loading gun's bolt carrier or slide, by its default round's momentum (bullet mass x muzzle speed): an "
+                + "M4 0.3 kg, an AKM 0.45, a Spear 0.65, a 9 mm slide 0.17.", Unit = "kg per N s", Suggested = true)]
             public static float boltMassPerMomentum = 0.08f;    // kg per N s of the default round's momentum (bullet mass x muzzle speed)
+            [Tunable("Reload & handles", TunableKind.Tune, "The lightest bolt or slide.", Unit = "kg", Suggested = true)]
             public static float minBoltMass = 0.12f;
+            [Tunable("Reload & handles", TunableKind.Tune, "The heaviest.", Unit = "kg", Suggested = true)]
             public static float maxBoltMass = 0.7f;
+            [Tunable("Reload & handles", TunableKind.Tune, "A self-loading shotgun's carrier (Tarkov's shot has no real weight).", Unit = "kg", Suggested = true)]
             public static float shotgunBoltMass = 0.4f;         // kg, a self-loading shotgun's carrier
+            [Tunable("Reload & handles", TunableKind.Tune, "A bolt-action's bolt, pushed home by the hand.", Unit = "kg", Suggested = true)]
             public static float boltActionBoltMass = 0.3f;      // kg, a bolt-action's bolt
+            [Tunable("Reload & handles", TunableKind.Tune, "A pump gun's forend and action bars.", Unit = "kg", Suggested = true)]
             public static float pumpMass = 0.25f;               // kg, a pump gun's forend and action bars
+            [Tunable("Reload & handles", TunableKind.Tune, "How fast the spring takes a bolt or slide home from all the way back.", Unit = "m/s", Suggested = true)]
             public static float boltSlamSpeed = 4f;             // m/s, how fast the spring drives a bolt or slide home from all the way back
             public static float chamberAheadOfGrip = 0.06f;     // m along the bore ahead of the grip, where a bolt hits home
             public static float pushSpeedSmoothing = 0.03f;     // s, smoothing time of a magazine / bolt / pump push speed
             // s: a jolt uses the hardest push within this window before the stop. A magazine only seats after it has eased onto its track,
             // and by then a fast push has already stopped.
+            [Tunable("Reload & handles", TunableKind.Tune, "A magazine, bolt-action bolt or pump jolts as hard as your hardest push in this long before it hit home.", Unit = "s", Suggested = true)]
             public static float pushPeakWindow = 0.25f;
             // s: a let-go charging handle uses how far back it was within this window before. The trigger release registers late, and
             // the handle follows the hand forward in the meantime.
+            [Tunable("Reload & handles", TunableKind.Tune, "The charging handle's jolt counts how far back it was this long before you let go (the trigger's let-go "
+                + "registers a little late).", Unit = "s", Suggested = true)]
             public static float handleLetGoWindow = 0.15f;
             internal static float handlePullPeak;
             internal static float handlePullPeakTime = -10f;

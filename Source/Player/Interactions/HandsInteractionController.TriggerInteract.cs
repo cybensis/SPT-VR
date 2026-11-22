@@ -2,6 +2,7 @@ using EFT.Interactive;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Weapons;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -9,8 +10,13 @@ namespace TarkovVR.Source.Player.Interactions
     // don't drive opens or closes it. The grip on a body only drags.
     internal partial class HandsInteractionController
     {
+        [Tunable("Loot & hands", TunableKind.Switch, "An empty hand's trigger is the interact press: on a body it opens its loot, in a container it opens it, on a "
+            + "door you don't move by hand it opens / closes it. The grip on a body only drags. Off: the old grip (a quick "
+            + "grip tap on a body, a grip press on a container or door).")]
         public static bool triggerInteract = true;              // false = use the grip: a quick tap on a body, a press on a container / door
+        [Tunable("Loot & hands", TunableKind.Tune, "How far the trigger has to go in (0-1) for that press.")]
         public static float interactTriggerPress = 0.75f;       // trigger axis: pressed from here, released under interactTriggerRelease
+        [Tunable("Loot & hands", TunableKind.Tune, "How far it has to come back out before it can press again.")]
         public static float interactTriggerRelease = 0.35f;
 
         private readonly bool[] interactTriggerHeld = new bool[2];      // [0] off hand, [1] dominant

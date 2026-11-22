@@ -4,6 +4,7 @@ using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -78,24 +79,43 @@ namespace TarkovVR.Source.Weapons
 
         public static class PressCheck
         {
+            [Tunable("Press check", TunableKind.Tune, "How long the turn takes, both ways.", Unit = "s")]
             public static float pressCheckBlendTime = 0.3f;     // s the turn takes, both ways
+            [Tunable("Press check", TunableKind.Tune, "How far the gun turns in the hand (muzzle tipping down) to bring the slide under the fingers.", Unit = "°")]
             public static float pressCheckTurnAngle = 90f;      // deg the gun turns in the hand about the thumb's knuckle
+            [Tunable("Press check", TunableKind.Tune, "The thumb joint it turns about: 0 the thumb's base, 1 its big knuckle, 2 its middle. Takes effect on the next "
+                + "press check.")]
             public static int pressCheckPivotJoint = 1;         // the thumb joint it turns about: 0 its base, 1 its big knuckle, 2 its middle
             // deg the hand also rolls about the gun's length, around the same knuckle (the thumb stays put): the heel of the palm comes off
             // the grip and the fingers go further over the slide
+            [Tunable("Press check", TunableKind.Tune, "The hand also rolls about the gun's length (same knuckle, the thumb stays): the heel of the palm off the grip, "
+                + "the fingers further over the slide.", Unit = "°")]
             public static float pressCheckWristOpen = 30f;
             // m from the knuckles to the fingertips on the slide. As the slide comes back, the fingers tilt back from the knuckles just
             // enough to keep their tips on it.
+            [Tunable("Press check", TunableKind.Tune, "Knuckles to fingertips: as the slide comes back the fingers tilt back from their knuckles by as much as keeps "
+                + "their tips with it. Smaller = more tilt.", Unit = "m")]
             public static float pressCheckFingerReach = 0.05f;
+            [Tunable("Press check", TunableKind.Tune, "Share of the turn the fingers spend opening; after it they close onto the slide.")]
             public static float pressCheckFingersCloseFrom = 0.6f;   // fraction of the turn during which the fingers open; after it they close onto the slide
+            [Tunable("Press check", TunableKind.Tune, "How far the slide comes back, times the gun's own chamber-check distance (1.35 to 3.3 cm).")]
             public static float pressCheckTravelScale = 1f;     // scale on the slide's travel, the gun's own check distance (Tarkov's clips: 1.35-3.3 cm)
+            [Tunable("Press check", TunableKind.Tune, "How fast the slide can follow the trigger.", Unit = "m/s")]
             public static float pressCheckSlideSpeed = 0.4f;    // m/s the slide can follow the trigger at
+            [Tunable("Press check", TunableKind.Tune, "How far your fingers wrap the grip (0 to 1, no squeeze) to put the hand back on it. Kept above the grip's own "
+                + "let-go point (0.5).")]
             public static float pressCheckGripReturn = 0.6f;    // the grip's value (how far the fingers wrap it, no squeeze) that puts the hand back on it
+            [Tunable("Press check", TunableKind.Tune, "Moves the gun in the hand at the full turn: x right, y back, z up along the gun.", Unit = "m")]
             public static Vector3 pressCheckHandOffset = new Vector3(-0.04f, 0f, 0f);   // m the gun moves in the hand at the full turn: x right, y back, z up along the gun
+            [Tunable("Press check", TunableKind.Tune, "More turn on top at the full turn, about the knuckle, in the gun's frame (x right, y back, z up).", Unit = "°")]
             public static Vector3 pressCheckHandTurn = Vector3.zero;     // deg of extra turn at the full turn, about the knuckle, in the gun's frame
             // deg the thumb turns about its knuckle on the gun, in the gun's frame (x right, y back, z up). z swings it sideways
             // (HandsInteractionController.pressCheckHookThumb only curls it in or out).
+            [Tunable("Press check", TunableKind.Tune, "Turns the thumb about its knuckle on the gun, in the gun's frame (x right, y back, z up): z swings it to the "
+                + "sides.", Unit = "°")]
             public static Vector3 pressCheckThumbTurn = new Vector3(0f, 0f, -40f);
+            [Tunable("Press check", TunableKind.Log, "A log line when a press check starts and ends: slide bone, travel, the thumb joint it turns about, round "
+                + "shown.", Suggested = true)]
             public static bool pressCheckDebug = false;
 
             internal static FirearmController pressCheckFor;
@@ -136,6 +156,7 @@ namespace TarkovVR.Source.Weapons
             internal static float pressCheckPull;                // m the slide is back
             private static bool pressCheckPulsedBack;
             private static bool pressCheckSlideOut;             // the slide's out sound played, its in sound not yet
+            [Tunable("Press check", TunableKind.Tune, "Share of the slide's travel where its out sound plays; the in sound plays when it's back under half that.")]
             public static float pressCheckSoundOut = 0.3f;      // fraction of the slide's travel where its out sound plays (the in sound below half that)
             private static bool pressCheckTriggerLock;          // ended with the trigger down: no shot until it's let go
             private static FirearmController pressCheckDataFor;

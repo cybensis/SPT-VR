@@ -3,6 +3,7 @@ using TarkovVR.Source.Controls;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
 using TarkovVR.Source.Player.Body;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -13,8 +14,11 @@ namespace TarkovVR.Source.Player.Interactions
     // If the second hand lets go, the first keeps the item; if the first lets go, the item passes to the second (HandOffToSecondHand).
     internal partial class HandsInteractionController
     {
+        [Tunable("Loot & hands", TunableKind.Switch, "Hold loot with both hands.")]
         public static bool twoHandedLoot = true;
+        [Tunable("Loot & hands", TunableKind.Tune, "How close the free palm must be to a held item's surface to take it too.", Unit = "m")]
         public static float secondHandReach = 0.06f;        // m: a free palm this close to the held item's surface takes it on a grip press
+        [Tunable("Loot & hands", TunableKind.Tune, "How much of the second hand's roll the item follows.")]
         public static float secondHandRollShare = 0.5f;     // how much of the second hand's roll about the grip-to-grip line the item takes
 
         private bool secondHandHolding;

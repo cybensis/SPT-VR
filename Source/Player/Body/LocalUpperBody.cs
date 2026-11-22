@@ -1,6 +1,7 @@
 using EFT;
 using TarkovVR.Source.Settings;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Body
 {
@@ -10,10 +11,13 @@ namespace TarkovVR.Source.Player.Body
     // (HeadSyncApply, from VRHeadPacket).
     internal static class LocalUpperBody
     {
+        [Tunable("Body", TunableKind.Switch, "With the row above on: the solve on your own body at all. Nothing to do with what the other players see.")]
         public static bool enabled = true;
         // true = your own skeleton keeps the solved pose (shadow and hitboxes follow the head). In first person the body sits behind the
         // camera, so it bends far forward. Tarkov hangs the hands container (PlayerSpring) and the body gun spots off the ribcage,
         // so the held and slung guns move out in front.
+        [Tunable("Body", TunableKind.Switch, "Bend your own body to the headset too (your shadow and hitboxes follow your head). Moves the held and slung "
+            + "gun out in front of you - for testing only.")]
         public static bool poseLocalBody = false;
         public static float blendTime = 0.25f;      // s to ease in and out
         public static bool logRig = true;           // logs one line per rig: the bones it turns, or why it can't

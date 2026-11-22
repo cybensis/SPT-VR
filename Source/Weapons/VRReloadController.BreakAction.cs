@@ -2854,28 +2854,27 @@ namespace TarkovVR.Source.Weapons
             }
 
             // debugZones: the fore-end (orange, green in reach) and each reachable chamber (blue / green)
-            private static GameObject foreEndZoneViz, ejectorZoneViz, cylinderBackZoneViz;
-            private static readonly GameObject[] chamberZoneViz = new GameObject[6];
+            private const int ChamberZones = 6;        // the most chambers a zone is drawn for
 
             private static void UpdateBreakZones(FirearmController firearmController, BreakData data, BreakState state)
             {
                 bool open = !state.latched || state.open > 0f;
                 Vector3 grab = ForeEndGrabWorld(data, OffHandOnRightArm);
                 bool atForeEnd = (OffHandPalm() - grab).sqrMagnitude <= foreEndGrabRadius * foreEndGrabRadius;
-                SetZoneViz(ref foreEndZoneViz, debugZones && open && !HoldingBarrels, grab, foreEndGrabRadius, atForeEnd ? new Color(0f, 1f, 0f, 0.25f) : new Color(1f, 0.6f, 0.1f, 0.25f));
+                SetZoneViz(debugZones && open && !HoldingBarrels, grab, foreEndGrabRadius, atForeEnd ? new Color(0f, 1f, 0f, 0.25f) : new Color(1f, 0.6f, 0.1f, 0.25f));
                 bool showEjector = debugZones && data.ejector != null && ejectorPressBone != null && state.open >= data.openDegrees * barrelOpenEnough && !HoldingEjector;
                 Vector3 ejectorAt = showEjector ? EjectorGrabWorld(data, OffHandOnRightArm) : Vector3.zero;
                 bool atEjector = showEjector && (OffHandPalm() - ejectorAt).sqrMagnitude <= ejectorGrabRadius * ejectorGrabRadius;
-                SetZoneViz(ref ejectorZoneViz, showEjector, ejectorAt, ejectorGrabRadius, atEjector ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.2f, 0.8f, 0.3f));
+                SetZoneViz(showEjector, ejectorAt, ejectorGrabRadius, atEjector ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.2f, 0.8f, 0.3f));
                 Vector3 backCentre = Vector3.zero;
                 float backRadius = 0f;
                 bool showBack = debugZones && data.revolver && firearmController.Firearms != null && state.open >= data.openDegrees * barrelOpenEnough && !HoldingBreakCase
                     && CylinderBack(firearmController.Firearms, firearmController.Item, out backCentre, out backRadius);
                 bool atBackZone = showBack && (OffHandPalm() - backCentre).sqrMagnitude <= backRadius * backRadius;
-                SetZoneViz(ref cylinderBackZoneViz, showBack, backCentre, backRadius, atBackZone ? new Color(0f, 1f, 0f, 0.2f) : new Color(1f, 1f, 0.2f, 0.2f));
+                SetZoneViz(showBack, backCentre, backRadius, atBackZone ? new Color(0f, 1f, 0f, 0.2f) : new Color(1f, 1f, 0.2f, 0.2f));
                 Firearms firearms = firearmController.Firearms;
                 Weapon weapon = firearmController.Item;
-                for (int chamber = 0; chamber < chamberZoneViz.Length; chamber++)
+                for (int chamber = 0; chamber < ChamberZones; chamber++)
                 {
                     bool show = debugZones && firearms != null && chamber < BreakSlots(weapon).Length && state.open >= data.openDegrees * barrelOpenEnough && !HoldingBreakCase;
                     bool zoneSpent = false;
@@ -2885,7 +2884,7 @@ namespace TarkovVR.Source.Weapons
                     Transform bone = show ? ChamberBone(firearms, chamber) : null;
                     Vector3 at = model != null ? model.transform.position : bone != null ? bone.position : Vector3.zero;
                     bool reach = model != null && (OffHandPalm() - at).sqrMagnitude <= caseGrabRadius * caseGrabRadius;
-                    SetZoneViz(ref chamberZoneViz[chamber], show && bone != null, at, caseGrabRadius, reach ? new Color(0f, 1f, 0f, 0.3f) : new Color(0.2f, 0.5f, 1f, 0.3f));
+                    SetZoneViz(show && bone != null, at, caseGrabRadius, reach ? new Color(0f, 1f, 0f, 0.3f) : new Color(0.2f, 0.5f, 1f, 0.3f));
                 }
             }
         }

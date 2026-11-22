@@ -1,5 +1,6 @@
 using EFT.Animations;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -11,6 +12,8 @@ namespace TarkovVR.Source.Weapons
     // recoil-free grip on the hand (the recoil shows on top) and the zeroing can put the recoil back.
     internal static class RecoilPose
     {
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How much of Tarkov's own recoil (the kick back and the climb about the gun's recoil point) the gun shows "
+            + "against your hand. 1 = all of it, 0.5 = half, 0 = the grip pinned to your hand as before.")]
         public static float kickShare = 1f;     // share of Tarkov's recoil the gun shows against the hand: 1 = all of it, 0 = the grip pinned to the hand
 
         private static Transform stepRoot;

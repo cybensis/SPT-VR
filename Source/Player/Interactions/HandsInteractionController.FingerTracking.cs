@@ -3,6 +3,7 @@ using Valve.VR;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Weapons;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -15,6 +16,7 @@ namespace TarkovVR.Source.Player.Interactions
     // track; other controllers (Estimated) keep the baked pose.
     internal partial class HandsInteractionController
     {
+        [Tunable("Loot & hands", TunableKind.Switch, "Index controller finger tracking.")]
         public static bool fingerTracking = true;          // master: Index skeletal finger tracking
         public static float curlToDeg = 90f;               // full curl swing at the base joint (tapers down by curlJointScale)
         public static float thumbCurlToDeg = 28f;          // thumbs curl far less than fingers
@@ -30,6 +32,7 @@ namespace TarkovVR.Source.Player.Interactions
         // idle-flex constants). Flip one only if a hand closes backward.
         public static float leftCurlSign = 1f;
         public static float rightCurlSign = 1f;
+        [Tunable("Loot & hands", TunableKind.Log, "One line a second with the Index tracking level and finger curls.", Suggested = true)]
         public static bool fingerTrackingDebug = false;    // logs the tracking level and curls per hand once a second
 
         private float nextFingerTrackLog;

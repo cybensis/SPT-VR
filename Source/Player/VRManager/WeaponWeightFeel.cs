@@ -1,4 +1,5 @@
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -17,41 +18,70 @@ namespace TarkovVR.Source.Player.VRManager
     //  - The swing lag is hard-capped (maxLagDegrees): the gun resists but never falls far behind the hand.
     public class WeaponWeightFeel
     {
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "Weapon Weight as a held rigid body on a spring: on your hand when it's still or panning steadily, trailing a "
+            + "move's start and carrying past its end, sagging one-handed. Off: the older spring that always trails a little "
+            + "(the rows from Max Lag down are that one's).")]
         public static bool physicsWeight = true;
         // The hold's stiffness. Against the gun's inertia about the grip it sets how quickly the gun follows the hand speeding up and
         // slowing down; against the gun's weight it sets the sag.
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How stiffly the gun hand alone holds the gun. Lower = more one-handed sag and a looser, slower follow (an M4 "
+            + "at 30: ~8° of sag, ~2 Hz).", Unit = "N m/rad")]
         public static float wristGripStiffness = 30f;     // N m/rad the gun hand alone (an M4 one-handed: ~8 deg of sag, ~2 Hz)
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "What the support hand adds two-handed, times how far apart your hands are squared. Lower = heavier, looser "
+            + "two-handed.", Unit = "N/m")]
         public static float supportGripStiffness = 1500f; // N/m the support hand, at its distance from the gun hand (x that distance squared)
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "The most the muzzle sags under the gun's weight.", Unit = "°")]
         public static float maxSag = 15f;                 // deg
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "1 = the gun settles on your hand without swinging back; lower = a heavy gun rocks a little after a stop.")]
         public static float holdDamping = 1f;             // 1 = it settles without swinging back; lower = a heavy gun rocks on a stop
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "The loosest any hold gets (an LMG one-handed).", Unit = "Hz")]
         public static float minHoldFrequency = 1.5f;      // Hz: the softest the hold gets (an LMG one-handed)
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "The stiffest any hold gets (a pistol, rolling a gun about its bore).", Unit = "Hz")]
         public static float maxHoldFrequency = 25f;       // Hz: the stiffest (a pistol; rolling any gun about its bore)
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How hard the gun hand alone can turn the gun: past it a violent swing trails further. Lower = heavier "
+            + "one-handed.", Unit = "N m")]
         public static float wristStrength = 15f;          // N m the gun hand alone can turn the gun with
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "What the support hand adds to that, times how far apart your hands are. Lower = heavier two-handed.", Unit = "N")]
         public static float supportForce = 120f;          // N the support hand adds, at its distance from the gun hand
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "x the strength for stopping a swing. Lower = heavy guns carry through further past your hand.")]
         public static float brakeStrength = 3f;           // x the strength while stopping the gun
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How much harder the grip works as the gun falls behind (so it never trails far).")]
         public static float catchBoost = 8f;              // the strength x (1 + this x (lag / maxLagDegrees)^2): the grip tightens as it falls behind
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How far the gun reaches behind the grip, for its inertia (pistols: none).", Unit = "m")]
         public static float stockBehindGrip = 0.25f;      // m the stock reaches behind the grip (the gun is a rod from there to the muzzle; pistols: none)
         public static float boreRadius = 0.05f;           // m radius of gyration about the bore (rolling the gun is easy)
         public static float handSpinSmoothing = 0.015f;   // s the hand's own turn rate is smoothed over (tracking noise)
+        [Tunable("Sling, stock & weight", TunableKind.Log, "A [WeaponWeight] line a second: the gun's mass, length and inertia, its weight, your strength, the sag and how "
+            + "far behind your hand it is.", Suggested = true)]
         public static bool physicsDebugLog = false;       // a line a second: the gun's mass and inertia, the strength, how far behind it is
         public static float springBase = 350f;        // spring stiffness before ErgonomicWeight divides it; higher = lighter feel overall
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "1 settles without overshoot; lower gives more follow-through.")]
         public static float dampingRatio = 0.95f;     // 1 = settles with no overshoot; lower = more follow-through on stops
         public static float supportStiffness = 2.5f;  // two-handed spring multiplier (the second hand's leverage)
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How fast the gun's roll catches up with your wrist.", Unit = "/s")]
         public static float twistRate = 25f;          // 1/s; barrel-roll catch-up. High because rolling a gun about its bore is easy
         public static float droopPerErgo = 0.9f;      // deg of one-handed muzzle sag per ErgonomicWeight unit
         public static float maxDroop = 8f;            // deg; sag cap
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "The most a gun's weight can lag behind your hand.", Unit = "°")]
         public static float maxLagDegrees = 20f;      // hard cap on total rotation lag behind the hand
         public static float maxSwingVel = 30f;        // rad/s safety rail on the momentum state
 
         // Jumping: the droop is 1 g pulling the muzzle down, and the body's vertical acceleration reaches the gun the same way. A push-off
         // or landing dips the muzzle (an impulse: the body's vertical speed change over g, times the gun's weight torque). In free fall
         // the gun weighs nothing and the droop lifts. Rotation only, through this spring and its lag cap. Follows the Weapon Weight setting.
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "Jumping reaches the gun (Weapon Weight on): the muzzle dips as you push off and as you land, then springs "
+            + "back; in the air the droop lifts.")]
         public static bool jumpInertia = true;
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How hard jumps and landings move the gun. 1 = as much as the weight that droops the muzzle; 2 = twice the dip.")]
         public static float jumpInertiaScale = 1f;    // 1 = as much as the weight that droops the muzzle; 2 = twice the dip
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "In the air the gun weighs nothing: the droop lifts (one-handed, to level). Off: only the push-off and landing "
+            + "dips.")]
         public static bool airborneFloat = true;      // in the air the droop lifts (one-handed: to level)
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How long a fall without a jump (off a ledge) must last before it counts, so stair edges don't move the gun.", Unit = "s")]
         public static float minAirTime = 0.12f;       // s off the ground before a fall without a jump counts (so a stair edge doesn't)
         public static float takeoffWindow = 0.15f;    // s after leaving the ground the push-off's speed is still read (it builds over frames)
         public static float maxBodySpeedChange = 8f;  // m/s cap on one dip (a teleport, a respawn)
+        [Tunable("Sling, stock & weight", TunableKind.Log, "A line per push-off and landing: the change in your vertical speed that moved the gun.", Suggested = true)]
         public static bool jumpDebugLog = false;      // a line per push-off / landing: the speed change and the dip it makes
         private const float GRAVITY = 9.81f;
 

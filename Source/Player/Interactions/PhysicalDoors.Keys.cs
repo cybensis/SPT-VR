@@ -12,6 +12,7 @@ using TarkovVR.Source.Controls;
 using TarkovVR.Source.Misc;
 using UnityEngine;
 using TarkovVR.Source.Player.Body;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -39,7 +40,10 @@ namespace TarkovVR.Source.Player.Interactions
         public static float keyTurnTickDegrees = 15f;   // deg of turn between light haptic pulses
         // In the lock the key stays on the keyway. It only comes out when pulled back along the keyway, or when the hand moves far from it
         // in any other direction (turning the key swings the controller's grip round in an arc, and the arm sways).
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How far you pull a key back out along the keyway before it comes out of the lock.", Unit = "m")]
         public static float keyPullOutDistance = 0.1f;  // m the controller must pull back along the keyway from where it seated the key
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How far your hand may drift from a key in the lock any other way (the arc of turning it, your arm swaying) "
+            + "before the key comes out.", Unit = "m")]
         public static float keyLetGoDistance = 0.25f;   // m the controller may move from there in any direction
         public static float keyReseatDelay = 0.3f;      // s after the key comes out before it can seat again
         public static float keyStowDelay = 0.5f;        // s the key stays turned in the unlocked lock before it goes away
@@ -88,7 +92,6 @@ namespace TarkovVR.Source.Player.Interactions
             public float turn;
             public float lastTickTurn;
             public float unseatTime = -10f;
-            public GameObject keyholeSphere, tipSphere;
         }
 
         private static readonly KeyHold[] keyHolds = { new KeyHold { dominant = false }, new KeyHold { dominant = true } };
@@ -441,8 +444,8 @@ namespace TarkovVR.Source.Player.Interactions
                     && Vector3.Dot(keyAxis, inward) >= Mathf.Cos(keyInsertAngle * Mathf.Deg2Rad);
                 if (keyDebugViz)
                 {
-                    DebugShapes.Sphere(ref keyHold.keyholeSphere, "VRKeyholeViz", true, lockPoint, keyholeRadius, new Color(0.2f, 0.4f, 1f, 0.35f));
-                    DebugShapes.Sphere(ref keyHold.tipSphere, "VRKeyTipViz", true, tip, 0.006f, canSeat ? Color.green : Color.yellow);
+                    DebugDraw.Sphere(lockPoint, keyholeRadius, new Color(0.2f, 0.4f, 1f, 0.35f));
+                    DebugDraw.Sphere(tip, 0.006f, canSeat ? Color.green : Color.yellow);
                 }
                 if (canSeat)
                     Seat(keyHold, lockPoint, inward);
@@ -742,23 +745,10 @@ namespace TarkovVR.Source.Player.Interactions
                 keyHold.state = KeyState.None;
                 keyHold.door = null;
                 keyHold.key = null;
-                if (keyHold.keyholeSphere != null)
-                    UnityEngine.Object.Destroy(keyHold.keyholeSphere);
-                if (keyHold.tipSphere != null)
-                    UnityEngine.Object.Destroy(keyHold.tipSphere);
             }
             unlockingByHand = null;
             playerOwnerOf = null;
             playerOwner = null;
-        }
-
-        // Hides the debug spheres while the key isn't looking for the lock
-        private static void HideKeyViz(KeyHold keyHold)
-        {
-            if (keyHold.keyholeSphere != null && keyHold.keyholeSphere.activeSelf)
-                keyHold.keyholeSphere.SetActive(false);
-            if (keyHold.tipSphere != null && keyHold.tipSphere.activeSelf)
-                keyHold.tipSphere.SetActive(false);
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

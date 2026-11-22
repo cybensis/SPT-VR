@@ -9,6 +9,7 @@ using TarkovVR.Source.Weapons;
 using UnityEngine;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Body;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -26,7 +27,9 @@ namespace TarkovVR.Source.Player.Interactions
         public static float slingRollDeg = 55f;          // deg of roll about the barrel, to fine-tune which way the slung gun faces
         public static float attachTime = 0.10f;         // s to fly in to the sling spot; after that the mount is rigid
         public static float rotAttachRate = 10f;        // 1/s rotation tuck-in
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How long the grip must stay open before the gun slings.", Unit = "s")]
         public static float slingDelay = 0.1f;          // s the grip must stay fully released before letting go (debounce)
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How close your hand must be to the gun's grip to take it back.", Unit = "m")]
         public static float regrabRadius = 0.13f;       // m, RightHand rig transform to the regrab zone
         public static float regrabForwardOffset = 0.07f;// m the zone sits toward the muzzle from the R-hand marker
         // The other gun spots (BodyWeapons, SpotPose): where the gun's Weapon_root sits relative to the eyes looking level, in the
@@ -39,10 +42,14 @@ namespace TarkovVR.Source.Player.Interactions
         public static Vector3 hipMuzzle = new Vector3(0f, -1f, 0.15f);
         public static Vector3 hipGrip = new Vector3(0.2f, 0f, -1f);
         // After eating or using meds, the gun Tarkov draws back goes to its spot like at a raid start, unless the gun hand's grip is held
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "After eating, drinking or using meds, the gun Tarkov draws back goes straight to its spot (unless your gun "
+            + "hand is holding grip). Off: it comes back into your hand until you grip and let go.")]
         public static bool hangAfterMeds = true;
         public static float afterMedsHangWindow = 5f;   // s after the hands change for the gun to go idle and hang
+        [Tunable("Sling, stock & weight", TunableKind.Log, "One state line a second while the gun is slung.", Suggested = true)]
         public static bool debugLog = false;            // logs the holder chain once a second while detached, plus save/restore lines
         private static float nextDebugLog;
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "Grab sound is the gun's own hand-on sound. Off: the old cloth sound.")]
         public static bool gripSoundHandOn = true;      // the gun's own hand-on-the-grip sound; false = cloth foley + a hint of gun
         public static float gripClothVolume = 0.85f;    // cloth mix: volume of the gear (rig/backpack) pickup foley, the cloth layer
         public static float gripGunVolume = 0.18f;      // cloth mix: volume of the weapon's own pickup clip, quiet underneath

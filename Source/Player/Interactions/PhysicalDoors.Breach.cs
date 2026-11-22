@@ -2,6 +2,7 @@ using Diz.LanguageExtensions;
 using EFT;
 using EFT.Interactive;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -17,6 +18,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static float lockedHitMinSpeed = 2.5f;   // m/s, the slowest hit at which a locked door thuds
         public static float lockedHitRetrigger = 0.4f;  // s
 
+        [Tunable("Sling, stock & weight", TunableKind.Log, "A [Doors] line for each hard gun hit on a door that didn't breach, saying why: locked, already open, free to "
+            + "swing, held, hit from the side it opens toward, glancing, too soft.")]
         public static bool logGunHits = true;           // one line per hard gun hit on a door that didn't breach, with the reason
         private static float lastLockedHitTime = -10f;
         private static float lastHitLogTime = -10f;

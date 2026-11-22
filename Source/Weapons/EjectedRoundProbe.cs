@@ -1,6 +1,7 @@
 using EFT;
 using EFT.Interactive;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -8,6 +9,8 @@ namespace TarkovVR.Source.Weapons
     // to the shell port, and where it is half a second later and whether it's shown. Debug only (VRMagazinePatches.ProbeEjectedRound).
     internal sealed class EjectedRoundProbe : MonoBehaviour
     {
+        [Tunable("Reload & handles", TunableKind.Log, "A line when your rack throws a round out of the chamber (where it spawned, how fast, shown or not) and another "
+            + "half a second later. Debug for the co-op \"I don't see my own round\" report.", Suggested = true)]
         public static bool enabled = false;
 
         private LootItem lootItem;

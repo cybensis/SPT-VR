@@ -1,4 +1,5 @@
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Misc
 {
@@ -6,6 +7,9 @@ namespace TarkovVR.Source.Misc
     // rearmTime: a hand resting on the edge flips in and out every few frames with tracking jitter, and re-arming at once would buzz nonstop.
     internal sealed class ZoneEntryBlip
     {
+        [Tunable("Haptics", TunableKind.Tune, "The buzz on reaching the foregrip, the gun hand's grip (hand swap) or a slung gun's grip comes once; it comes "
+            + "again only after the hand has been out of reach this long. Shorter = buzzes again sooner, but a hand resting "
+            + "on the edge can buzz repeatedly.", Unit = "s")]
         public static float rearmTime = 0.3f;   // s out of reach before coming back in blips again
 
         private bool inside;

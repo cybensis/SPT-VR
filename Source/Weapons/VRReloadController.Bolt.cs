@@ -149,7 +149,6 @@ namespace TarkovVR.Source.Weapons
             // away, 0.45 s) that only fit from the start of the movement; the DVL-10 has BoltStart / BoltOut / BoltIn / BoltEnd.
             private static bool boltPullSounded, boltPushSounded;
             private static float boltSlidePeak;
-            private static GameObject boltZoneViz;
             private static bool boltChamberBoneWasActive;
             private static Vector3 boltChamberRoundRest;
             private static bool boltChamberEmpty;               // shown empty: the round went out at full travel (the next one stays in the
@@ -226,7 +225,6 @@ namespace TarkovVR.Source.Weapons
             internal static void TickBolt(bool offTriggerPressed, bool offTriggerReleased, bool gunTriggerPressed, bool gunTriggerReleased, bool handBusy)
             {
                 OffHandAtBolt = false;
-                SetZoneViz(ref boltZoneViz, false, Vector3.zero, 0f, Color.clear);
                 if (HoldingBolt)
                 {
                     if (!BoltHoldIsStillValid())
@@ -263,7 +261,7 @@ namespace TarkovVR.Source.Weapons
                 bool gunHandAt = ChestHang.SupportOnly && HandTouchesCapsule(true, knob, knob, boltGrabRadius);
                 OffHandAtBolt = offHandAt;
                 // debugZones: the grab zone, green while a hand that may take it is in it
-                SetZoneViz(ref boltZoneViz, debugZones, knob, boltGrabRadius, offHandAt || gunHandAt ? new Color(0f, 1f, 0f, 0.3f) : new Color(0.7f, 0f, 1f, 0.3f));
+                SetZoneViz(debugZones, knob, boltGrabRadius, offHandAt || gunHandAt ? new Color(0f, 1f, 0f, 0.3f) : new Color(0.7f, 0f, 1f, 0.3f));
                 if (offTriggerPressed && offHandAt)
                     GrabBolt(firearmController, bolt, state, gunHand: false);
                 else if (gunTriggerPressed && gunHandAt)

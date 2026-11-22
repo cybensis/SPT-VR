@@ -1,4 +1,5 @@
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Controls
 {
@@ -8,6 +9,8 @@ namespace TarkovVR.Source.Controls
     // restarts the wait, and a press still held when the wait ends only counts once it is released.
     public static class MenuExitButtonWait
     {
+        [Tunable("Reload & handles", TunableKind.Tune, "After a menu closes, how long B (Y left-handed) does nothing to the gun: no mag release, no reload, no drop. "
+            + "Every press in that time starts it over; a button still held when it ends counts once it's let go.", Unit = "s")]
         public static float waitTime = 0.6f;    // s after a menu closes, or after the last press while waiting
 
         private static int evaluatedFrame = -1;

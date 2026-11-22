@@ -13,6 +13,7 @@ using UnityEngine;
 using Valve.VR;
 using FirearmController = EFT.Player.FirearmController;
 using TarkovVR.Source.Player.Body;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -28,30 +29,52 @@ namespace TarkovVR.Source.Player.Interactions
     // The view stays the headset's the whole time, still in the world while Tarkov moves the body onto the gun.
     internal static class MountedGun
     {
+        [Tunable("Mounted guns", TunableKind.Switch, "Mounted guns by hand. Off: you can't use them (the gaze menu stays gone).")]
         public static bool enabled = true;
+        [Tunable("Mounted guns", TunableKind.Tune, "How close your wrist must be to a handle for its grip to take the gun.", Unit = "m")]
         public static float grabRadius = 0.13f;     // m, controller wrist to a handle for its grip to take the gun
+        [Tunable("Mounted guns", TunableKind.Tune, "On the gun: how close a hand that let go must come back for its grip to take its handle again.", Unit = "m")]
         public static float regrabRadius = 0.18f;   // m, on the gun: a hand that let go within this of its handle takes it again
         // The Utyos is held by its right handle alone (Tarkov's left hand only rests on its stock), so the left hand stays on your controller.
         // The body on the gun faces its aim, so none of Tarkov's step clips play (they play when the aim turns away from the body), and it
         // stands under your head instead of where its steps would take it. false = Tarkov's steps.
+        [Tunable("Mounted guns", TunableKind.Switch, "On the gun the body faces the aim and stands under your head: no Tarkov side steps. Off: Tarkov's steps walk "
+            + "the body round the gun.")]
         public static bool bodyFollowsHead = true;
+        [Tunable("Mounted guns", TunableKind.Tune, "How far your head may be off the body's own head before the body moves (so leaning to the sight doesn't slide "
+            + "it).", Unit = "m")]
         public static float bodyFollowDeadZone = 0.2f;  // m your head may be off the body's own head before the body moves (leaning)
+        [Tunable("Mounted guns", TunableKind.Tune, "How quickly the body catches up once your head is past the dead zone. Lower = snappier.", Unit = "s")]
         public static float bodyFollowTime = 0.12f;     // s the body takes to catch up past that
+        [Tunable("Mounted guns", TunableKind.Tune, "How long both hands must stay open before you let go of the gun.", Unit = "s")]
         public static float leaveDelay = 0.3f;      // s both hands must be open before you let go of the gun
+        [Tunable("Mounted guns", TunableKind.Tune, "A grab Tarkov never finishes is called off after this long, so you can't get stuck unable to move.", Unit = "s")]
         public static float takeTimeout = 8f;       // s a take may last before it's called off (Tarkov's walk onto the gun is 1.5 s at most)
         // As a co-op client: s on the gun before letting go takes effect. The host's copy of you gets onto the gun later than you (it walks
         // there, then spawns the gun from your packets). Letting go before that means the host never finishes the hands change off the gun,
         // and every later move waits for an answer that never comes (no shooting, no reload). Hands opened earlier let go once the time is up.
+        [Tunable("Mounted guns", TunableKind.Tune, "Co-op as a client: how long you stay on the gun before letting go takes effect (the host's copy of you gets on "
+            + "it later; letting go sooner can leave the host never answering your next moves = no shooting or reloading).", Unit = "s")]
         public static float coopMinMounted = 2.5f;
+        [Tunable("Mounted guns", TunableKind.Tune, "How close your headset must come to the sight to aim through it (the AGS's scope only shows its view while "
+            + "aiming).", Unit = "m")]
         public static float aimEyeReach = 0.2f;     // m, headset to the sight to aim through it
+        [Tunable("Mounted guns", TunableKind.Tune, "How far off the barrel you can look and still aim through it.", Unit = "°")]
         public static float aimEyeAngle = 25f;      // deg, headset forward off the barrel to aim through it
         public static float aimExitReach = 0.28f;   // m / deg to stop aiming again (wider, so it doesn't flicker at the edge)
         public static float aimExitAngle = 35f;
         // The gun's turn from the hands is One Euro filtered: tracking noise is held still at rest, a fast swing is followed closely.
+        [Tunable("Mounted guns", TunableKind.Tune, "The smoothing at rest: lower = steadier, but slower to start a turn.", Unit = "Hz")]
         public static float aimMinCutoff = 2f;          // Hz at rest: lower = steadier, more lag starting a turn
+        [Tunable("Mounted guns", TunableKind.Tune, "How much faster it follows the faster you swing the gun: higher = less lag on a quick swing.", Unit = "Hz per °/s")]
         public static float aimSpeedCutoff = 0.05f;     // Hz added per deg/s of turn
+        [Tunable("Mounted guns", TunableKind.Tune, "How smoothly it measures how fast you're swinging (feeds the line above).", Unit = "Hz")]
         public static float aimDerivativeCutoff = 1f;   // Hz, the turn speed's own smoothing
+        [Tunable("Mounted guns", TunableKind.Log, "A line per grab, getting on, letting go, plus where the gun's real handles are against the grab zones; once a "
+            + "second on the gun, the sight check (eye distance, look angle, aiming); a grip near a gun that didn't take it "
+            + "says why.", Suggested = true)]
         public static bool debugLog = false;        // a line per take / mount / let-go, plus the live handles against the zones
+        [Tunable("Mounted guns", TunableKind.View, "Show the two grab zones as spheres (blue left, orange right) when your hands are free near a mounted gun.", Suggested = true)]
         public static bool debugViz = false;        // the handle zones as spheres
 
         // Each gun's hand positions in its idle hold (weapon_L_IK_marker / weapon_R_IK_marker in utes_idle / ags_idle), in its 'weapon'
@@ -106,7 +129,6 @@ namespace TarkovVR.Source.Player.Interactions
         private static object gunsFor;
         private static float nextGunScan;
         private static int loggedGunCount = -1;
-        private static GameObject leftZoneSphere, rightZoneSphere;
 
         //---------------------------------------------------------------------------------------------------------
         // State
@@ -179,12 +201,10 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 stage = Stage.Free;
                 takeArmed = false;
-                ShowZones(false, Vector3.zero, Vector3.zero);
                 return false;
             }
             if (Active)
             {
-                ShowZones(false, Vector3.zero, Vector3.zero);
                 TickOnGun(player, leftGrip, rightGrip, leftPressed, rightPressed);
                 return true;
             }
@@ -207,7 +227,6 @@ namespace TarkovVR.Source.Player.Interactions
                 handleBlips[LEFT].Enter(false);
                 handleBlips[RIGHT].Enter(false);
                 takeArmed = false;
-                ShowZones(false, Vector3.zero, Vector3.zero);
                 return false;
             }
             HandlePoints(nearest, out Vector3 leftHandle, out Vector3 rightHandle);
@@ -752,8 +771,11 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static void ShowZones(bool show, Vector3 left, Vector3 right, bool showLeft = true)
         {
-            DebugShapes.Sphere(ref leftZoneSphere, "MountedGunLeftZone", show && showLeft, left, grabRadius, new Color(0.2f, 0.5f, 1f, 0.35f));
-            DebugShapes.Sphere(ref rightZoneSphere, "MountedGunRightZone", show, right, grabRadius, new Color(1f, 0.5f, 0.2f, 0.35f));
+            if (!show)
+                return;
+            if (showLeft)
+                DebugDraw.Sphere(left, grabRadius, new Color(0.2f, 0.5f, 1f, 0.35f));
+            DebugDraw.Sphere(right, grabRadius, new Color(1f, 0.5f, 0.2f, 0.35f));
         }
     }
 }

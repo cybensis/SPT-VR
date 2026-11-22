@@ -3,6 +3,7 @@ using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Controls
 {
@@ -15,24 +16,41 @@ namespace TarkovVR.Source.Controls
     // after a lean doesn't undo it. A lean held for a while becomes the new `settled`.
     public static class StepSprint
     {
+        [Tunable("Moving", TunableKind.Tune, "The time a quick move is measured over. Longer = slower moves count.", Unit = "s")]
         public static float moveTime = 0.2f;        // s, the window a quick move is measured over
+        [Tunable("Moving", TunableKind.Tune, "How far forward the neck has to go within moveTime to start the run. Lower = easier to trigger.", Unit = "m")]
         public static float startDistance = 0.08f;  // m the neck has to move forward within moveTime to start the run (0.4 m/s)
+        [Tunable("Moving", TunableKind.Tune, "How far back it has to go within moveTime to stop it.", Unit = "m")]
         public static float stopDistance = 0.08f;   // m the neck has to move back within moveTime to stop it
+        [Tunable("Moving", TunableKind.Tune, "How far ahead of where you stand a start has to end (behind, a stop). Keeps coming back upright from counting.", Unit = "m")]
         public static float aheadMargin = 0.04f;    // m ahead of `settled` a start has to end (behind it, for a stop)
+        [Tunable("Moving", TunableKind.Tune, "How long 'where you stand' takes to follow you. Longer = a held lean stays a lean longer before straightening "
+            + "up counts as a stop.", Unit = "s")]
         public static float settleTime = 2.5f;      // s, time constant of `settled` following the neck: longer = a held lean counts as a lean longer
+        [Tunable("Moving", TunableKind.Tune, "Sideways movement allowed, as a share of the forward / back.")]
         public static float sidewaysShare = 0.7f;   // sideways movement allowed, as a fraction of the forward / back movement
+        [Tunable("Moving", TunableKind.Tune, "Up / down allowed, as a share of the forward / back (crouching moves the neck forward too).")]
         public static float verticalShare = 1f;     // up / down movement allowed, same fraction: crouching and standing up also move the neck
         public static float glitchSpeed = 3f;       // m/s, faster than a body moves = a tracking jump or recenter, and the history is dropped
+        [Tunable("Moving", TunableKind.Tune, "A step this long before the stick is pushed forward still starts the run.", Unit = "s")]
         public static float goGrace = 0.35f;        // s, a step this long before the stick is pushed forward still starts the run
+        [Tunable("Moving", TunableKind.Tune, "Time after a start or stop before another counts.", Unit = "s")]
         public static float cooldown = 0.5f;        // s after a start / stop before another (the game's sprint state lags the command)
         // A start also needs the head looking roughly the way you'd run, so leaning out to look down off a ledge doesn't start a run.
         // Stops ignore where you look.
+        [Tunable("Moving", TunableKind.Tune, "A start needs the head looking no further down than this (leaning out to look off a ledge doesn't start a "
+            + "run). Stops ignore where you look.", Unit = "°")]
         public static float maxLookDown = 35f;      // deg below level
+        [Tunable("Moving", TunableKind.Tune, "...and no further up than this.", Unit = "°")]
         public static float maxLookUp = 45f;        // deg above level
+        [Tunable("Moving", TunableKind.Tune, "...and no further to the side of the way the character faces than this.", Unit = "°")]
         public static float maxLookSideways = 60f;  // deg off the way the character faces
+        [Tunable("Moving", TunableKind.Tune, "The buzz once the run has started (a stop gets half). 0 = none.")]
         public static float pulseAmplitude = 0.3f;  // haptic pulse on both controllers once the game has started the run; a stop gets half
         public static float pulseDuration = 0.06f;
         public static float pulseFrequency = 90f;
+        [Tunable("Moving", TunableKind.Log, "A line per start and stop, and per near miss while walking or running, with its numbers. On for the first "
+            + "tuning round.", Suggested = false)]
         public static bool debugLog = true;         // logs a line per start / stop and per near miss while walking or running
 
         private const int Capacity = 256;

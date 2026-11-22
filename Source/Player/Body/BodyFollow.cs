@@ -1,5 +1,6 @@
 using TarkovVR.Source.Controls;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Body
 {
@@ -13,20 +14,35 @@ namespace TarkovVR.Source.Player.Body
     internal static class BodyFollow
     {
         // Smoothing of the measured offset of the body's eyes over its root: filters out the walk's bob and breathing, follows stance changes
+        [Tunable("Body", TunableKind.Tune, "How quickly the body takes up where its head is over its feet (measured every frame). Lower = follows stance "
+            + "changes faster, but the walk's bob shows more.", Unit = "s")]
         public static float stanceSmoothTime = 0.25f;   // s
         public static float maxStanceOffset = 0.6f;     // m, a measurement further off the root than this is skipped (bad bone read)
+        [Tunable("Body", TunableKind.Tune, "Moves your body further back than its own eyes put it (negative = forward). 0 = its eyes exactly under yours.", Unit = "m")]
         public static float bodyBack = 0f;              // m, extra distance the body stands behind its eyes (negative = forward)
         // m, how far your eyes may lean off the body's before it follows: forward, back and sideways, relative to your look direction
+        [Tunable("Body", TunableKind.Tune, "The same leaning forward (along where you look).", Unit = "m")]
         public static float leanRoomForward = 0.20f;
+        [Tunable("Body", TunableKind.Tune, "The same leaning back.", Unit = "m")]
         public static float leanRoomBack = 0.20f;
+        [Tunable("Body", TunableKind.Tune, "How far you can lean sideways (peek) before your body steps after your head.", Unit = "m")]
         public static float leanRoomSide = 0.40f;
+        [Tunable("Body", TunableKind.Tune, "The lean room while the movement stick is pushed, as a share of the above (the body walks under you).")]
         public static float movingRoomScale = 0.1f;     // lean room multiplier while the movement stick is pushed
+        [Tunable("Body", TunableKind.Tune, "How long the lean room takes to shrink when you start walking and grow back.", Unit = "s")]
         public static float roomBlendTime = 0.3f;       // s, time for the room to shrink / grow back
+        [Tunable("Body", TunableKind.Tune, "When you stop walking, how long before the lean room grows back (the body settles under you first).", Unit = "s")]
         public static float stopSettleTime = 0.3f;      // s after stopping before the room grows back (the body settles under you first)
+        [Tunable("Body", TunableKind.Tune, "How far the movement stick has to be pushed to count as walking (stick drift below this doesn't).")]
         public static float stickDeadZone = 0.15f;      // movement stick deflection above which you count as walking
+        [Tunable("Body", TunableKind.Tune, "How quickly the body catches up once your head is past the room. Lower = tighter, 0 = as shaky as your head.", Unit = "s")]
         public static float followTime = 0.08f;         // s, time for the body to take up the overshoot (0 = at once, as shaky as your head)
+        [Tunable("Body", TunableKind.Switch, "Walls stop your body following your head (leaning through a wall leaves the body at it). Off = the body goes "
+            + "through, as before.")]
         public static bool blockedByWalls = false;      // sweep the body's capsule along each move: a wall stops the body, your head goes on
         public static float wallSkin = 0.02f;           // m kept off a wall
+        [Tunable("Body", TunableKind.Log, "A [BodyFollow] line a second: where the body's eyes are over its feet (measured), how far yours are off them, "
+            + "the room.")]
         public static bool debugLog = false;            // logs a [BodyFollow] line per second: measured stance, your eye offset, the room
 
         private static int steppedFrame = -1;

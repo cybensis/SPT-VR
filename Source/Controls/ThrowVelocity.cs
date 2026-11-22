@@ -1,5 +1,6 @@
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Controls
 {
@@ -9,6 +10,8 @@ namespace TarkovVR.Source.Controls
     // overshoots instead, because the predicted poses run ahead of an accelerating hand.
     public static class ThrowVelocity
     {
+        [Tunable("Grenades", TunableKind.Tune, "Throw strength on the palm's velocity: 1.25 = about what the controller's top point gave before. Higher = "
+            + "farther.")]
         public static float palmScale = 1.25f;      // the top of the controller (the raw point) moves ~1.25x faster than the palm; scale up to match
 
         // The palm's velocity in tracking space, scaled by palmScale (OpenXR only)

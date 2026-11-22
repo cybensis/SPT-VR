@@ -19,6 +19,7 @@ using TarkovVR.Source.Player.Interactions;
 using static EFT.Player.FirearmController;
 using static PhysicsExtensions;
 using TarkovVR.Source.Player.Body;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -731,6 +732,9 @@ namespace TarkovVR.Patches.Core.Player
         // m. A right-grip marker further than this from the gun's right IK marker is treated as off the gun, and the IK marker
         // (_markers[1], where the held gun is anchored) is used instead. Among the game's and the Content Backport's guns, the Sako and the
         // backport's P226R, QBZ-191 and MXLR are 55-59 cm apart (the IK marker on the gun); every other gun is under 22 cm (the M4: 21).
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "A gun whose right-hand marker is further than this from its right IK marker has it off the gun (the backport's "
+            + "P226R, QBZ-191 and MXLR): its body spot, regrab zone and stock length use the IK marker instead. The log says "
+            + "once per gun ([GripMarker]). Normal guns are under 22 cm apart.", Unit = "m")]
         public static float offGunGripMarkerDistance = 0.45f;
         private static readonly HashSet<string> offGunGripMarkersLogged = new HashSet<string>();
 

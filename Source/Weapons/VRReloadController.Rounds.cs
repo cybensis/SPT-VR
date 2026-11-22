@@ -306,7 +306,6 @@ namespace TarkovVR.Source.Weapons
             };
             public static bool RoundInGunHand => HoldingRound && roundInGunHand;
             internal static bool previousGunHandGripState;
-            private static GameObject roundZoneViz;
 
             //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -568,20 +567,14 @@ namespace TarkovVR.Source.Weapons
             // debugZones: the load zone while a round is in the hand (green once the round is in it)
             internal static void UpdateRoundViz()
             {
-                if (!HoldingShell || shellPath != null)
-                {
-                    SetZoneViz(ref tubeZoneViz, false, Vector3.zero, 0f, Color.clear);
-                    SetZoneViz(ref portZoneViz, false, Vector3.zero, 0f, Color.clear);
-                }
                 bool show = debugZones && HoldingRound && !HoldingShell && heldRoundFor != null && TryGetLoadPoint(heldRoundFor, out Vector3 loadPoint);
                 if (!show)
                 {
-                    SetZoneViz(ref roundZoneViz, false, Vector3.zero, 0f, Color.clear);
                     return;
                 }
                 TryGetLoadPoint(heldRoundFor, out loadPoint);
                 bool inZone = (RoundCenterWorld() - loadPoint).sqrMagnitude <= roundLoadRadius * roundLoadRadius;
-                SetZoneViz(ref roundZoneViz, true, loadPoint, roundLoadRadius, inZone ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.5f, 0.8f, 0.3f));
+                SetZoneViz(true, loadPoint, roundLoadRadius, inZone ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.5f, 0.8f, 0.3f));
             }
         }
     }

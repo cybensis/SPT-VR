@@ -11,6 +11,7 @@ using TarkovVR.ModSupport.ORBIT;
 using TarkovVR.Source.Controls;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -36,7 +37,9 @@ namespace TarkovVR.Source.Player.Interactions
         public static float bodyThrowVelocityScale = 1.0f;
         public static float bodyMaxThrowSpeed = 8f;
 
+        [Tunable("Loot & hands", TunableKind.Tune, "With triggerInteract off: longest grip on a body that still counts as a tap (opens its loot). Longer = a drag.", Unit = "s")]
         public static float bodyTapMaxTime = 0.25f;
+        [Tunable("Loot & hands", TunableKind.Tune, "With triggerInteract off: how far the hand may move during a tap on a body.", Unit = "m")]
         public static float bodyTapMaxMove = 0.06f;
 
         public static bool debugBodyGrab = false;
@@ -130,6 +133,8 @@ namespace TarkovVR.Source.Player.Interactions
         // PhysX zeroes a body's velocity when it sleeps, so a held or falling body would only sink about g*dt per frame.
         // While true, the bones of every body we hold or are letting settle skip that call (BodyDragPatches). HollywoodFX sets
         // CorpseEnergyToSleep to -1, which hides the problem while it's installed.
+        [Tunable("Loot & hands", TunableKind.Switch, "A body you drag, or one you've let go of that's still settling, falls at full speed. Off: Tarkov puts its "
+            + "resting bones to sleep every frame, and the body floats down slowly.")]
         public static bool keepHeldBodiesAwake = true;
         internal static readonly HashSet<PlayerRigidbodySleepHierarchy> bonesKeptAwake = new HashSet<PlayerRigidbodySleepHierarchy>();
 
@@ -165,6 +170,9 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Logs one line, with the reason, for each grip on a body that didn't take (a gate blocked it, or the press was too long or moved
         // too far for a tap)
+        [Tunable("Loot & hands", TunableKind.Log, "A line per grip on a body that didn't take: what the hand was doing (holster zone, gun grip...), or (grip "
+            + "mode) a press too long / moved for a tap. Also an [Interact] line per trigger on a body / container / door "
+            + "that didn't take, with what that hand had.")]
         public static bool logBodyGrips = true;
 
         // The hand the body interaction belongs to (one at a time): false = the off hand, true = the dominant one

@@ -6,6 +6,7 @@ using HarmonyLib;
 using TarkovVR.Source.Player.Interactions;
 using UnityEngine;
 using static EFT.Player;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -21,6 +22,7 @@ namespace TarkovVR.Patches.Core.Player
     // ===========================================================================
     internal static class EatingRecon
     {
+        [Tunable("Eating", TunableKind.Log, "Recon log while you eat a food the vanilla way (grips, sounds, states, hand paths).", Suggested = true)]
         public static bool enabled = false;            // turns the recon on; can be switched live
 
         // Optional extra (prop, palm) pair. It is tracked along with the auto-discovered props, and its raw pose is logged

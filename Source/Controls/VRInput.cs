@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using TarkovVR.Source.XR;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Controls
 {
@@ -36,6 +37,8 @@ namespace TarkovVR.Source.Controls
 
         // After a radial menu pick with a controller's stick (CircularSegmentUI closing), everything else reads that stick as centred
         // until it is let go. Otherwise the pick's push would carry on as a move or a crouch.
+        [Tunable("Moving", TunableKind.Tune, "After a radial menu closes, the stick that picked in it does nothing in the game (move, turn, crouch, zoom) "
+            + "until it's back within this distance of the centre (0..1 stick travel).")]
         public static float menuStickLetGoRadius = 0.2f;    // how far from the centre counts as let go
         private static readonly bool[] stickHeld = new bool[2];
 

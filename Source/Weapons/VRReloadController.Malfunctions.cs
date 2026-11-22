@@ -8,6 +8,7 @@ using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -180,7 +181,7 @@ namespace TarkovVR.Source.Weapons
                 || DeflectorBlocksClearing(firearmController) || !Malfunctions.TryGetJamPort(firearmController, out Vector3 port))
                 return false;
             bool atPort = HandTouchesCapsule(gunHand, port, port, Malfunctions.jamPortRadius);
-            SetZoneViz(ref Malfunctions.jamPortZoneViz, debugZones, port, Malfunctions.jamPortRadius, atPort ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.9f, 0f, 0.3f));
+            SetZoneViz(debugZones, port, Malfunctions.jamPortRadius, atPort ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.9f, 0f, 0.3f));
             return atPort;
         }
 
@@ -327,6 +328,7 @@ namespace TarkovVR.Source.Weapons
 
         public static class Malfunctions
         {
+            [Tunable("Malfunctions", TunableKind.Tune, "Tugs on the handle that don't move it during a hard slide; it breaks free on the next.")]
             public static int hardSlideStuckTugs = 2;               // tugs that don't move it; it breaks free on the next
             public static float hardSlideTugDistance = 0.025f;      // m the hand pulls on the stuck handle or bolt for a tug
             public static float hardSlideTugReset = 0.01f;          // m it has to come back toward rest before the next one counts
@@ -335,10 +337,12 @@ namespace TarkovVR.Source.Weapons
                                                                     // as its own repair does (it would hold the bolt where the jam left it)
             // For testing: your next shot fails with this malfunction type, then this resets to None. Only applied where Tarkov itself could
             // roll that type (ForcedMalfunction), so a gun never gets one it has no animations for.
+            [Tunable("Malfunctions", TunableKind.Test, "Your next shot fails with this malfunction, once. Refused (and logged) when Tarkov couldn't give it on that "
+                + "gun: Feed and both slides need rounds left in the magazine.", Suggested = "Jam")]
             public static Weapon.EMalfunctionState testMalfunctionNextShot = Weapon.EMalfunctionState.None;
-            internal static GameObject jamPortZoneViz;
 
             // The stuck case of a failure to eject, with the fingers locked on it
+            [Tunable("Malfunctions", TunableKind.Tune, "How far you pull a stuck case before it comes out.", Unit = "m")]
             public static float jamCaseBreakDistance = 0.05f;       // m the controller must pull away from where it took the case before the case comes out
             public static float jamCaseGive = 0.006f;               // m the stuck case gives toward the pull, all of it at the break
             public static float jamCaseWiggleDegrees = 15f;         // deg it tips with the hand's turn while stuck (about its end in the gun)

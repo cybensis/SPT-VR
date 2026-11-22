@@ -1,4 +1,5 @@
 using RootMotion.FinalIK;
+using TarkovVR.Source.Dev;
 using UnityEngine;
 
 namespace TarkovVR.Source.Player.Body
@@ -33,13 +34,17 @@ namespace TarkovVR.Source.Player.Body
 
     internal static class HandTargets
     {
+        [Tunable("Loot & hands", TunableKind.Log, "A [HandTargets] line whenever a hand changes hands: the frame, which arm, and the system "
+            + "and target before and after. Two systems fighting over a hand show as lines every frame.", Suggested = true)]
         public static bool logChanges = false;      // a line whenever an arm's owner or target changes: frame, arm, before -> after
 
         private static LimbIK leftArm, rightArm;
         private static HandOwner leftOwner, rightOwner;
         private static Transform leftTarget, rightTarget;
 
+        [Tunable("Loot & hands", TunableKind.Status, "Which system the left arm reaches for right now (HandTargets).")]
         internal static HandOwner LeftOwner => leftOwner;
+        [Tunable("Loot & hands", TunableKind.Status, "Which system the right arm reaches for right now (HandTargets).")]
         internal static HandOwner RightOwner => rightOwner;
 
         internal static void Set(LimbIK arm, Transform target, HandOwner owner)

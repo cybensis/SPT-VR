@@ -9,6 +9,7 @@ using System.Runtime.CompilerServices;
 using TarkovVR.ModSupport;
 using TarkovVR.Patches.Core.Player;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -25,6 +26,7 @@ namespace TarkovVR.Source.Player.Interactions
     public static class WeaponCollision
     {
         // ---- live tunables ----
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "The gun collides with the world (also switches hand collision and the turn-away suppression).")]
         public static bool enabled = true;                 // master switch (also gates HandCollision + the TurnAway suppression)
         public static float bodyRadius = 0.05f;            // m; gun body/receiver capsule
         public static float barrelRadius = 0.02f;          // m; gun barrel capsule
@@ -34,9 +36,14 @@ namespace TarkovVR.Source.Player.Interactions
         public static float impactSoundFullSpeed = 4f;     // m/s at which it plays at impactSoundVolume
         public static float impactSoundRetrigger = 0.8f;   // s between impact sounds
         public static float freshContactGap = 0.3f;        // s off a surface before touching it again counts as a new impact
+        [Tunable("Sling, stock & weight", TunableKind.Tune, "How hard the gun has to hit a whole window to break it.", Unit = "m/s")]
         public static float glassBreakMinSpeed = 2.0f;     // m/s approach needed to break
         public static float glassBreakDamage = 30f;        // melee damage carried by the synthetic hit (~knife slash)
+        [Tunable("Sling, stock & weight", TunableKind.Switch, "What's left of a broken window breaks as soon as the gun touches it. Off: the leftover glass needs the same "
+            + "hit as a whole window.")]
         public static bool leftoverGlassAtTouch = true;    // what's left of a broken window breaks at any touch (false = it needs the whack too)
+        [Tunable("Sling, stock & weight", TunableKind.Log, "A [WeaponCollision] hit line each time the gun bumps into something: the object's path, layer, collider shape "
+            + "and size, and its bullet surface. For finding what the gun catches on that it shouldn't.")]
         public static bool logContacts = false;            // a line per new contact: what the gun hit (path, layer, collider, bullet surface)
         // Logs a line a second while the gun touches something: how much the drawn muzzle shakes frame to frame (its second difference,
         // in the rig's frame so walking and turning don't count) against the hand's own shake, how deep the hand is in, and the substeps.

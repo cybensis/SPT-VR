@@ -1,5 +1,6 @@
 using TarkovVR.Source.Weapons;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -12,6 +13,8 @@ namespace TarkovVR.Source.Player.VRManager
     public static class LateGunPlacement
     {
         public static float maxCorrection = 0.5f;   // m: a larger move in one frame is a teleport (respawn, weapon switch) and is left alone
+        [Tunable("Sling, stock & weight", TunableKind.Log, "A [LateGunPlacement] line a second: the most the gun was moved back onto your hand in one frame, and the rig's "
+            + "pin.", Suggested = true)]
         public static bool debugLog = false;        // logs once a second the most the gun and the rig moved here in a frame
 
         private static Transform positioner;

@@ -162,11 +162,10 @@ namespace TarkovVR.Source.Weapons
         {
             if (!show || HoldingChargingHandle || !TryGetSideKnobPoint(firearmController, out Vector3 point))
             {
-                SetZoneViz(ref HandleParts.sideHandleZoneViz, false, Vector3.zero, 0f, Color.clear);
                 return;
             }
             bool inReach = OffHandTouchesCapsule(point, point, handleGrabRadius);
-            SetZoneViz(ref HandleParts.sideHandleZoneViz, true, point, handleGrabRadius, inReach ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.4f, 0f, 0.3f));
+            SetZoneViz(true, point, handleGrabRadius, inReach ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.4f, 0f, 0.3f));
         }
 
         public static class HandleParts
@@ -181,7 +180,6 @@ namespace TarkovVR.Source.Weapons
 
             internal static Transform sideKnobMeshFor;
             internal static MeshFilter sideKnobMesh;
-            internal static GameObject sideHandleZoneViz;
 
             internal static SideHandle SideHandleOf(FirearmController firearmController)
             {

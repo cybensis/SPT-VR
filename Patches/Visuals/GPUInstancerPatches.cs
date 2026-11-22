@@ -3,6 +3,7 @@ using HarmonyLib;
 using System;
 using UnityEngine;
 using UnityEngine.Rendering;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -16,6 +17,7 @@ namespace TarkovVR.Patches.Visuals
         // (SetEyeGrassMatrices). Vanilla fills A and B once a frame from the mono camera, which is wrong in each eye.
         // false = identity matrices: the wind sway reads as screen motion and FSR drops the history on swaying grass.
         // The scope's own managers stay vanilla.
+        [Tunable("Visuals", TunableKind.Switch, "Grass motion vectors per eye. Off: the old identity behaviour, to compare.")]
         public static bool perEyeGrassMotion = true;
         private static readonly int NonJitteredVP = Shader.PropertyToID("_NonJitteredVP");
         private static readonly int PreviousVP = Shader.PropertyToID("_PreviousVP");

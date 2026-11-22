@@ -13,6 +13,7 @@ using TarkovVR.Source.Weapons;
 using UnityEngine;
 using Valve.VR;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -27,17 +28,30 @@ namespace TarkovVR.Source.Player.Interactions
     // Holding the trigger at the slot for holdSeconds moves the slot (saved like a gun spot).
     public static class GrenadeSlot
     {
+        [Tunable("Grenades", TunableKind.Switch, "The grenade on the chest.")]
         public static bool enabled = true;
+        [Tunable("Grenades", TunableKind.Tune, "Where the grenade's middle sits by default, from the neck, body frame (x right, y up, z forward). A slot moved "
+            + "by hand overrides it (Reset Placed Gun Spots clears that).", Unit = "m")]
         public static Vector3 slotFromNeck = new Vector3(-0.12f, -0.20f, 0.14f);    // m, body frame (x right, y up, z forward): the grenade's middle, top left of the chest
+        [Tunable("Grenades", TunableKind.Tune, "The grenade's default turn on the slot, body frame. A slot moved by hand overrides it.", Unit = "deg")]
         public static Vector3 slotEuler = new Vector3(278.5f, 132.7f, 166f);        // the grenade body's rotation there, body frame
+        [Tunable("Grenades", TunableKind.Tune, "How close any point of the hand must be to the grenade's middle to take it.", Unit = "m")]
         public static float grabRadius = 0.08f;     // m from any point of the hand (palm, knuckles, fingertips) to the grenade's middle
         public static float holdSeconds = 1f;       // s the trigger is held at the slot to start moving it
         public static float switchTimeout = 3f;     // s before a grab whose hands switch never completes is given up
+        [Tunable("Grenades", TunableKind.Tune, "A gun that was hanging when the grenade came out, back in the hands (put-back or after a throw): how long it "
+            + "has to hang on its spot again.", Unit = "s")]
         public static float rehangSeconds = 3f;     // s, once a gun that hung before the grenade is back in the hands, for it to hang again
+        [Tunable("Grenades", TunableKind.Tune, "After a throw, how long Tarkov's draw of that hanging gun still counts as its return (skipped, hung again).", Unit = "s")]
         public static float throwReturnTimeout = 8f;    // s after a throw that Tarkov's draw of the previously hung gun still counts as its return
         public static float returnRetryDelay = 1f;      // co-op client: s between requests for a gun's return the host refused (once it's free)
+        [Tunable("Grenades", TunableKind.Tune, "Co-op as a client: how many times a gun return the host refused is asked for again (1 s apart, once the host "
+            + "is free). No grenade grab until it's back.")]
         public static int returnRetries = 4;
+        [Tunable("Grenades", TunableKind.Tune, "Co-op as a client: after the host refuses a grenade grab (your hands go back to what they held), how long the "
+            + "slot waits before another grab.", Unit = "s")]
         public static float refusedTakeHold = 2f;       // co-op client: s the slot waits after the host refused a take
+        [Tunable("Grenades", TunableKind.Log, "A line per pick, grab, skipped draw and slot move.")]
         public static bool debugLog = true;         // one line per grab / pick / placement
 
         private sealed class Hand

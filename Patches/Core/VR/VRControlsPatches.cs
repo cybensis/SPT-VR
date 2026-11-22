@@ -5,6 +5,7 @@ using UnityEngine;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Settings;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Patches.Core.VR
 {
@@ -18,8 +19,14 @@ namespace TarkovVR.Patches.Core.VR
 
         // While looking through a scope that zooms on the turning stick (VRPlayerManager.ScopeZoomOwnsStick), the stick only turns when pushed
         // nearly straight sideways, and not at all after a zoom push until it is back near the centre (so a zoom push drifting sideways doesn't turn)
+        [Tunable("Reload & handles", TunableKind.Switch, "In a scope that zooms on the turning stick: it only turns pushed nearly straight sideways, and not after a "
+            + "zoom push until the stick is back in the centre. Off: any sideways part turns you, as before.")]
         public static bool scopeTurnGuard = true;
+        [Tunable("Reload & handles", TunableKind.Tune, "How far off straight sideways the stick may point and still turn in a zoom scope. Lower = harder to turn by "
+            + "accident.", Unit = "°")]
         public static float scopeTurnMaxAngle = 45f;    // deg off straight sideways the stick may point and still turn
+        [Tunable("Reload & handles", TunableKind.Tune, "How far sideways the stick has to go before it turns in a zoom scope (0-1). Smooth turning ramps up from "
+            + "there.")]
         public static float scopeTurnDeadzone = 0.15f;  // sideways push below which it doesn't turn; smooth turning ramps up from here
         public static float scopeZoomPush = 0.3f;       // an up / down push past this, more up / down than sideways, is a zoom
         public static float stickCentre = 0.2f;         // back within this of the centre, it may turn / zoom again

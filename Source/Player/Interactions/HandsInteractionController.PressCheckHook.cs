@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -16,10 +17,13 @@ namespace TarkovVR.Source.Player.Interactions
         // deg on the slide: knuckle / middle / tip joint. The turn leaves the knuckles beside the slide at about its middle height
         // (on a 1911), so the knuckle bends most to reach over the top and the other joints wrap down onto it.
         // Tuned together with VRReloadController's wrist opening (30) and offset:
+        [Tunable("Press check", TunableKind.Tune, "Index, middle and ring on the slide, bent from the open hand: knuckle, middle joint, tip.", Unit = "°")]
         public static Vector3 pressCheckHookFinger = new Vector3(30f, 40f, 45f);   // index to ring
+        [Tunable("Press check", TunableKind.Tune, "The pinky's bend: knuckle, middle joint, tip.", Unit = "°")]
         public static Vector3 pressCheckHookPinky = new Vector3(-15f, -5f, 5f);
         // deg added to the gripping thumb's base / knuckle / tip joint: + closes it toward the palm, - opens it.
         // Bending the base moves the knuckle the gun turns about; the other joints bend from it.
+        [Tunable("Press check", TunableKind.Tune, "The thumb on top of its grip: base, knuckle, tip. Positive closes it toward the palm, negative opens it.", Unit = "°")]
         public static Vector3 pressCheckHookThumb = Vector3.zero;
 
         private static readonly Quaternion[] pressCheckJointAnimated = new Quaternion[3];

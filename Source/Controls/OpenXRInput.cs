@@ -3,6 +3,7 @@ using TarkovVR.Source.XR;
 using UnityEngine;
 using UnityEngine.XR;
 using Valve.VR;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Controls
 {
@@ -23,11 +24,16 @@ namespace TarkovVR.Source.Controls
         // handle as a grab. Letting go still uses the wrap (gripReleaseThreshold), so a gun stays held without squeezing the whole time.
         public static float gripForcePressThreshold = 0.4f;
         public static float gripForceLetUpThreshold = 0.25f; // a squeeze ends under this force
+        [Tunable("Grenades", TunableKind.Tune, "The wrap a held grip lets go under (any controller). Higher = lets go sooner.")]
         public static float gripReleaseThreshold = 0.5f;    // wrap under which a held grip lets go (too low waits for a nearly open hand)
         // On Index an opening hand lets go at once, before the wrap gets under gripReleaseThreshold: the wrap falls by gripFastOpenDrop
         // within gripFastOpenWindow, without a squeeze and below gripFastOpenCeiling. A hand relaxing on the handle falls slowly and keeps holding.
+        [Tunable("Grenades", TunableKind.Tune, "How far the wrap (0..1) must fall within the window for a fast open. Lower = lets go sooner, but a twitch of "
+            + "the fingers can drop what you hold.")]
         public static float gripFastOpenDrop = 0.3f;
+        [Tunable("Grenades", TunableKind.Tune, "The time that fall must happen in.", Unit = "s")]
         public static float gripFastOpenWindow = 0.1f;      // s
+        [Tunable("Grenades", TunableKind.Tune, "A fast open only counts once the wrap is under this (a squeeze shifting near the top isn't an opening).")]
         public static float gripFastOpenCeiling = 0.75f;    // wrap: a squeeze shifting at the top of its range isn't an opening
 
         // Extra correction on top of the grip -> raw conversion, in the raw pose's own space

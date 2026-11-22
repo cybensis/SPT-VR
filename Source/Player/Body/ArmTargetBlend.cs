@@ -1,6 +1,7 @@
 using RootMotion.FinalIK;
 using TarkovVR.Source.Controls;
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Body
 {
@@ -14,7 +15,10 @@ namespace TarkovVR.Source.Player.Body
     // restores the target. Off while the gun is in the left hand: that arm holds the gun then, and its grip has to stay on it.
     internal static class ArmTargetBlend
     {
+        [Tunable("Reload & handles", TunableKind.Switch, "The off hand blends whenever what it reaches for changes (onto the foregrip and off it, a reload animation "
+            + "taking it, letting go of a part). Off: it jumps.")]
         public static bool enabled = true;
+        [Tunable("Reload & handles", TunableKind.Tune, "How long that blend takes.", Unit = "s")]
         public static float switchBlendTime = 0.14f;        // s
 
         private static LimbIK hookedArm;

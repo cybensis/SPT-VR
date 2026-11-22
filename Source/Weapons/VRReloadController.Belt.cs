@@ -9,6 +9,7 @@ using TarkovVR.Source.Settings;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
 using TarkovVR.Source.Player.Body;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -23,6 +24,8 @@ namespace TarkovVR.Source.Weapons
     // Not synced to co-op observers (they see Tarkov's poses); the inventory moves are synced.
     public static partial class VRReloadController
     {
+        [Tunable("Belt-fed machine guns", TunableKind.Log, "Log lines for the cover, latch and belt: grabs, refusals (why the cover or box won't move), laid / out, "
+            + "charged.")]
         public static bool beltDebugLog = true;             // grabs, refusals, the belt's states
 
         private sealed class LmgData
@@ -227,24 +230,39 @@ namespace TarkovVR.Source.Weapons
 
         public static class Belt
         {
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "How close your hand must be to the cover's free end, or the latch, for the trigger to take it.", Unit = "m")]
             public static float hingeGrabRadius = 0.05f;        // m from any point of the hand to a cover's or latch's free end
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "Let go past this share open and the cover / latch swings fully open; below it, shut.")]
             public static float hingeOpenEnough = 0.5f;         // share open past which letting go swings it fully open (else it shuts)
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "How long the cover / latch takes to swing the rest of the way once let go.", Unit = "s")]
             public static float hingeSettleTime = 0.12f;        // s it takes to swing the rest of the way once let go
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "How far open the cover must be for the box to come off and the belt to go in or out.")]
             public static float coverOpenToWork = 0.85f;        // share open the cover must be for the box and the belt
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "How far the scope mount must be swung aside before the cover will lift.")]
             public static float latchOpenToWork = 0.85f;        // share the latch must be swung aside for the cover to lift
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "How close your hand must be to the hanging belt (or its end in the tray) to take it.", Unit = "m")]
             public static float beltGrabRadius = 0.05f;         // m from any point of the hand to the belt (its hanging end, or its end in the tray)
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "How close the belt end must come to the tray to go in.", Unit = "m")]
             public static float beltLayRadius = 0.05f;          // m the held end must come to where Tarkov lays it
             public static float beltLayTime = 0.15f;            // s the belt eases into the animator's laid pose
             public static float beltTipEaseTime = 0.1f;         // s the end eases into the hand at the grab
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "How many more links you can pull out of the box than Tarkov's clip has out.")]
             public static int beltExtraOut = 6;                 // links the hand can draw out of the box past the clip's own
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "How much of its swing the hanging belt keeps each step (lower = it settles faster).")]
             public static float beltDamping = 0.9f;             // share of each point's motion kept per step (lower = less swing)
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "The fastest a belt point moves (keeps a snap turn from flinging it).", Unit = "m/s")]
             public static float beltMaxSpeed = 4f;              // m/s a belt point moves at most (a snap turn doesn't fling it)
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "The sharpest two links can bend at (lower = a stiffer belt).", Unit = "deg")]
             public static float beltMaxBendDegrees = 50f;       // deg, the largest angle between two links
             // Share of the way each free link is pulled back per step toward the clip's hanging shape (in the box's frame). While held, the
             // pull fades toward the end in the hand, so the belt bends to follow the hand from the box out.
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "How firmly a hanging belt keeps Tarkov's own hanging shape (0 = a floppy rope; higher = stiffer).")]
             public static float beltShapeFree = 0.25f;
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "Held by its end: how firmly the belt near the box keeps that shape (it fades out toward your hand).")]
             public static float beltShapeHeld = 0.3f;
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "Share of gravity on the free belt (the shape carries the rest).")]
             public static float beltGravity = 0.3f;             // share of gravity on the free links (the shape spring carries the rest)
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "How far the free belt stays off the box / drum (it's kept out of it, not through it).", Unit = "m")]
             public static float beltBoxMargin = 0.004f;         // m the free links are kept off the box's body (so they don't pass through it)
             public static int beltIterations = 10;
             public static float beltJumpDistance = 0.4f;        // m; a box move this large in one frame is a jump (the rig recentred), the belt moves with it
@@ -252,6 +270,7 @@ namespace TarkovVR.Source.Weapons
             // M60's left hand everything but the handle).
             // A hand taking a part (the cover, the latch; the box through the magazine holds) moves onto the clip's hold, and the belt's end
             // goes into the fingers where the clip pinches it.
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "Gun in the left hand: how far a part may sit off the gun's centre plane and still get the mirrored hold.", Unit = "m")]
             public static float partMirrorPlaneTolerance = 0.03f; // m a part's bone may be off the gun's centre plane and still mirror its hold (gun in the other hand)
 
             //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -413,6 +432,7 @@ namespace TarkovVR.Source.Weapons
             // The belt box's grab zone is its body: any point of the hand within beltBoxGrabMargin of it. (A magazine's grab capsule,
             // a magazine length down, would sit inside the middle of the box.)
 
+            [Tunable("Belt-fed machine guns", TunableKind.Tune, "How close any part of the hand has to be to the box's body to grab it.", Unit = "m")]
             public static float beltBoxGrabMargin = 0.04f;      // m from any point of the hand to the box's body (its mesh bounds)
             private static Transform beltBoxBoundsFor;
             private static Bounds beltBoxBounds;                // in the box view's own frame
@@ -599,7 +619,6 @@ namespace TarkovVR.Source.Weapons
             private static readonly HingeRig coverRig = new HingeRig(), latchRig = new HingeRig();
             private static readonly Dictionary<Transform, Quaternion> hingeClosedPoses = new Dictionary<Transform, Quaternion>();
             private static readonly Dictionary<Transform, Vector3> buttonRestPoses = new Dictionary<Transform, Vector3>();
-            private static GameObject coverZoneViz, latchZoneViz, beltZoneViz, trayZoneViz;
 
             public static bool HoldingHinge { get; private set; }
             private static HingeKind heldHinge;
@@ -1510,7 +1529,7 @@ namespace TarkovVR.Source.Weapons
                         part = 0;
                     }
                     if (showZones)
-                        SetZoneViz(ref coverZoneViz, true, cover.grab.position, hingeGrabRadius, outside <= 0f ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.6f, 1f, 0.3f));
+                        SetZoneViz(true, cover.grab.position, hingeGrabRadius, outside <= 0f ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.6f, 1f, 0.3f));
                 }
                 if (latchHand && LatchPresent(firearmController, data, out HingeRig latch))
                 {
@@ -1522,7 +1541,7 @@ namespace TarkovVR.Source.Weapons
                         part = 1;
                     }
                     if (showZones)
-                        SetCapsuleZoneViz(ref latchZoneViz, from, latch.grab.position, hingeGrabRadius, outside <= 0f ? new Color(0f, 1f, 0f, 0.3f) : new Color(0.7f, 0.3f, 1f, 0.3f));
+                        SetCapsuleZoneViz(from, latch.grab.position, hingeGrabRadius, outside <= 0f ? new Color(0f, 1f, 0f, 0.3f) : new Color(0.7f, 0.3f, 1f, 0.3f));
                 }
                 bool boxOn = beltHand && weapon.GetCurrentMagazine() != null && gunRope.links != null && gunRope.box == GunBoxView(firearmController);
                 if (boxOn && state.beltOut && gunRope.simulating)
@@ -1536,7 +1555,7 @@ namespace TarkovVR.Source.Weapons
                         part = 2;
                     }
                     if (showZones)
-                        SetCapsuleZoneViz(ref beltZoneViz, mouth, end, beltGrabRadius, outside <= 0f ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.9f, 0f, 0.3f));
+                        SetCapsuleZoneViz(mouth, end, beltGrabRadius, outside <= 0f ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.9f, 0f, 0.3f));
                 }
                 if (boxOn && !state.beltOut && CoverOpenEnough(state))
                 {
@@ -1552,7 +1571,7 @@ namespace TarkovVR.Source.Weapons
                 if (showZones)
                 {
                     bool showTray = boxOn && state.beltOut && CoverOpenEnough(state);
-                    SetZoneViz(ref trayZoneViz, showTray, showTray ? gunRope.box.TransformPoint(gunRope.laidEndLocal) : Vector3.zero, beltLayRadius, new Color(0f, 1f, 0.4f, 0.3f));
+                    SetZoneViz(showTray, showTray ? gunRope.box.TransformPoint(gunRope.laidEndLocal) : Vector3.zero, beltLayRadius, new Color(0f, 1f, 0.4f, 0.3f));
                 }
                 if (part < 0)
                     return false;
@@ -1575,14 +1594,6 @@ namespace TarkovVR.Source.Weapons
                 UpdateHinge(triggerReleased, gunHandTriggerReleased);
                 UpdateBeltHold(triggerReleased, gunHandTriggerReleased);
                 latchButtonPressed = Mathf.MoveTowards(latchButtonPressed, HoldingHinge && heldHinge == HingeKind.Latch ? 1f : 0f, Time.deltaTime / 0.08f);
-                // Hide the zones; TickBeltGunGrabs (which runs after this) shows the ones a hand may take now
-                if (debugZones)
-                {
-                    SetZoneViz(ref coverZoneViz, false, Vector3.zero, 0f, Color.clear);
-                    SetZoneViz(ref latchZoneViz, false, Vector3.zero, 0f, Color.clear);
-                    SetZoneViz(ref beltZoneViz, false, Vector3.zero, 0f, Color.clear);
-                    SetZoneViz(ref trayZoneViz, false, Vector3.zero, 0f, Color.clear);
-                }
                 FirearmController firearmController = VRGlobals.firearmController;
                 if (!TryGetLmg(firearmController, out _))
                 {

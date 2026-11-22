@@ -6,6 +6,7 @@ using TarkovVR.Source.Settings;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
 using TarkovVR.Source.Player.Body;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -21,6 +22,7 @@ namespace TarkovVR.Source.Weapons
     // back the handle is. Only the pose changes; the bolt-catch flag isn't touched.
     public static partial class VRReloadController
     {
+        [Tunable("Reload & handles", TunableKind.Tune, "How close the palm must be to a charging handle to grab it.", Unit = "m")]
         public static float handleGrabRadius = 0.06f;      // m, palm distance to the back of the charging handle to grab it
         public static float handleFullPull = 0.9f;         // share of handleTravel that counts as all the way back
 
@@ -443,8 +445,6 @@ namespace TarkovVR.Source.Weapons
             bool hasHandle = show && TryGetChargingHandle(firearmController, weapon);
             if (!hasHandle || HoldingChargingHandle)
             {
-                SetZoneViz(ref ChargingHandle.handleZoneViz, false, Vector3.zero, 0f, Color.clear);
-                SetZoneViz(ref ChargingHandle.otherKnobZoneViz, false, Vector3.zero, 0f, Color.clear);
                 return;
             }
             Vector3 backWorld = firearmController.WeaponRoot.up;
@@ -452,7 +452,6 @@ namespace TarkovVR.Source.Weapons
             {
                 if (zone >= ChargingHandle.HandleZoneCount)
                 {
-                    SetZoneViz(ref ChargingHandle.otherKnobZoneViz, false, Vector3.zero, 0f, Color.clear);
                     continue;
                 }
                 Vector3 grabPoint = ChargingHandle.HandleZonePoint(zone, backWorld);
@@ -461,17 +460,19 @@ namespace TarkovVR.Source.Weapons
                     || (ChestHang.SupportOnly && HandTouchesCapsule(true, grabPoint, zoneEnd, handleGrabRadius));
                 Color color = inReach ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.4f, 0f, 0.3f);
                 if (zone == 0)
-                    SetCapsuleZoneViz(ref ChargingHandle.handleZoneViz, grabPoint, zoneEnd, handleGrabRadius, color);
+                    SetCapsuleZoneViz(grabPoint, zoneEnd, handleGrabRadius, color);
                 else
-                    SetCapsuleZoneViz(ref ChargingHandle.otherKnobZoneViz, grabPoint, zoneEnd, handleGrabRadius, color);
+                    SetCapsuleZoneViz(grabPoint, zoneEnd, handleGrabRadius, color);
             }
         }
 
         public static class ChargingHandle
         {
             public static float handleZoneBack = 0.05f;        // m the grab zone (a capsule) extends past that toward the stock
+            [Tunable("Reload & handles", TunableKind.Tune, "Handle travel for guns without their own measured value.", Unit = "m")]
             public static float handleTravel = 0.08f;          // m the handle comes back
             public static float minHandleTravel = 0.01f;       // m a handle already at (or past) its full back can still move, so the pull registers
+            [Tunable("Reload & handles", TunableKind.Tune, "How far a handle can still come back with the bolt already locked back.", Unit = "m")]
             public static float handleLockedBackTravel = 0.02f; // m of travel left for a handle on the bolt when the bolt is already locked back
             public static float underGunPullGain = 1.6f;        // off hand on a handle on the bolt: handle travel per controller travel (1 = one to one).
                                                                 // That hand reaches under the gun and would hit the other controller over a full pull.
@@ -506,12 +507,13 @@ namespace TarkovVR.Source.Weapons
             internal static readonly Dictionary<string, Transform> rigBones = new Dictionary<string, Transform>();
             private static Transform handleMeshesFor;
             private static MeshFilter[] handleMeshes;
-            internal static GameObject handleZoneViz;
             internal static Vector3? foundHandleGrabLocal;
             internal static Vector3[] foundHandleKnobs;
             internal static int grabbedKnob;                     // which of those the hand took, while holding
+            [Tunable("Reload & handles", TunableKind.Tune, "How far off the gun's centre a single handle can sit and still give the right hand the left hand's grip, "
+                + "mirrored (an AR's T). 0: only knob pairs like the MDR's.", Unit = "m")]
             public static float handleMirrorPlaneTolerance = 0.015f;   // m a grab point can sit off the gun's centre plane and still take the left hand's hold mirrored (a T)
-            internal static GameObject otherKnobZoneViz;
+            [Tunable("Reload & handles", TunableKind.Tune, "How long a folding knob (the MDR's paddles) takes to swing out as you grab it, and back.", Unit = "s")]
             public static float knobFoldTime = 0.1f;            // s a knob takes to fold out as it's taken, and back
             internal static Transform foldingKnob;
             private static Quaternion foldingKnobRest;

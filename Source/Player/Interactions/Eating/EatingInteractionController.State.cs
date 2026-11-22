@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using static EFT.Player;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -81,6 +82,7 @@ namespace TarkovVR.Source.Player.Interactions
         // moved: the top one is the bone name to pass to OpenGrip(...). Don't place the hand from the clip's wrist bones:
         // raw reads return last frame's pinned values, and reads after a forced Animator.Update(0) come back in the wrong frame.
         public static bool logOpenMovers = false;
+        [Tunable("Eating", TunableKind.Log, "Each eat's progress, step by step.", Suggested = true)]
         public static bool logSteps = false;              // each eat's step-by-step progress ("[ManualEat] Opening / Took / Ate ..."); warnings always
         internal static void LogStep(string message) { if (logSteps) Plugin.MyLog.LogInfo(message); }
         // OpenGrip snap: at the grab the hand jumps so its index fingertip sits on the lid or cover bone (the deepest index bone
@@ -101,7 +103,9 @@ namespace TarkovVR.Source.Player.Interactions
         // eases onto the authored pose at the grab and back to the controller at the release, and turns about the point it holds
         // as the controller turns since the grab (relative to the holding hand), capped at latchWiggleDegrees. Tilt opens keep
         // pullWiggleDeg about the wrist, because their gesture is the hand's turn. false = the latch jumps on and snaps off.
+        [Tunable("Eating", TunableKind.Switch, "Reload-style hand lock on lids and bags (ease in, wiggle, ease out). Off: the old latch.")]
         public static bool reloadStyleLatch = true;
+        [Tunable("Eating", TunableKind.Tune, "How far a hand locked onto a lid can turn about its fingertip.", Unit = "°")]
         public static float latchWiggleDegrees = 15f;   // deg at most, one to one with the controller's turn
         public static float latchSnapTime = 0.06f;      // s onto the authored pose (= handSnapTime)
         public static float latchReleaseTime = 0.08f;   // s back onto the controller (= handReleaseTime)

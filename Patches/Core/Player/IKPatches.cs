@@ -7,6 +7,7 @@ using EFT.Animations;
 using RootMotion.FinalIK;
 using AnimationSystem;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -574,6 +575,8 @@ namespace TarkovVR.Patches.Core.Player
 
         // s continuously off the ground before the hands go to VR control. Higher = fewer false triggers on ledges, more lag
         // into a jump. 0 = no air handling (sprint only).
+        [Tunable("Moving", TunableKind.Tune, "Off the ground this long without a jump (a ledge, a stair edge) before the hands are taken off the animation. "
+            + "0 = no air path at all.", Unit = "s")]
         public static float airborneFreefallTime = 0.20f;
         // A jump counts as airborne from its first frame. EFT's JumpPlayerState starts in PushingFromTheGround: the player is still
         // on the ground for its lift delay (JUMP_DELAY_BY_SPEED, longer the faster you go) while the jump animation already plays,

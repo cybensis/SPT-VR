@@ -1,4 +1,5 @@
 using UnityEngine;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.ModSupport
 {
@@ -9,9 +10,13 @@ namespace TarkovVR.ModSupport
     // No FIKA types in this class: FikaHostWait keeps them behind NoInlining calls.
     internal static class CoopHost
     {
+        [Tunable("Grenades", TunableKind.Tune, "Co-op as a FIKA client: the longest a quick move of ours (grenade put-back / pin pull / throw finish, body-gun "
+            + "grab, food discard, loot stow) waits for the host to answer your last move before going anyway. Sent sooner "
+            + "the host refuses it and the hands can break.", Unit = "s")]
         public static float waitLimit = 5f;     // s a quick move waits on the host's answer before it goes anyway
         // s the host's copy of you is still throwing after a grenade leaves your hand. The host doesn't answer a throw, and it
         // plays the draw, pin pull and throw that we skip at full length.
+        [Tunable("Grenades", TunableKind.Tune, "Co-op as a client: the shortest wait after any throw before your gun comes back.", Unit = "s")]
         public static float throwSettle = 2.5f;
 
         private static float busyUntil = -1f;
@@ -26,6 +31,9 @@ namespace TarkovVR.ModSupport
         // ignored, since our next move crosses it too. A quick throw keeps the host busy well past throwSettle.
         public static float hostPinPull = 1.5f;
         public static float hostThrow = 0.9f;
+        [Tunable("Grenades", TunableKind.Tune, "Co-op as a client: extra wait after a throw before your gun comes back, on top of the host playing the pin "
+            + "pull and the throw at full length. Raise it if the log still shows 'Default Inventory is currently being "
+            + "modified' after quick throws.", Unit = "s")]
         public static float hostThrowMargin = 1f;   // s extra for the host's frames and the end of its throw; an estimate, not measured
 
         internal static void GrenadeThrown(float pinSentAt)

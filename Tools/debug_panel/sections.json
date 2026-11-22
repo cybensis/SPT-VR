@@ -1,0 +1,89 @@
+{
+ "sections": [
+  {
+   "id": "malfunctions",
+   "title": "Malfunctions",
+   "blurb": "Clearing jams by hand, and forcing a malfunction to test one."
+  },
+  {
+   "id": "reload",
+   "title": "Reload & handles",
+   "blurb": "Magazines, charging handles, bolts and single rounds by hand."
+  },
+  {
+   "id": "presscheck",
+   "title": "Press check",
+   "blurb": "Pistols, OpenXR touch: grip let go with the thumb on A/B/stick and the finger on the trigger. Your hand stays as it holds; the gun turns in it about the thumb's knuckle (thumb stays on the frame), the fingers open and come down on the slide; the trigger draws the slide back; touching the grip puts it back."
+  },
+  {
+   "id": "shotguns",
+   "title": "Shotguns",
+   "blurb": "Tube shotguns by hand: shells from the chest pouch into the loading port (bottom) or, with the action open and the chamber empty, the ejection port; the pump by the support hand while two-handing; a semi-auto's bolt handle (MR-153, MP-155, M3 in semi) by either hand's trigger. Malfunctions: a full pump stroke or a rack of the handle clears them, a stuck shell comes out of the port by trigger (the malfunction test switch above works on shotguns too)."
+  },
+  {
+   "id": "lmgs",
+   "title": "Belt-fed machine guns",
+   "blurb": "PKM / PKP / PKTM, RPD / RPDN and M60E4 / E6 reloaded like Tarkov does it: scope mount latch aside (with a scope on it), cover open, box off and on, belt end into the tray, cover shut, handle. All with the trigger, either hand that's free. debugZones shows the cover (blue), latch (purple), hanging belt (yellow) and tray (green). The M60's LBT pouch goes in laid (no belt step)."
+  },
+  {
+   "id": "handling",
+   "title": "Sling, stock & weight",
+   "blurb": "Holding the gun: the chest sling, the virtual stock, weight feel and collision."
+  },
+  {
+   "id": "haptics",
+   "title": "Haptics",
+   "blurb": "Recoil, the per-controller mixer, and buzz driven by sounds."
+  },
+  {
+   "id": "loot",
+   "title": "Loot & hands",
+   "blurb": "Picking up loose loot, the grip that closes on it, two-handed holding and finger tracking."
+  },
+  {
+   "id": "eating",
+   "title": "Eating",
+   "blurb": "Manual eating: zones, step logs, the hand lock and authoring help."
+  },
+  {
+   "id": "moving",
+   "title": "Moving",
+   "blurb": "Jumping, and Step Or Lean Forward To Sprint (VR tab): a quick step or lean forward starts the run while the move stick is forward, back ends it. Measured on the neck under the headset; a move has to take you ahead of (or behind) where you stand."
+  },
+  {
+   "id": "mounted",
+   "title": "Mounted guns",
+   "blurb": "The AGS-30 and the NSV Utyos by hand: both grips on the handles (the Utyos: the right one alone, the left stays free; hands empty or the gun slung) takes it, the body stays under your head, your hands turn it about its mount, a holding hand's trigger fires, your eye at the sight aims, both hands open lets go."
+  },
+  {
+   "id": "grenades",
+   "title": "Grenades",
+   "blurb": "The chest slot (the grenade Tarkov would throw next, top left of the chest; either hand's grip takes it, the other hand's grip at it swaps hands), the ring the other hand's index finger hooks and pulls, and the throw."
+  },
+  {
+   "id": "body",
+   "title": "Body",
+   "blurb": "Your body following your head (the BodyFollow rows), and upper bodies following the headset. Your own body stays as animated; the other players bend their copy of you from your headset. The stance rows act on the OTHER VR players as your game draws them (SPT-VR-FikaSync's copy of the solver)."
+  },
+  {
+   "id": "doorsync",
+   "title": "Doors in co-op",
+   "blurb": "Doors another VR player moves by hand or breaks with the gun, as your game shows them. Set these on the WATCHING player's game (SPT-VR-FikaSync 2.4.4)."
+  },
+  {
+   "id": "visuals",
+   "title": "Visuals",
+   "blurb": "Rendering switches worth flipping while testing."
+  }
+ ],
+ "enums": {
+  "EFT.InventoryLogic.Weapon.EMalfunctionState": [
+   "None",
+   "Misfire",
+   "Jam",
+   "HardSlide",
+   "SoftSlide",
+   "Feed"
+  ]
+ }
+}

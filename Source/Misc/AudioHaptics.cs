@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Dev;
 
 namespace TarkovVR.Source.Misc
 {
@@ -18,6 +19,7 @@ namespace TarkovVR.Source.Misc
     public static class AudioHaptics
     {
         public static bool enabled = true;
+        [Tunable("Haptics", TunableKind.Tune, "Strength of the buzz driven by sounds (0 to about 1.5).")]
         public static float strength = 1f;        // master amplitude scale (0..~1.5)
         public static float windowSec = 0.02f;     // one haptic pulse per window
         public static float minAmp = 0.04f;        // skip windows quieter than this
