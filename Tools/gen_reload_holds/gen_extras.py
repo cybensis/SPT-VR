@@ -6,7 +6,8 @@
 #    the knob folds out, the base slides back under the hand, the slider it runs in follows once the base has come sliderLag back.
 #    The grip is the palm in the base's frame at full pull.
 #  - rockIn: guns whose magazine tilts out less than gen_holds' 15 deg but still tilts (AK-50: 9.9 deg about the AKs' axis, then away
-#    down; headset: its straight track ran toward the stock)
+#    down; headset: its straight track ran toward the stock), and guns whose detachable magazines play another clip set than _0 (the
+#    SKS: its _0 set is the fixed 10-round, its boxes play _1 / _2 and rock out 26 deg like an AK's)
 #  - handles / gunHandHandles / handleBones: guns whose handle bone has another name than mod_charge (MP7)
 import sys, json, re, os, zlib
 exec(open('gen_holds.py',encoding='utf-8').read().split("if __name__=='__main__':")[0])
@@ -477,6 +478,19 @@ for family in LOW_ROCK_GUNS:
     if rocks:
         rockIns[family]=dict(axis=rocks['axis'],angle=rocks['angle'],thumb=rocks['thumb'])
         print(f'{family} rock-in:',{k:v for k,v in rocks.items() if k!='thumb'},flush=True)
+ROCK_CLIP_SETS={'sks':'1'}
+for family,index in ROCK_CLIP_SETS.items():
+    # (any of its containers with the magazine bone: the SKS has no mod_charge for loadFolder)
+    folder=famFolder[family]; tree=None
+    for c in sorted(os.listdir(ROOT+folder)):
+        if c.endswith('_container.bundle') and c.startswith('weapon_'):
+            tree=loadTree(ROOT+folder+'/'+c)
+            if bone(tree[0],'/mod_magazine') and bone(tree[0],'/Base HumanLPalm'): break
+            tree=None
+    rocks=rockIn(tree,folderClips(folder),family,bone(tree[0],'/mod_magazine'),index=index) if tree else None
+    if rocks:
+        rockIns[family]=dict(axis=rocks['axis'],angle=rocks['angle'],thumb=rocks['thumb'])
+        print(f'{family} rock-in (clip set {index}):',{k:v for k,v in rocks.items() if k!='thumb'},'thumb' if rocks['thumb'] else 'no thumb on the catch',flush=True)
 json.dump(dict(boltBones=boltBones,sideHandles=sideHandles,rockIn=rockIns,handles=extraHandles,gunHandHandles=extraGunHandHandles,
                handleBones=handleBones,handleCarriers=handleCarriers,handleGrabPoints=handleGrabPoints,handleFullBacks=handleFullBacks,handleMovesWithBolt=extraMovesWithBolt,
                handleKnobs=handleKnobs,handleOverTop=handleOverTop,handleKnobFolds=handleKnobFolds,pressChecks=pressChecks),open('extras.json','w'))

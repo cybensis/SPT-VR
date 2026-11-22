@@ -25,8 +25,11 @@ namespace TarkovVR.Source.Weapons
     //    while open, and closing the bolt chambers it (BoltClosed shows the round). Otherwise the round goes on top of the magazine.
     //  - Letting go anywhere before it's in puts it back (it never left the stack); it is never dropped to the ground.
     // The same applies to a self-loader loaded through its open action into a fixed magazine (the SKS's internal 10-round; its detachable
-    // boxes are swapped instead). With the carrier locked back on Tarkov's catch, every round goes on top of the magazine, and letting the
-    // carrier go chambers the top one (the charging handle's own release).
+    // boxes are swapped instead), with the carrier locked back on Tarkov's catch. The first round goes into the empty chamber and shows
+    // there, as Tarkov's own internal reload and the bolt-actions do (nothing strips a round off the magazine as the carrier goes home);
+    // the caught carrier keeps it from firing, like a magazine swapped into a gun locked open, until the handle lets it go. The rest go
+    // into the magazine, 10 in all from empty as Tarkov's reload leaves it. Tarkov's magazine model only fills its rounds when it's
+    // made, so each one put in remakes them (ShowMagazineRounds).
     public static partial class VRReloadController
     {
         public static bool HoldingRound { get; private set; }
@@ -92,8 +95,7 @@ namespace TarkovVR.Source.Weapons
         private static bool TryBuildLoadOne(Ammo source, Weapon weapon, Magazine magazine, out OperationResult<IItemOperationResult> operation, out bool intoChamber)
         {
             InventoryController inventoryController = VRGlobals.player.InventoryController;
-            // A self-loader's rounds go on top of its magazine: the carrier chambers one as it goes home
-            intoChamber = weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0 && !Rounds.LoadsFixedMagazineThroughAction(weapon);
+            intoChamber = weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0;
             ItemAddress to = intoChamber ? weapon.Chambers[0].CreateItemAddress() : magazine.Cartridges.CreateItemAddress();
             Item top = intoChamber ? null : magazine.Cartridges.Last;
             if (top != null && top.TemplateId == source.TemplateId)
@@ -333,7 +335,10 @@ namespace TarkovVR.Source.Weapons
                 magazine = weapon.GetCurrentMagazine();
                 if (magazine == null)
                     return false;
-                return magazine.Count < magazine.MaxCount || (boltAction && weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0);
+                // (a self-loader's round in the chamber of the caught carrier counts as the magazine's top one)
+                if (!boltAction)
+                    return weapon.ChamberAmmoCount == 0 || magazine.Count + 1 < magazine.MaxCount;
+                return magazine.Count < magazine.MaxCount || (weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0);
             }
 
             // A self-loader Tarkov loads through its open action, with its fixed magazine in (the SKS's internal 10-round, not a detachable box)
@@ -503,13 +508,19 @@ namespace TarkovVR.Source.Weapons
                 {
                     if (result.Succeed)
                     {
-                        // In the chamber for Tarkov, but it waits for the bolt like one a magazine brought in; closing the bolt puts its
-                        // model in (roundShown is cleared because a full stroke's rechamber marked the chamber shown with nothing in it)
-                        if (intoChamber)
+                        bool topLoader = LoadsFixedMagazineThroughAction(weapon);
+                        // A self-loader's shows in the open action at once: its caught carrier holds it till it goes home
+                        if (intoChamber && topLoader)
+                            ShowChamberedRound(firearmController);
+                        // A bolt-action's is in the chamber for Tarkov, but it waits for the bolt like one a magazine brought in; closing the
+                        // bolt puts its model in (roundShown is cleared because a full stroke's rechamber marked the chamber shown with nothing in it)
+                        else if (intoChamber)
                         {
                             weaponsWaitingForRack.Add(weapon);
                             BoltStateOf(weapon).roundShown = false;
                         }
+                        else if (topLoader)
+                            ShowMagazineRounds(firearmController, magazine);
                         if (firearmController.FirearmsAnimator != null)
                         {
                             firearmController.FirearmsAnimator.SetAmmoOnMag(magazine.Count);
@@ -520,6 +531,22 @@ namespace TarkovVR.Source.Weapons
                         LogAction($"[VRReload] round {(result.Succeed ? "in" : "NOT in: " + result.Error)} ({(intoChamber ? "chamber, waits for the bolt" : "magazine")}), gun {magazine.Count}/{magazine.MaxCount} + chamber {weapon.ChamberAmmoCount}");
                     EndRoundHold();
                 });
+            }
+
+            // Tarkov's magazine model fills its rounds only when it's made (SpringMagazineVisual.FillAmmoObjectsOnStart) and afterwards only hides
+            // them as it empties: made again, it shows the ones put in by hand
+            private static void ShowMagazineRounds(FirearmController firearmController, Magazine magazine)
+            {
+                if (firearmController.WeaponRoot == null)
+                    return;
+                foreach (MagazineInHandsVisualController view in firearmController.WeaponRoot.GetComponentsInChildren<MagazineInHandsVisualController>(true))
+                {
+                    if (!(view._magazineInHandsVisual is SpringMagazineVisual visual) || visual._magazine != magazine)
+                        continue;
+                    bool animated = visual._isAnimated;
+                    visual.OnReturnToPool();
+                    view.InitializeMagazine(new SpringMagazineVisual(), magazine, animated);
+                }
             }
 
             private static Vector3 RoundCenterWorld()
