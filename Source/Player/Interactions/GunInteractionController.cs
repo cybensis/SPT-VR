@@ -239,14 +239,16 @@ public class GunInteractionController : MonoBehaviour
     }
     
     // True when the hands do what this menu would: Manual Reload on a gun with a magazine, or a gun the hands load (tube shotguns,
-    // bolt-actions, break-actions). Also a malfunction the hands clear with the handle, slide or bolt (VRReloadController.Malfunctions);
-    // any other jam (including a shotgun's) still needs the menu's Fix Malfunction.
+    // bolt-actions, break-actions and revolvers, the SKS's fixed magazine through its open action). Also a malfunction the hands clear
+    // with the handle, slide or bolt (VRReloadController.Malfunctions); any other jam (including a shotgun's) still needs the menu's Fix
+    // Malfunction.
     private static bool ManualReloadReplacesMenu()
     {
         if (VRReloadController.MalfunctionClearsByHand(VRGlobals.firearmController))
             return true;
         return (VRReloadController.ManualReloadActive() || VRReloadController.HandsLoadShotgun(VRGlobals.firearmController)
-                || VRReloadController.Bolt.HandsLoadBoltAction(VRGlobals.firearmController) || VRReloadController.BreakAction.HandsLoadBreakAction(VRGlobals.firearmController))
+                || VRReloadController.Bolt.HandsLoadBoltAction(VRGlobals.firearmController) || VRReloadController.BreakAction.HandsLoadBreakAction(VRGlobals.firearmController)
+                || VRReloadController.Rounds.ManualTopLoader(VRGlobals.firearmController))
             && VRGlobals.firearmController.Weapon.MalfState.State == EFT.InventoryLogic.Weapon.EMalfunctionState.None;
     }
 
