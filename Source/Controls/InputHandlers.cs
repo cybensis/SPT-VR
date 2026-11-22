@@ -316,7 +316,7 @@ namespace TarkovVR.Source.Controls
 
                 // On a pump gun worked by hand, B is the slide release (VRReloadController.Shotgun); on a break-action it is the lever
                 // (VRReloadController.BreakAction). Never Tarkov's reload.
-                if (VRReloadController.GunHandButtonIsSlideRelease(VRGlobals.firearmController) || VRReloadController.GunHandButtonIsBarrelLever(VRGlobals.firearmController))
+                if (VRReloadController.Shotgun.GunHandButtonIsSlideRelease(VRGlobals.firearmController) || VRReloadController.BreakAction.GunHandButtonIsBarrelLever(VRGlobals.firearmController))
                 {
                     waitingForSecondTap = false;
                     reloadTriggered = false;

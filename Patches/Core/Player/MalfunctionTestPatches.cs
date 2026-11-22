@@ -14,9 +14,9 @@ namespace TarkovVR.Patches.Core.Player
         private static void ForceTestMalfunction(EFT.Player.FirearmController __instance, bool hasAmmoInMag, bool doesWeaponHaveBoltCatch, bool isMagazineInserted,
             ref Weapon.EMalfunctionState __result, ref Weapon.EMalfunctionSource malfunctionSource)
         {
-            if (VRReloadController.testMalfunctionNextShot == Weapon.EMalfunctionState.None || __instance._player == null || !__instance._player.IsYourPlayer)
+            if (VRReloadController.Malfunctions.testMalfunctionNextShot == Weapon.EMalfunctionState.None || __instance._player == null || !__instance._player.IsYourPlayer)
                 return;
-            if (VRReloadController.ForcedMalfunction(__instance.Item, hasAmmoInMag, doesWeaponHaveBoltCatch, isMagazineInserted, out Weapon.EMalfunctionState malfunction))
+            if (VRReloadController.Malfunctions.ForcedMalfunction(__instance.Item, hasAmmoInMag, doesWeaponHaveBoltCatch, isMagazineInserted, out Weapon.EMalfunctionState malfunction))
             {
                 __result = malfunction;
                 malfunctionSource = Weapon.EMalfunctionSource.Durability;

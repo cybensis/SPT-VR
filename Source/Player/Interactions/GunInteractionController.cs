@@ -245,7 +245,7 @@ public class GunInteractionController : MonoBehaviour
         if (VRReloadController.MalfunctionClearsByHand(VRGlobals.firearmController))
             return true;
         return (VRReloadController.ManualReloadActive() || VRReloadController.HandsLoadShotgun(VRGlobals.firearmController)
-                || VRReloadController.HandsLoadBoltAction(VRGlobals.firearmController) || VRReloadController.HandsLoadBreakAction(VRGlobals.firearmController))
+                || VRReloadController.Bolt.HandsLoadBoltAction(VRGlobals.firearmController) || VRReloadController.BreakAction.HandsLoadBreakAction(VRGlobals.firearmController))
             && VRGlobals.firearmController.Weapon.MalfState.State == EFT.InventoryLogic.Weapon.EMalfunctionState.None;
     }
 
@@ -416,7 +416,7 @@ public class GunInteractionController : MonoBehaviour
         TarkovVR.Source.Weapons.GunJolt.PreAnchor();
         // A press check turns the gun in the hand about the thumb's knuckle (VRReloadController.PressCheck). It runs before the anchor,
         // which then puts the hand's marker on the turned gun at your hand.
-        TarkovVR.Source.Weapons.VRReloadController.ApplyPressCheckGunTurn(VRGlobals.weaponHolder.transform);
+        TarkovVR.Source.Weapons.VRReloadController.PressCheck.ApplyPressCheckGunTurn(VRGlobals.weaponHolder.transform);
 
         if (!WeaponPatches.grenadeEquipped && VRGlobals.firearmController != null)
         {
@@ -471,7 +471,7 @@ public class GunInteractionController : MonoBehaviour
         }
 
         // A press check with the gun in the left hand moves the gun so the left hand (the marker's mirror image) stays on the left controller
-        TarkovVR.Source.Weapons.VRReloadController.HoldPressCheckLeftHand(VRGlobals.weaponHolder.transform);
+        TarkovVR.Source.Weapons.VRReloadController.PressCheck.HoldPressCheckLeftHand(VRGlobals.weaponHolder.transform);
 
         // A reload jolt (a magazine seated, a bolt slammed home) on top of the anchor. It's applied before the collision so the
         // collision physics includes it.

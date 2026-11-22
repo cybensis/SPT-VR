@@ -115,8 +115,8 @@ namespace TarkovVR.Source.Player.Interactions
         private void SampleFingerSync()
         {
             // A press check's fingers on the slide (PressCheckHook) are sent too: the gun hand's, or the left one's with the gun in the left hand
-            bool pressCheck = VRReloadController.PressCheckProgress > 0f;
-            bool pressCheckLeft = pressCheck && VRReloadController.PressCheckOnLeftHand;
+            bool pressCheck = VRReloadController.PressCheck.PressCheckProgress > 0f;
+            bool pressCheckLeft = pressCheck && VRReloadController.PressCheck.PressCheckOnLeftHand;
             syncLeftFingersActive = (handWeightBlend >= 0.01f || pressCheckLeft) && leftFingerJoints != null;
             syncRightFingersActive = (rightHandWeightBlend >= 0.01f || (pressCheck && !pressCheckLeft)) && rightFingerJoints != null;
             if (syncLeftFingersActive)

@@ -10,16 +10,16 @@ namespace TarkovVR.Patches.Core.Player
         // VRReloadController.Belt puts Weapon_root back in its place for the binding and keeps the animator's state through our own box moves.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(WeaponPrefab), nameof(WeaponPrefab.UpdateAnimatorHierarchy))]
-        private static void BeforeRebind(WeaponPrefab __instance, out VRReloadController.AnimatorRebind __state)
+        private static void BeforeRebind(WeaponPrefab __instance, out VRReloadController.Belt.AnimatorRebind __state)
         {
-            __state = VRReloadController.BeforeAnimatorRebind(__instance);
+            __state = VRReloadController.Belt.BeforeAnimatorRebind(__instance);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WeaponPrefab), nameof(WeaponPrefab.UpdateAnimatorHierarchy))]
-        private static void AfterRebind(VRReloadController.AnimatorRebind __state)
+        private static void AfterRebind(VRReloadController.Belt.AnimatorRebind __state)
         {
-            VRReloadController.AfterAnimatorRebind(__state);
+            VRReloadController.Belt.AfterAnimatorRebind(__state);
         }
 
         // Keeps Tarkov's grip fingers on the PKM's support hand while it holds the handguard and aims (VRReloadController.Belt support spots).
@@ -28,7 +28,7 @@ namespace TarkovVR.Patches.Core.Player
         private static void SupportSpotGrip(EFT.Player __instance)
         {
             if (__instance != null && __instance.IsYourPlayer)
-                VRReloadController.AfterSupportIkProcess(__instance);
+                VRReloadController.Belt.AfterSupportIkProcess(__instance);
         }
     }
 }

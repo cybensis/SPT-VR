@@ -232,7 +232,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return "holding the gun";
             // On the charging handle the hand is off the grip, but still holds the gun by the handle through a magazine swap
             // (ChestHang.HandleHeld)
-            if (TarkovVR.Source.Weapons.VRReloadController.HandleInGunHand)
+            if (TarkovVR.Source.Weapons.VRReloadController.ChargingHandle.HandleInGunHand)
                 return "on the charging handle";
             if (TarkovVR.Patches.Core.Player.WeaponPatches.grenadeEquipped)
                 return "a grenade in hand";

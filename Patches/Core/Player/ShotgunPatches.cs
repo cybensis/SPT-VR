@@ -14,11 +14,11 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (__instance == null || !__instance.IsYourPlayer)
                 return;
-            VRReloadController.ApplyShotgunBeforeIk();
+            VRReloadController.Shotgun.ApplyShotgunBeforeIk();
             // A belt-fed gun's cover, scope latch and belt (VRReloadController.Belt), at the same point; the hand on the cover follows it
-            VRReloadController.ApplyBeltGunBeforeIk();
+            VRReloadController.Belt.ApplyBeltGunBeforeIk();
             // A break-action's barrels and lever (VRReloadController.BreakAction); the hand on the fore-end follows them
-            VRReloadController.ApplyBreakActionBeforeIk();
+            VRReloadController.BreakAction.ApplyBreakActionBeforeIk();
         }
 
         // While a break-action's lever is pressed, the gun hand's IK marker is swapped only for Tarkov's IK in this LateUpdate.
@@ -29,7 +29,7 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (__instance == null || !__instance.IsYourPlayer)
                 return;
-            VRReloadController.RestoreBreakLeverMarker();
+            VRReloadController.BreakAction.RestoreBreakLeverMarker();
         }
 
         // A dry fire drops the hammer, which releases a pump gun's action lock (VRReloadController.PumpDryFired)
@@ -39,7 +39,7 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (__instance == null || __instance._player == null || !__instance._player.IsYourPlayer)
                 return;
-            VRReloadController.PumpDryFired(__instance);
+            VRReloadController.Shotgun.PumpDryFired(__instance);
         }
     }
 }

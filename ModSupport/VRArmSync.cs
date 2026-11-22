@@ -203,7 +203,7 @@ namespace TarkovVR.ModSupport.FIKA
                 bool reloadBuilt = false;
                 if (isFirearm)
                 {
-                    try { reloadBuilt = VRReloadController.TryBuildSync((Player.FirearmController)hc); }
+                    try { reloadBuilt = VRReloadController.Sync.TryBuildSync((Player.FirearmController)hc); }
                     catch (System.Exception exception)
                     {
                         if (!loggedReloadBuildError)
@@ -216,14 +216,14 @@ namespace TarkovVR.ModSupport.FIKA
                 if (reloadBuilt)
                 {
                     FikaVrSync.SendReloadState(local.NetId,
-                        VRReloadController.syncManualReload, VRReloadController.syncManualBolt,
-                        VRReloadController.syncDriveLeft, VRReloadController.syncDriveRight,
-                        VRReloadController.syncLeftPosition, VRReloadController.syncLeftRotation,
-                        VRReloadController.syncRightPosition, VRReloadController.syncRightRotation,
-                        VRReloadController.syncPropItems, VRReloadController.syncPropPositions, VRReloadController.syncPropRotations,
-                        VRReloadController.syncPartPaths, VRReloadController.syncPartPositions, VRReloadController.syncPartRotations,
-                        VRReloadController.syncPartShown, VRReloadController.syncHiddenGroundItem,
-                        VRReloadController.syncBoltCatch, VRReloadController.syncBoltOpenDriven, VRReloadController.syncBoltOpen,
+                        VRReloadController.Sync.syncManualReload, VRReloadController.Sync.syncManualBolt,
+                        VRReloadController.Sync.syncDriveLeft, VRReloadController.Sync.syncDriveRight,
+                        VRReloadController.Sync.syncLeftPosition, VRReloadController.Sync.syncLeftRotation,
+                        VRReloadController.Sync.syncRightPosition, VRReloadController.Sync.syncRightRotation,
+                        VRReloadController.Sync.syncPropItems, VRReloadController.Sync.syncPropPositions, VRReloadController.Sync.syncPropRotations,
+                        VRReloadController.Sync.syncPartPaths, VRReloadController.Sync.syncPartPositions, VRReloadController.Sync.syncPartRotations,
+                        VRReloadController.Sync.syncPartShown, VRReloadController.Sync.syncHiddenGroundItem,
+                        VRReloadController.Sync.syncBoltCatch, VRReloadController.Sync.syncBoltOpenDriven, VRReloadController.Sync.syncBoltOpen,
                         VRReloadController.syncShellsThrown, VRReloadController.syncRoundsShown);
                     wasSendingReload = true;
                 }

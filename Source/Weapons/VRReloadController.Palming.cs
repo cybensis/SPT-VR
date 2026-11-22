@@ -15,11 +15,6 @@ namespace TarkovVR.Source.Weapons
     // in the hand. Letting go at the chest leaves it in the rig; anywhere else throws it from the rig to the ground.
     public static partial class VRReloadController
     {
-        public static bool palming = true;                  // false = no second magazine in the hand
-        public static float palmGrabRadius = 0.10f;         // m, palm to the gun magazine's capsule; wider than an empty hand's since the new magazine is in the way
-        public static float palmMaxThickness = 0.035f;      // m; a drum or a MAG5 doesn't fit in one hand with another magazine
-        public static float palmMaxLength = 0.26f;          // m
-
         private sealed class PalmHold
         {
             public MagazineHold newMagazine;
@@ -53,335 +48,343 @@ namespace TarkovVR.Source.Weapons
 
         private static GameObject palmedProp;
         private static Magazine palmedMagazine;
-        private static FirearmController palmedFor;
-        private static HeldMagazineSource palmedSource;
         private static PalmHold activePalmHold;
-        private static bool palmedIsOld;                    // false = the new one, waiting while the hand pulls the gun's out
-        private static bool palmedOnRightArm;               // the arm holding it (OnRightArm): it's let go if that changes
-        private static bool palmedLetGo;                    // the grip opened before the old one's move to the rig had landed
-        private static Vector3 palmedPosition;              // where it sits in the hand
-        private static Quaternion palmedRotation;
-
-        private static bool palmZoneEntered;
 
         private static bool HoldingPalmedMagazine => palmedProp != null;
 
-        private static bool InPalmZone(FirearmController firearmController, Weapon weapon, Slot magazineSlot)
+        public static class Palming
         {
-            if (MagazinePartlyOut)
-                return OffHandUnderMagazine(firearmController, magazineSlot, onItToo: true);
-            return weapon.GetCurrentMagazine() != null && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom, out Vector3 upTheWell)
-                && DistanceToMagazineZone(OffHandPalm(), magazineCenter, magazineBottom, upTheWell) <= palmGrabRadius;
-        }
+            public static bool palming = true;                  // false = no second magazine in the hand
+            public static float palmGrabRadius = 0.10f;         // m, palm to the gun magazine's capsule; wider than an empty hand's since the new magazine is in the way
+            public static float palmMaxThickness = 0.035f;      // m; a drum or a MAG5 doesn't fit in one hand with another magazine
+            public static float palmMaxLength = 0.26f;          // m
+            private static FirearmController palmedFor;
+            private static HeldMagazineSource palmedSource;
+            internal static bool palmedIsOld;                    // false = the new one, waiting while the hand pulls the gun's out
+            private static bool palmedOnRightArm;               // the arm holding it (OnRightArm): it's let go if that changes
+            private static bool palmedLetGo;                    // the grip opened before the old one's move to the rig had landed
+            private static Vector3 palmedPosition;              // where it sits in the hand
+            private static Quaternion palmedRotation;
 
-        // A light buzz on coming into reach, so you know the trigger will take it
-        private static void UpdatePalmZoneBlip()
-        {
-            bool inZone = palming && heldSource == HeldMagazineSource.FromPouch && !onRail && !HoldingPalmedMagazine
-                && TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
-                && (!MagazineSlidesOntoHand || MagazinePartlyOut) && FindPalmHold(firearmController) != null && InPalmZone(firearmController, weapon, magazineSlot);
-            if (inZone && !palmZoneEntered)
-                Pulse(SoundHand.OffHandAlone, 0.2f, 0.03f);
-            palmZoneEntered = inZone;
-        }
+            private static bool palmZoneEntered;
 
-        private static bool RefusePalming(string reason)
-        {
-            LogAction($"[VRReload] no palming: {reason}");
-            return false;
-        }
-
-        private static bool MagazineFitsPalm(GameObject magazineObject, Vector3 wellPointInObject)
-        {
-            return TryGetMagazineShape(magazineObject, wellPointInObject, out _, out float length, out float thinnestSide)
-                && length <= palmMaxLength && thinnestSide <= palmMaxThickness;
-        }
-
-        private const string RIFLE_PALM_POSE = "m4a1";
-        private const string PISTOL_PALM_POSE = "p226r";
-        private const string ROCK_IN_PALM_POSE = "ak74n";
-
-        private static PalmHold FindPalmHold(FirearmController firearmController)
-        {
-            LoadRecordedGrips();
-            if (palmHolds.TryGetValue(AnimationFamily(firearmController), out PalmHold own))
-                return own;
-            string closestKind = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isWeapPistol ? PISTOL_PALM_POSE
-                : RockInOf(firearmController) != null ? ROCK_IN_PALM_POSE : RIFLE_PALM_POSE;
-            palmHolds.TryGetValue(closestKind, out PalmHold borrowed);
-            return borrowed;
-        }
-
-        private static void PoseForThisMagazine(MagazineHold hold, GameObject prop, Vector3 wellPointInProp, out Vector3 position, out Quaternion rotation)
-        {
-            hold = InModelFrame(hold, prop);
-            if (TryGetMagazineShape(prop, wellPointInProp, out Vector3 lengthAxis, out float length, out _))
-                hold = MoveAlongMagazine(hold, lengthAxis, length);
-            position = hold.position;
-            rotation = Quaternion.Euler(hold.rotation);
-        }
-
-        //-----------------------------------------------------------------------------------------------------------------------------
-
-        // The trigger with a new magazine in the hand. Logs why it refused, since it's a gesture you can't see fail.
-        private static bool TryStartPalming()
-        {
-            if (!palming || heldSource != HeldMagazineSource.FromPouch || onRail || HoldingPalmedMagazine)
-                return false;
-            if (!CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
-                return RefusePalming("the gun isn't ready");
-            if (MagazineSlidesOntoHand && !MagazinePartlyOut)
-                return RefusePalming("a pistol's magazine has to come partly out first: hold the release");
-            PalmHold palmHold = FindPalmHold(firearmController);
-            if (palmHold == null)
-                return RefusePalming($"no palming pose for '{AnimationFamily(firearmController)}'");
-            if (weapon.MalfState.State == Weapon.EMalfunctionState.Feed)
-                return RefusePalming("feed malfunction");
-            if (!InPalmZone(firearmController, weapon, magazineSlot))
-                return RefusePalming("hand not at the gun's magazine");
-
-            ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
-            if (magazineView == null || magazineView.ItemView == null || magazineView.Bone == null)
-                return RefusePalming("no magazine model on the gun");
-            if (!MagazineFitsPalm(heldProp, propWellPointLocal))
-                return RefusePalming($"{heldMagazine.LocalizedShortName()} is too big to palm");
-            if (!MagazineFitsPalm(magazineView.ItemView.gameObject, magazineView.ItemView.InverseTransformPoint(magazineView.Bone.position)))
-                return RefusePalming("the gun's magazine is too big to palm");
-
-            PoseForThisMagazine(palmHold.newMagazine, heldProp, propWellPointLocal, out palmedPosition, out palmedRotation);
-            ToOffHandPalm(heldProp, magazineView.Bone, ref palmedPosition, ref palmedRotation);
-            palmedOnRightArm = OffHandOnRightArm;
-            palmedProp = heldProp;
-            palmedMagazine = heldMagazine;
-            palmedSource = heldSource;
-            palmedFor = firearmController;
-            palmedIsOld = false;
-            palmedLetGo = false;
-            activePalmHold = palmHold;
-            heldProp = null;
-            ClearHold();
-
-            GrabFromGun(firearmController, weapon, magazineSlot, takenWithRelease: false);
-            if (!HoldingGunMagazine)
+            private static bool InPalmZone(FirearmController firearmController, Weapon weapon, Slot magazineSlot)
             {
-                ReturnPalmedNewToHold();
+                if (MagazinePartlyOut)
+                    return OffHandUnderMagazine(firearmController, magazineSlot, onItToo: true);
+                return weapon.GetCurrentMagazine() != null && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom, out Vector3 upTheWell)
+                    && DistanceToMagazineZone(OffHandPalm(), magazineCenter, magazineBottom, upTheWell) <= palmGrabRadius;
+            }
+
+            // A light buzz on coming into reach, so you know the trigger will take it
+            internal static void UpdatePalmZoneBlip()
+            {
+                bool inZone = palming && heldSource == HeldMagazineSource.FromPouch && !onRail && !HoldingPalmedMagazine
+                    && TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
+                    && (!MagazineSlidesOntoHand || MagazinePartlyOut) && FindPalmHold(firearmController) != null && InPalmZone(firearmController, weapon, magazineSlot);
+                if (inZone && !palmZoneEntered)
+                    Pulse(SoundHand.OffHandAlone, 0.2f, 0.03f);
+                palmZoneEntered = inZone;
+            }
+
+            private static bool RefusePalming(string reason)
+            {
+                LogAction($"[VRReload] no palming: {reason}");
                 return false;
             }
 
-            // Put the hand on the old magazine as the clip has it, with the new one carried in the palm
-            PoseForThisMagazine(palmHold.oldMagazine, heldProp, propWellPointLocal, out Vector3 oldPosition, out Quaternion oldRotation);
-            heldReloadGrip = new ReloadGrip { pull = new MagazineHold { position = oldPosition, rotation = oldRotation.eulerAngles } };
-            magazineHandFingers = palmHold.fingers;
-            SnapHandToGrip(oldPosition, oldRotation.eulerAngles);
-            LogAction($"[VRReload] palming {palmedMagazine.LocalizedShortName()}, pulling {heldMagazine.LocalizedShortName()}");
-            return true;
-        }
-
-        // The old magazine came free of the well. It moves to the rig and its model stays in the hand; the new one is now the one going in.
-        private static void FinishPalmPull()
-        {
-            Magazine oldMagazine = heldMagazine;
-            GameObject oldProp = heldProp;
-            FirearmController firearmController = heldForFirearm;
-
-            if (!TryBuildMoveToRig(oldMagazine, out OperationResult<MoveResult> moveResult))
+            private static bool MagazineFitsPalm(GameObject magazineObject, Vector3 wellPointInObject)
             {
-                // No room in the rig: it can't be kept, so it falls from the hand (or stays in the gun where nothing can be dropped)
-                onRail = false;
-                magazineLeftWell = true;
-                ReleaseHandLatch();
-                if (CanDropToGround(oldMagazine))
+                return TryGetMagazineShape(magazineObject, wellPointInObject, out _, out float length, out float thinnestSide)
+                    && length <= palmMaxLength && thinnestSide <= palmMaxThickness;
+            }
+
+            private const string RIFLE_PALM_POSE = "m4a1";
+            private const string PISTOL_PALM_POSE = "p226r";
+            private const string ROCK_IN_PALM_POSE = "ak74n";
+
+            private static PalmHold FindPalmHold(FirearmController firearmController)
+            {
+                LoadRecordedGrips();
+                if (palmHolds.TryGetValue(AnimationFamily(firearmController), out PalmHold own))
+                    return own;
+                string closestKind = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isWeapPistol ? PISTOL_PALM_POSE
+                    : RockInOf(firearmController) != null ? ROCK_IN_PALM_POSE : RIFLE_PALM_POSE;
+                palmHolds.TryGetValue(closestKind, out PalmHold borrowed);
+                return borrowed;
+            }
+
+            private static void PoseForThisMagazine(MagazineHold hold, GameObject prop, Vector3 wellPointInProp, out Vector3 position, out Quaternion rotation)
+            {
+                hold = InModelFrame(hold, prop);
+                if (TryGetMagazineShape(prop, wellPointInProp, out Vector3 lengthAxis, out float length, out _))
+                    hold = MoveAlongMagazine(hold, lengthAxis, length);
+                position = hold.position;
+                rotation = Quaternion.Euler(hold.rotation);
+            }
+
+            //-----------------------------------------------------------------------------------------------------------------------------
+
+            // The trigger with a new magazine in the hand. Logs why it refused, since it's a gesture you can't see fail.
+            internal static bool TryStartPalming()
+            {
+                if (!palming || heldSource != HeldMagazineSource.FromPouch || onRail || HoldingPalmedMagazine)
+                    return false;
+                if (!CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
+                    return RefusePalming("the gun isn't ready");
+                if (MagazineSlidesOntoHand && !MagazinePartlyOut)
+                    return RefusePalming("a pistol's magazine has to come partly out first: hold the release");
+                PalmHold palmHold = FindPalmHold(firearmController);
+                if (palmHold == null)
+                    return RefusePalming($"no palming pose for '{AnimationFamily(firearmController)}'");
+                if (weapon.MalfState.State == Weapon.EMalfunctionState.Feed)
+                    return RefusePalming("feed malfunction");
+                if (!InPalmZone(firearmController, weapon, magazineSlot))
+                    return RefusePalming("hand not at the gun's magazine");
+
+                ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
+                if (magazineView == null || magazineView.ItemView == null || magazineView.Bone == null)
+                    return RefusePalming("no magazine model on the gun");
+                if (!MagazineFitsPalm(heldProp, propWellPointLocal))
+                    return RefusePalming($"{heldMagazine.LocalizedShortName()} is too big to palm");
+                if (!MagazineFitsPalm(magazineView.ItemView.gameObject, magazineView.ItemView.InverseTransformPoint(magazineView.Bone.position)))
+                    return RefusePalming("the gun's magazine is too big to palm");
+
+                PoseForThisMagazine(palmHold.newMagazine, heldProp, propWellPointLocal, out palmedPosition, out palmedRotation);
+                ToOffHandPalm(heldProp, magazineView.Bone, ref palmedPosition, ref palmedRotation);
+                palmedOnRightArm = OffHandOnRightArm;
+                palmedProp = heldProp;
+                palmedMagazine = heldMagazine;
+                palmedSource = heldSource;
+                palmedFor = firearmController;
+                palmedIsOld = false;
+                palmedLetGo = false;
+                activePalmHold = palmHold;
+                heldProp = null;
+                ClearHold();
+
+                GrabFromGun(firearmController, weapon, magazineSlot, takenWithRelease: false);
+                if (!HoldingGunMagazine)
                 {
-                    Vector3 handPosition = oldProp.transform.position;
-                    Quaternion handRotation = oldProp.transform.rotation;
-                    CommitHold();
-                    RunDrop(oldMagazine, firearmController, handPosition, handRotation, HandWorldVelocity(gunHand: false));
-                    PlayFirstGunSound(firearmController, SoundHand.OffHand.Seating, MAG_OUT_SOUNDS);
+                    ReturnPalmedNewToHold();
+                    return false;
+                }
+
+                // Put the hand on the old magazine as the clip has it, with the new one carried in the palm
+                PoseForThisMagazine(palmHold.oldMagazine, heldProp, propWellPointLocal, out Vector3 oldPosition, out Quaternion oldRotation);
+                heldReloadGrip = new ReloadGrip { pull = new MagazineHold { position = oldPosition, rotation = oldRotation.eulerAngles } };
+                magazineHandFingers = palmHold.fingers;
+                SnapHandToGrip(oldPosition, oldRotation.eulerAngles);
+                LogAction($"[VRReload] palming {palmedMagazine.LocalizedShortName()}, pulling {heldMagazine.LocalizedShortName()}");
+                return true;
+            }
+
+            // The old magazine came free of the well. It moves to the rig and its model stays in the hand; the new one is now the one going in.
+            internal static void FinishPalmPull()
+            {
+                Magazine oldMagazine = heldMagazine;
+                GameObject oldProp = heldProp;
+                FirearmController firearmController = heldForFirearm;
+
+                if (!TryBuildMoveToRig(oldMagazine, out OperationResult<MoveResult> moveResult))
+                {
+                    // No room in the rig: it can't be kept, so it falls from the hand (or stays in the gun where nothing can be dropped)
+                    onRail = false;
+                    magazineLeftWell = true;
+                    ReleaseHandLatch();
+                    if (CanDropToGround(oldMagazine))
+                    {
+                        Vector3 handPosition = oldProp.transform.position;
+                        Quaternion handRotation = oldProp.transform.rotation;
+                        CommitHold();
+                        RunDrop(oldMagazine, firearmController, handPosition, handRotation, HandWorldVelocity(gunHand: false));
+                        PlayFirstGunSound(firearmController, SoundHand.OffHand.Seating, MAG_OUT_SOUNDS);
+                    }
+                    else
+                    {
+                        CancelHold();
+                    }
+                    ReturnPalmedNewToHold();
+                    return;
+                }
+
+                oldProp.transform.SetParent(HandBone(), worldPositionStays: true);
+                PoseForThisMagazine(activePalmHold.oldMagazine, oldProp, propWellPointLocal, out Vector3 oldPosition, out Quaternion oldRotation);
+                ToOffHandPalm(oldProp, magazineWell, ref oldPosition, ref oldRotation);
+
+                // The gun's model of it stays hidden until Tarkov removes it (as CommitHold, but this prop stays in the hand)
+                pendingHiddenView = hiddenGunMagazineView;
+                hiddenGunMagazineView = null;
+                heldProp = null;
+                ReleaseHandLatch();
+                ExpectOperation(ExpectedOperation.PullOut, firearmController);
+                VRGlobals.player.InventoryController.TryRunNetworkTransaction(moveResult);
+                TryForceExpectedOperation();
+
+                GameObject newProp = palmedProp;
+                Magazine newMagazine = palmedMagazine;
+                Vector3 newPosition = palmedPosition;
+                Quaternion newRotation = palmedRotation;
+                palmedProp = oldProp;
+                palmedMagazine = oldMagazine;
+                palmedIsOld = true;
+                palmedPosition = oldPosition;
+                palmedRotation = oldRotation;
+
+                // In the clip the new magazine doesn't move in the hand on its way in: the wrist turns it to the well
+                ArmNewMagazine(firearmController, newMagazine, newProp, palmedSource);
+                freeHoldPosition = newPosition;
+                freeHoldRotation = newRotation;
+                magazineHandFingers = activePalmHold.fingers;
+
+                PlayFirstGunSound(firearmController, SoundHand.OffHand.Seating, MAG_OUT_SOUNDS);
+                Pulse(SoundHand.OffHand.Seating, 0.5f, 0.04f);
+                LogAction($"[VRReload] {oldMagazine.LocalizedShortName()} out and in the hand, {newMagazine.LocalizedShortName()} next");
+            }
+
+            // Makes a new magazine the held one, off the track, and works out its way into this gun (the second half of HoldNewMagazine)
+            private static void ArmNewMagazine(FirearmController firearmController, Magazine magazine, GameObject prop, HeldMagazineSource source)
+            {
+                ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(firearmController.Item.GetMagazineSlot());
+                ModPlacer modPlacer = prop.GetComponent<ModPlacer>();
+                seatedLocalPosition = modPlacer != null ? modPlacer.ModPosition : Vector3.zero;
+                seatedLocalRotation = modPlacer != null ? Quaternion.Euler(modPlacer.ModRotation) : Quaternion.Euler(90f, 0f, 0f);
+                propWellPointLocal = SeatedWellPointLocal(prop);
+                railAxisInWell = RailAxisInWell(firearmController, prop, SeatedScale(prop));
+                heldRockIn = RockInOf(firearmController);
+                heldReloadGrip = FindReloadGrip(firearmController, magazine, prop, propWellPointLocal);
+
+                heldSource = source;
+                heldMagazine = magazine;
+                heldForFirearm = firearmController;
+                heldProp = prop;
+                heldOnRightArm = OffHandOnRightArm;
+                magazineWell = magazineView != null ? magazineView.Bone : null;
+                magazineLeftWell = true;
+                onRail = false;
+                // It's right at the well already: it has to leave before the track can catch it
+                railCatchArmed = false;
+                railCatchClearance = 0f;
+            }
+
+            // The pull it was waiting on ended without the old magazine coming free: back to an ordinary new magazine in the hand
+            private static void ReturnPalmedNewToHold()
+            {
+                GameObject prop = palmedProp;
+                Magazine magazine = palmedMagazine;
+                HeldMagazineSource source = palmedSource;
+                FirearmController firearmController = palmedFor;
+                palmedProp = null;
+                palmedMagazine = null;
+                palmedFor = null;
+                if (prop == null || magazine == null || firearmController == null)
+                {
+                    ReturnPropToPool(prop);
+                    return;
+                }
+
+                ArmNewMagazine(firearmController, magazine, prop, source);
+                if (heldReloadGrip?.insert != null)
+                {
+                    freeHoldPosition = heldReloadGrip.insert.position;
+                    freeHoldRotation = Quaternion.Euler(heldReloadGrip.insert.rotation);
+                    ToOffHandPalm(prop, magazineWell, ref freeHoldPosition, ref freeHoldRotation, heldReloadGrip.insert.rightHand);
+                    magazineHandFingers = MagazineFingersFrom(heldReloadGrip.insert, MAGAZINE_INSERT_FINGERS);
                 }
                 else
                 {
-                    CancelHold();
+                    GetPoseIn(HandBone(), prop.transform, out freeHoldPosition, out freeHoldRotation);
+                    magazineHandFingers = MAGAZINE_INSERT_FINGERS;
                 }
-                ReturnPalmedNewToHold();
-                return;
             }
 
-            oldProp.transform.SetParent(HandBone(), worldPositionStays: true);
-            PoseForThisMagazine(activePalmHold.oldMagazine, oldProp, propWellPointLocal, out Vector3 oldPosition, out Quaternion oldRotation);
-            ToOffHandPalm(oldProp, magazineWell, ref oldPosition, ref oldRotation);
-
-            // The gun's model of it stays hidden until Tarkov removes it (as CommitHold, but this prop stays in the hand)
-            pendingHiddenView = hiddenGunMagazineView;
-            hiddenGunMagazineView = null;
-            heldProp = null;
-            ReleaseHandLatch();
-            ExpectOperation(ExpectedOperation.PullOut, firearmController);
-            VRGlobals.player.InventoryController.TryRunNetworkTransaction(moveResult);
-            TryForceExpectedOperation();
-
-            GameObject newProp = palmedProp;
-            Magazine newMagazine = palmedMagazine;
-            Vector3 newPosition = palmedPosition;
-            Quaternion newRotation = palmedRotation;
-            palmedProp = oldProp;
-            palmedMagazine = oldMagazine;
-            palmedIsOld = true;
-            palmedPosition = oldPosition;
-            palmedRotation = oldRotation;
-
-            // In the clip the new magazine doesn't move in the hand on its way in: the wrist turns it to the well
-            ArmNewMagazine(firearmController, newMagazine, newProp, palmedSource);
-            freeHoldPosition = newPosition;
-            freeHoldRotation = newRotation;
-            magazineHandFingers = activePalmHold.fingers;
-
-            PlayFirstGunSound(firearmController, SoundHand.OffHand.Seating, MAG_OUT_SOUNDS);
-            Pulse(SoundHand.OffHand.Seating, 0.5f, 0.04f);
-            LogAction($"[VRReload] {oldMagazine.LocalizedShortName()} out and in the hand, {newMagazine.LocalizedShortName()} next");
-        }
-
-        // Makes a new magazine the held one, off the track, and works out its way into this gun (the second half of HoldNewMagazine)
-        private static void ArmNewMagazine(FirearmController firearmController, Magazine magazine, GameObject prop, HeldMagazineSource source)
-        {
-            ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(firearmController.Item.GetMagazineSlot());
-            ModPlacer modPlacer = prop.GetComponent<ModPlacer>();
-            seatedLocalPosition = modPlacer != null ? modPlacer.ModPosition : Vector3.zero;
-            seatedLocalRotation = modPlacer != null ? Quaternion.Euler(modPlacer.ModRotation) : Quaternion.Euler(90f, 0f, 0f);
-            propWellPointLocal = SeatedWellPointLocal(prop);
-            railAxisInWell = RailAxisInWell(firearmController, prop, SeatedScale(prop));
-            heldRockIn = RockInOf(firearmController);
-            heldReloadGrip = FindReloadGrip(firearmController, magazine, prop, propWellPointLocal);
-
-            heldSource = source;
-            heldMagazine = magazine;
-            heldForFirearm = firearmController;
-            heldProp = prop;
-            heldOnRightArm = OffHandOnRightArm;
-            magazineWell = magazineView != null ? magazineView.Bone : null;
-            magazineLeftWell = true;
-            onRail = false;
-            // It's right at the well already: it has to leave before the track can catch it
-            railCatchArmed = false;
-            railCatchClearance = 0f;
-        }
-
-        // The pull it was waiting on ended without the old magazine coming free: back to an ordinary new magazine in the hand
-        private static void ReturnPalmedNewToHold()
-        {
-            GameObject prop = palmedProp;
-            Magazine magazine = palmedMagazine;
-            HeldMagazineSource source = palmedSource;
-            FirearmController firearmController = palmedFor;
-            palmedProp = null;
-            palmedMagazine = null;
-            palmedFor = null;
-            if (prop == null || magazine == null || firearmController == null)
+            // Every frame, after the held magazine's update
+            internal static void UpdatePalmedMagazine(bool gripReleased)
             {
-                ReturnPropToPool(prop);
-                return;
-            }
+                if (palmedMagazine == null)
+                    return;
+                if (palmedProp == null)
+                {
+                    ForgetPalmedMagazine();
+                    return;
+                }
 
-            ArmNewMagazine(firearmController, magazine, prop, source);
-            if (heldReloadGrip?.insert != null)
-            {
-                freeHoldPosition = heldReloadGrip.insert.position;
-                freeHoldRotation = Quaternion.Euler(heldReloadGrip.insert.rotation);
-                ToOffHandPalm(prop, magazineWell, ref freeHoldPosition, ref freeHoldRotation, heldReloadGrip.insert.rightHand);
-                magazineHandFingers = MagazineFingersFrom(heldReloadGrip.insert, MAGAZINE_INSERT_FINGERS);
-            }
-            else
-            {
-                GetPoseIn(HandBone(), prop.transform, out freeHoldPosition, out freeHoldRotation);
-                magazineHandFingers = MAGAZINE_INSERT_FINGERS;
-            }
-        }
+                if (!palmedIsOld && !HoldingGunMagazine)
+                {
+                    ReturnPalmedNewToHold();
+                    if (gripReleased)
+                        ReleaseHeldMagazine();
+                    return;
+                }
 
-        // Every frame, after the held magazine's update
-        private static void UpdatePalmedMagazine(bool gripReleased)
-        {
-            if (palmedMagazine == null)
-                return;
-            if (palmedProp == null)
-            {
-                ForgetPalmedMagazine();
-                return;
-            }
+                if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.firearmController == null
+                    || VRGlobals.firearmController != palmedFor || palmedOnRightArm != OffHandOnRightArm)
+                {
+                    DropPalmedModel();
+                    return;
+                }
 
-            if (!palmedIsOld && !HoldingGunMagazine)
-            {
-                ReturnPalmedNewToHold();
+                Transform handBone = HandBone();
+                Transform propTransform = palmedProp.transform;
+                if (propTransform.parent != handBone)
+                    propTransform.SetParent(handBone, worldPositionStays: true);
+                float ease = 1f - Mathf.Exp(-gripEaseRate * Time.deltaTime);
+                GetPoseIn(handBone, propTransform, out Vector3 handLocalPosition, out Quaternion handLocalRotation);
+                SetPoseIn(handBone, propTransform, Vector3.Lerp(handLocalPosition, palmedPosition, ease), Quaternion.Slerp(handLocalRotation, palmedRotation, ease));
+
+                if (!palmedIsOld)
+                    return;
+
+                bool stillInGun = palmedFor.Item != null && palmedFor.Item.GetCurrentMagazine() == palmedMagazine;
+                // The move to the rig never happened: the magazine is still in the gun and shown again
+                if (stillInGun && expectedOperation == ExpectedOperation.None && palmedFor.CurrentOperation is FirearmController.Idling)
+                {
+                    Plugin.MyLog.LogWarning($"[VRReload] {palmedMagazine.LocalizedShortName()} never left the gun, letting go of its model");
+                    DropPalmedModel();
+                    return;
+                }
                 if (gripReleased)
-                    ReleaseHeldMagazine();
-                return;
+                    palmedLetGo = true;
+                if (palmedLetGo && !stillInGun)
+                    LetGoOfPalmedMagazine();
             }
 
-            if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.firearmController == null
-                || VRGlobals.firearmController != palmedFor || palmedOnRightArm != OffHandOnRightArm)
+            // Already in the rig: at the chest it stays there, anywhere else it goes to the ground from where the hand has it
+            private static void LetGoOfPalmedMagazine()
             {
+                Magazine magazine = palmedMagazine;
+                if (!InChestPouchZone(OffHandPalm()) && CanDropToGround(magazine))
+                {
+                    pendingDropMagazine = magazine;
+                    pendingDropPosition = palmedProp.transform.position;
+                    pendingDropRotation = palmedProp.transform.rotation;
+                    pendingDropVelocity = HandWorldVelocity(gunHand: false);
+                    pendingDropDeadline = Time.time + 3f;
+                    VRGlobals.player.InventoryController.ThrowItem(magazine, false, null);
+                }
+                else
+                {
+                    PlayFirstGunSound(palmedFor, SoundHand.OffHandAlone, MAG_INTO_POUCH_SOUNDS);
+                    Pulse(SoundHand.OffHandAlone, 0.4f, 0.05f);
+                }
                 DropPalmedModel();
-                return;
             }
 
-            Transform handBone = HandBone();
-            Transform propTransform = palmedProp.transform;
-            if (propTransform.parent != handBone)
-                propTransform.SetParent(handBone, worldPositionStays: true);
-            float ease = 1f - Mathf.Exp(-gripEaseRate * Time.deltaTime);
-            GetPoseIn(handBone, propTransform, out Vector3 handLocalPosition, out Quaternion handLocalRotation);
-            SetPoseIn(handBone, propTransform, Vector3.Lerp(handLocalPosition, palmedPosition, ease), Quaternion.Slerp(handLocalRotation, palmedRotation, ease));
-
-            if (!palmedIsOld)
-                return;
-
-            bool stillInGun = palmedFor.Item != null && palmedFor.Item.GetCurrentMagazine() == palmedMagazine;
-            // The move to the rig never happened: the magazine is still in the gun and shown again
-            if (stillInGun && expectedOperation == ExpectedOperation.None && palmedFor.CurrentOperation is FirearmController.Idling)
+            private static void DropPalmedModel()
             {
-                Plugin.MyLog.LogWarning($"[VRReload] {palmedMagazine.LocalizedShortName()} never left the gun, letting go of its model");
-                DropPalmedModel();
-                return;
+                ReturnPropToPool(palmedProp);
+                ForgetPalmedMagazine();
             }
-            if (gripReleased)
-                palmedLetGo = true;
-            if (palmedLetGo && !stillInGun)
-                LetGoOfPalmedMagazine();
-        }
 
-        // Already in the rig: at the chest it stays there, anywhere else it goes to the ground from where the hand has it
-        private static void LetGoOfPalmedMagazine()
-        {
-            Magazine magazine = palmedMagazine;
-            if (!InChestPouchZone(OffHandPalm()) && CanDropToGround(magazine))
+            private static void ForgetPalmedMagazine()
             {
-                pendingDropMagazine = magazine;
-                pendingDropPosition = palmedProp.transform.position;
-                pendingDropRotation = palmedProp.transform.rotation;
-                pendingDropVelocity = HandWorldVelocity(gunHand: false);
-                pendingDropDeadline = Time.time + 3f;
-                VRGlobals.player.InventoryController.ThrowItem(magazine, false, null);
+                palmedProp = null;
+                palmedMagazine = null;
+                palmedFor = null;
+                palmedIsOld = false;
+                palmedLetGo = false;
+                activePalmHold = null;
             }
-            else
-            {
-                PlayFirstGunSound(palmedFor, SoundHand.OffHandAlone, MAG_INTO_POUCH_SOUNDS);
-                Pulse(SoundHand.OffHandAlone, 0.4f, 0.05f);
-            }
-            DropPalmedModel();
-        }
-
-        private static void DropPalmedModel()
-        {
-            ReturnPropToPool(palmedProp);
-            ForgetPalmedMagazine();
-        }
-
-        private static void ForgetPalmedMagazine()
-        {
-            palmedProp = null;
-            palmedMagazine = null;
-            palmedFor = null;
-            palmedIsOld = false;
-            palmedLetGo = false;
-            activePalmHold = null;
         }
     }
 }

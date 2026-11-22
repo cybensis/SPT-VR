@@ -429,14 +429,14 @@ namespace TarkovVR.Patches.Core.Player
             ContainerCollectionView.SlotView magazineView = sessionFirearm.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
             if (magazineView == null || magazineView.ItemView == null || magazineView.Bone == null)
                 return 0f;
-            return VRReloadController.MeasureMagazineLength(magazineView.ItemView, magazineView.Bone.position);
+            return VRReloadController.Grips.MeasureMagazineLength(magazineView.ItemView, magazineView.Bone.position);
         }
 
         // Saves the reload's holds into VRReloadController's recordings. A reload from one magazine type to another records the
         // pull of the first and the insert of the second.
         private static void SaveMagazineHolds()
         {
-            if (!VRReloadController.saveReloadGrips || sessionFirearm == null || VRGlobals.firearmController != sessionFirearm)
+            if (!VRReloadController.Grips.saveReloadGrips || sessionFirearm == null || VRGlobals.firearmController != sessionFirearm)
                 return;
 
             string gunName = sessionFirearm.Item.LocalizedShortName();
@@ -458,7 +458,7 @@ namespace TarkovVR.Patches.Core.Player
                             holdFingers = sample.fingers;
                         }
                     }
-                    saved |= VRReloadController.TrySaveHold(sessionFirearm, oldMagazineType, true, oldMagazineInMarker.bestPosition, oldMagazineInMarker.bestRotation,
+                    saved |= VRReloadController.Grips.TrySaveHold(sessionFirearm, oldMagazineType, true, oldMagazineInMarker.bestPosition, oldMagazineInMarker.bestRotation,
                         oldMagazineLength, holdFingers, $"{gunName} {oldMagazineName}");
                 }
                 else
@@ -469,14 +469,14 @@ namespace TarkovVR.Patches.Core.Player
             if (phase == ReloadPhase.Finished && newMagazine != null)
             {
                 if (newMagazineInMarker.bestFrames >= stableMinimumFrames && newMagazineFingers != null)
-                    saved |= VRReloadController.TrySaveHold(sessionFirearm, newMagazine.magAnimationIndex, false, newMagazineInMarker.bestPosition, newMagazineInMarker.bestRotation,
+                    saved |= VRReloadController.Grips.TrySaveHold(sessionFirearm, newMagazine.magAnimationIndex, false, newMagazineInMarker.bestPosition, newMagazineInMarker.bestRotation,
                         SeatedMagazineLength(), newMagazineFingers, $"{gunName} {newMagazine.LocalizedShortName()}");
                 else
                     Plugin.MyLog.LogWarning($"[ReloadGrips] {gunName} {newMagazine.LocalizedShortName()}: the hand never held it still, no insert hold");
             }
 
             if (saved)
-                VRReloadController.FinishSavingHolds();
+                VRReloadController.Grips.FinishSavingHolds();
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

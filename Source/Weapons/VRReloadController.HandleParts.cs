@@ -13,9 +13,7 @@ namespace TarkovVR.Source.Weapons
     //    The hand rides our own frame on the receiver, which none of those parts move.
     public static partial class VRReloadController
     {
-        public static float sideKnobFoldTime = 0.1f;        // s the knob takes to fold out as the hand takes it
-
-        private sealed class SideHandle
+        internal sealed class SideHandle
         {
             public HandleHold hold;                         // the palm in the base's frame
             public string sliderBone;
@@ -43,57 +41,30 @@ namespace TarkovVR.Source.Weapons
         private static Transform sideSlider;
         private static Transform sideBase;
         private static Transform sideKnob;
-        private static Vector3 sideSliderRestLocalPosition;
-        private static Vector3 sideBaseRestLocalPosition;
-        private static Quaternion sideKnobRestLocalRotation;
-        private static Vector3 sideSliderAxis;              // one metre back, in the slider's parent's frame
-        private static Vector3 sideBaseAxis;                // the same, in the slider's frame (the base's parent)
-        private static float sideKnobFold;                  // 0 = folded away, 1 = out
         private static readonly List<MovedBolt> movedBolts = new List<MovedBolt>();
-
-        private static Transform sideKnobMeshFor;
-        private static MeshFilter sideKnobMesh;
-        private static GameObject sideHandleZoneViz;
-
-        private static SideHandle SideHandleOf(FirearmController firearmController)
-        {
-            if (firearmController == null)
-                return null;
-            LoadRecordedGrips();
-            sideHandles.TryGetValue(AnimationFamily(firearmController), out SideHandle sideHandle);
-            return sideHandle;
-        }
 
         // The centre of the knob in its folded position. Only a gun with that part fitted has one.
         private static bool TryGetSideKnobPoint(FirearmController firearmController, out Vector3 point)
         {
             point = Vector3.zero;
-            SideHandle sideHandle = SideHandleOf(firearmController);
+            SideHandle sideHandle = HandleParts.SideHandleOf(firearmController);
             Transform knob = sideHandle != null ? FindRigBone(firearmController, sideHandle.knobBone) : null;
             if (knob == null)
                 return false;
-            if (sideKnobMeshFor != knob)
+            if (HandleParts.sideKnobMeshFor != knob)
             {
-                sideKnobMeshFor = knob;
-                sideKnobMesh = knob.GetComponentInChildren<MeshFilter>();
+                HandleParts.sideKnobMeshFor = knob;
+                HandleParts.sideKnobMesh = knob.GetComponentInChildren<MeshFilter>();
             }
-            point = sideKnobMesh != null && sideKnobMesh.sharedMesh != null
-                ? sideKnobMesh.transform.TransformPoint(sideKnobMesh.sharedMesh.bounds.center)
+            point = HandleParts.sideKnobMesh != null && HandleParts.sideKnobMesh.sharedMesh != null
+                ? HandleParts.sideKnobMesh.transform.TransformPoint(HandleParts.sideKnobMesh.sharedMesh.bounds.center)
                 : knob.position;
             return true;
         }
 
-        // On a jammed gun, only while the hands may clear it, like the main handle
-        private static bool InSideHandleZone(FirearmController firearmController, Weapon weapon)
-        {
-            if (!HandsMayWorkAction(firearmController, weapon) || !TryGetSideKnobPoint(firearmController, out Vector3 point))
-                return false;
-            return OffHandTouchesCapsule(point, point, handleGrabRadius);
-        }
-
         private static bool FrameHandleOnSidePart(FirearmController firearmController, Vector3 backWorld)
         {
-            heldSideHandle = SideHandleOf(firearmController);
+            heldSideHandle = HandleParts.SideHandleOf(firearmController);
             sideSlider = heldSideHandle != null ? FindRigBone(firearmController, heldSideHandle.sliderBone) : null;
             sideBase = heldSideHandle != null ? FindRigBone(firearmController, heldSideHandle.baseBone) : null;
             sideKnob = heldSideHandle != null ? FindRigBone(firearmController, heldSideHandle.knobBone) : null;
@@ -109,12 +80,12 @@ namespace TarkovVR.Source.Weapons
             handleRider.localRotation = Quaternion.identity;
             handleBone = handleFrame;
             handleView = handleRider;
-            sideSliderRestLocalPosition = sideSlider.localPosition;
-            sideBaseRestLocalPosition = sideBase.localPosition;
-            sideKnobRestLocalRotation = sideKnob.localRotation;
-            sideSliderAxis = sideSlider.parent.InverseTransformVector(backWorld);
-            sideBaseAxis = sideSlider.InverseTransformVector(backWorld);
-            sideKnobFold = 0f;
+            HandleParts.sideSliderRestLocalPosition = sideSlider.localPosition;
+            HandleParts.sideBaseRestLocalPosition = sideBase.localPosition;
+            HandleParts.sideKnobRestLocalRotation = sideKnob.localRotation;
+            HandleParts.sideSliderAxis = sideSlider.parent.InverseTransformVector(backWorld);
+            HandleParts.sideBaseAxis = sideSlider.InverseTransformVector(backWorld);
+            HandleParts.sideKnobFold = 0f;
             return true;
         }
 
@@ -149,10 +120,10 @@ namespace TarkovVR.Source.Weapons
             if (heldSideHandle != null && sideSlider != null && sideBase != null && sideKnob != null)
             {
                 float sliderPull = Mathf.Max(0f, handlePull - heldSideHandle.sliderLag);
-                sideSlider.localPosition = sideSliderRestLocalPosition + sideSliderAxis * sliderPull;
-                sideBase.localPosition = sideBaseRestLocalPosition + sideBaseAxis * (handlePull - sliderPull);
-                sideKnobFold = Mathf.MoveTowards(sideKnobFold, 1f, Time.deltaTime / Mathf.Max(sideKnobFoldTime, 0.001f));
-                sideKnob.localRotation = sideKnobRestLocalRotation * Quaternion.AngleAxis(heldSideHandle.foldAngle * sideKnobFold, heldSideHandle.foldAxis);
+                sideSlider.localPosition = HandleParts.sideSliderRestLocalPosition + HandleParts.sideSliderAxis * sliderPull;
+                sideBase.localPosition = HandleParts.sideBaseRestLocalPosition + HandleParts.sideBaseAxis * (handlePull - sliderPull);
+                HandleParts.sideKnobFold = Mathf.MoveTowards(HandleParts.sideKnobFold, 1f, Time.deltaTime / Mathf.Max(HandleParts.sideKnobFoldTime, 0.001f));
+                sideKnob.localRotation = HandleParts.sideKnobRestLocalRotation * Quaternion.AngleAxis(heldSideHandle.foldAngle * HandleParts.sideKnobFold, heldSideHandle.foldAxis);
             }
             foreach (MovedBolt bolt in movedBolts)
             {
@@ -169,11 +140,11 @@ namespace TarkovVR.Source.Weapons
                 if (handleForFirearm != null)
                     PlayFirstGunSound(handleForFirearm, SoundHand.GunBody, "HandleClose");
                 if (sideSlider != null)
-                    sideSlider.localPosition = sideSliderRestLocalPosition;
+                    sideSlider.localPosition = HandleParts.sideSliderRestLocalPosition;
                 if (sideBase != null)
-                    sideBase.localPosition = sideBaseRestLocalPosition;
+                    sideBase.localPosition = HandleParts.sideBaseRestLocalPosition;
                 if (sideKnob != null)
-                    sideKnob.localRotation = sideKnobRestLocalRotation;
+                    sideKnob.localRotation = HandleParts.sideKnobRestLocalRotation;
             }
             heldSideHandle = null;
             sideSlider = null;
@@ -191,11 +162,43 @@ namespace TarkovVR.Source.Weapons
         {
             if (!show || HoldingChargingHandle || !TryGetSideKnobPoint(firearmController, out Vector3 point))
             {
-                SetZoneViz(ref sideHandleZoneViz, false, Vector3.zero, 0f, Color.clear);
+                SetZoneViz(ref HandleParts.sideHandleZoneViz, false, Vector3.zero, 0f, Color.clear);
                 return;
             }
             bool inReach = OffHandTouchesCapsule(point, point, handleGrabRadius);
-            SetZoneViz(ref sideHandleZoneViz, true, point, handleGrabRadius, inReach ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.4f, 0f, 0.3f));
+            SetZoneViz(ref HandleParts.sideHandleZoneViz, true, point, handleGrabRadius, inReach ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.4f, 0f, 0.3f));
+        }
+
+        public static class HandleParts
+        {
+            public static float sideKnobFoldTime = 0.1f;        // s the knob takes to fold out as the hand takes it
+            internal static Vector3 sideSliderRestLocalPosition;
+            internal static Vector3 sideBaseRestLocalPosition;
+            internal static Quaternion sideKnobRestLocalRotation;
+            internal static Vector3 sideSliderAxis;              // one metre back, in the slider's parent's frame
+            internal static Vector3 sideBaseAxis;                // the same, in the slider's frame (the base's parent)
+            internal static float sideKnobFold;                  // 0 = folded away, 1 = out
+
+            internal static Transform sideKnobMeshFor;
+            internal static MeshFilter sideKnobMesh;
+            internal static GameObject sideHandleZoneViz;
+
+            internal static SideHandle SideHandleOf(FirearmController firearmController)
+            {
+                if (firearmController == null)
+                    return null;
+                LoadRecordedGrips();
+                sideHandles.TryGetValue(AnimationFamily(firearmController), out SideHandle sideHandle);
+                return sideHandle;
+            }
+
+            // On a jammed gun, only while the hands may clear it, like the main handle
+            internal static bool InSideHandleZone(FirearmController firearmController, Weapon weapon)
+            {
+                if (!HandsMayWorkAction(firearmController, weapon) || !TryGetSideKnobPoint(firearmController, out Vector3 point))
+                    return false;
+                return OffHandTouchesCapsule(point, point, handleGrabRadius);
+            }
         }
     }
 }

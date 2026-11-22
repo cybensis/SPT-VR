@@ -14,7 +14,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(FirearmController.SpawnOperation), "Start", new[] { typeof(Action) })]
         private static void LeaveTheRackToTheHand(FirearmController.SpawnOperation __instance)
         {
-            VRReloadController.TakeRackOutOfDraw(__instance);
+            VRReloadController.ChargingHandle.TakeRackOutOfDraw(__instance);
         }
     }
 }

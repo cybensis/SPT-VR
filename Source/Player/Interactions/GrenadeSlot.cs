@@ -927,7 +927,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return (ChestHang.Hanging || VRGlobals.player.HandsIsEmpty || VRGlobals.player.HandsController is EFT.Player.KnifeController)
                     && !VRReloadController.GunHandHolds;
             return !VRGlobals.vrPlayer.isSupporting && !ChestHang.SupportOnly && !VRReloadController.OffHandHolds && !VRReloadController.OffHandAtChargingHandle
-                && !VRReloadController.OffHandAtBolt && hands.scopeTransform == null;
+                && !VRReloadController.Bolt.OffHandAtBolt && hands.scopeTransform == null;
         }
 
         // Distance from the nearest rendered hand point (palm, knuckles, fingertips) to the grenade's middle, divided by grabRadius:

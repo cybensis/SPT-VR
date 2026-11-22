@@ -34,22 +34,22 @@ namespace TarkovVR.Source.Player.Interactions
         private void UpdatePressCheckHook()
         {
             pressCheckMirrorReady = false;
-            float progress = VRReloadController.PressCheckProgress;
+            float progress = VRReloadController.PressCheck.PressCheckProgress;
             if (progress <= 0f || rightRestPoseEuler == null || rightRestPoseEuler.Length == 0)
                 return;
             if (!rightFingersResolved)
                 ResolveRightFingers();
             if (rightFingerJoints == null)
                 return;
-            bool mirrored = VRReloadController.PressCheckOnLeftHand;
+            bool mirrored = VRReloadController.PressCheck.PressCheckOnLeftHand;
             if (mirrored)
                 pressCheckMirrorLocals.Clear();
             // The fingers open over the first part of the turn and close onto the slide over the rest (reversed on the way back)
-            float closeFrom = Mathf.Clamp(VRReloadController.pressCheckFingersCloseFrom, 0.05f, 0.95f);
+            float closeFrom = Mathf.Clamp(VRReloadController.PressCheck.pressCheckFingersCloseFrom, 0.05f, 0.95f);
             float open = Mathf.SmoothStep(0f, 1f, progress / closeFrom);
             float close = Mathf.SmoothStep(0f, 1f, (progress - closeFrom) / (1f - closeFrom));
             // While the slide is drawn back, each finger tilts back with it from its knuckle (below, using its own knuckle-to-tip direction)
-            bool dragging = VRReloadController.TryGetPressCheckDrag(out Vector3 backInPalm, out float pull);
+            bool dragging = VRReloadController.PressCheck.TryGetPressCheckDrag(out Vector3 backInPalm, out float pull);
             int poseIndex = 0;
             for (int finger = 0; finger < rightFingerJoints.Length; finger++)
             {
@@ -85,7 +85,7 @@ namespace TarkovVR.Source.Player.Interactions
                     Vector3 axis = Vector3.Cross(toTip, backInPalm);
                     if (axis.sqrMagnitude > 1e-10f)
                     {
-                        float reach = Mathf.Max(VRReloadController.pressCheckFingerReach, 0.01f);
+                        float reach = Mathf.Max(VRReloadController.PressCheck.pressCheckFingerReach, 0.01f);
                         pressCheckJointShown[0] = Quaternion.AngleAxis(Mathf.Atan2(pull, reach) * Mathf.Rad2Deg, axis) * pressCheckJointShown[0];
                     }
                 }
@@ -116,7 +116,7 @@ namespace TarkovVR.Source.Player.Interactions
         // check's mirror image.
         private void ApplyPressCheckHookLeft()
         {
-            if (pressCheckMirrorReady && VRReloadController.PressCheckOnLeftHand)
+            if (pressCheckMirrorReady && VRReloadController.PressCheck.PressCheckOnLeftHand)
                 TarkovVR.Source.Player.Body.HandMirror.ApplyMirroredRight(pressCheckMirrorLocals);
         }
 
@@ -128,7 +128,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private void KeepThumbOnGun(Transform[] joints, float amount, bool mirrored)
         {
-            if (!VRReloadController.TryGetPressCheckThumb(out int serial, out int pivotJoint, out Quaternion palmNow, out Quaternion palmAtStart, out Quaternion thumbTurn)
+            if (!VRReloadController.PressCheck.TryGetPressCheckThumb(out int serial, out int pivotJoint, out Quaternion palmNow, out Quaternion palmAtStart, out Quaternion thumbTurn)
                 || pivotJoint >= joints.Length || joints[pivotJoint] == null)
                 return;
             if (serial != pressCheckThumbSerial)

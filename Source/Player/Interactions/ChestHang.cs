@@ -256,7 +256,7 @@ namespace TarkovVR.Source.Player.Interactions
                     }
                 }
                 // A press at a belt gun's box isn't a regrab: the gun hand takes the box (VRReloadController.GunHandAtBox, one frame old)
-                else if (pressed && near && !VRReloadController.HandleInGunHand && !VRReloadController.BoltInGunHand && !VRReloadController.GunHandAtBox)
+                else if (pressed && near && !VRReloadController.ChargingHandle.HandleInGunHand && !VRReloadController.Bolt.BoltInGunHand && !VRReloadController.GunHandAtBox)
                 {
                     // The dominant hand takes the grip back: normal two-handed hold. Reattach clears SupportOnly itself; clearing
                     // it here first would make wasDetached read false inside it, so no retake sound or haptic would play.
@@ -272,7 +272,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (HandleHeld)
             {
                 HandInRegrabZone = false;
-                if (!VRReloadController.HandleInGunHand)
+                if (!VRReloadController.ChargingHandle.HandleInGunHand)
                 {
                     // The handle was let go (the bolt went home): the off hand holds the gun if it's back on the foregrip, else nobody does
                     HandleHeld = false;
@@ -576,7 +576,7 @@ namespace TarkovVR.Source.Player.Interactions
         // True when the off hand lets go of the support hold while the gun hand is on the charging handle: that hand then carries the gun
         private static bool CanHoldByHandle()
         {
-            return VRReloadController.HandleInGunHand && !Handedness.GunInLeftHand
+            return VRReloadController.ChargingHandle.HandleInGunHand && !Handedness.GunInLeftHand
                 && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.RightHand != null;
         }
 
@@ -597,7 +597,7 @@ namespace TarkovVR.Source.Player.Interactions
             SupportOnly = false;
             HandleHeld = true;
             // Move the gun hand from the shared hand latch onto a pin on the handle, because the off hand's magazine work needs that latch
-            VRReloadController.PinGunHandOnHandle();
+            VRReloadController.ChargingHandle.PinGunHandOnHandle();
             Pulse(0.35f, throughGun: true);
         }
 
@@ -647,7 +647,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             // Cancel a press check first, so its marker on the gun hand isn't saved below as the gun's own and given back on the
             // next grab (the hand would fly off to it)
-            VRReloadController.CancelPressCheck();
+            VRReloadController.PressCheck.CancelPressCheck();
             var arm = VRGlobals.ikManager != null ? VRGlobals.ikManager.rightArmIk : null;
             var rightHand = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.RightHand : null;
             var player = VRGlobals.player;
@@ -674,7 +674,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             var player = VRGlobals.player;
             // Never give back a press check's marker: it isn't part of the gun
-            if (VRReloadController.IsPressCheckMarker(gunHandMarker))
+            if (VRReloadController.PressCheck.IsPressCheckMarker(gunHandMarker))
             {
                 var gun = VRGlobals.firearmController;
                 gunHandMarker = gun != null && gun.HandsHierarchy != null ? gun.HandsHierarchy.GetTransform(ECharacterWeaponBones.weapon_R_IK_marker) : null;
@@ -802,7 +802,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static void SaveHolderOnce()
         {
             // A press check turns the holder: cancel it so the turn isn't saved (else every restore would keep it)
-            VRReloadController.CancelPressCheck();
+            VRReloadController.PressCheck.CancelPressCheck();
             if (holderSaved || VRGlobals.weaponHolder == null)
                 return;
             Transform holder = VRGlobals.weaponHolder.transform;

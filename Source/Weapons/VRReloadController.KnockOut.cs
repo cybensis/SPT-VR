@@ -13,172 +13,175 @@ namespace TarkovVR.Source.Weapons
     // drop's path (RunDrop), so it is synced and placed the same way.
     public static partial class VRReloadController
     {
-        public static float knockContactRadius = 0.03f;     // m from the catch to the held magazine's body that counts as touching it
-        public static float knockSpeed = 0.35f;             // m/s the held magazine must move forward (toward the muzzle) against the gun
-        public static float knockTransfer = 0.9f;           // share of that push the old magazine leaves with
-        public static float knockMaxSpeed = 4f;             // m/s cap on the push it's given
-        public static float knockDrop = 0.3f;               // m/s down on top (it falls out of the well as the catch lets go)
-        public static float knockSpin = 1f;                 // its rock off the hinge = the push over the catch's lever to the hinge, times this
-        public static float knockMaxSpin = 7f;              // rad/s cap (Unity's own default cap on a body's spin)
-
-        private static FirearmController knockCatchFor;
-        private static Transform knockCatchPart;
-        private static Renderer knockCatchRenderer;
-        private static Vector3 knockCatchLast;
-        private static float knockCatchLastTime = -1f;
-        private static GameObject knockBodyFor;
-        private static MeshFilter knockBody;                // the held magazine's body (its biggest mesh)
-        private static GameObject knockZoneViz;
-
-        // Runs every Tick, after the grabs: checks the held new magazine against the gun's catch
-        private static void TickKnockOut()
+        public static class MagazineKnockOut
         {
-            bool showZone = false;
-            Vector3 zoneAt = Vector3.zero;
-            try
+            public static float knockContactRadius = 0.03f;     // m from the catch to the held magazine's body that counts as touching it
+            public static float knockSpeed = 0.35f;             // m/s the held magazine must move forward (toward the muzzle) against the gun
+            public static float knockTransfer = 0.9f;           // share of that push the old magazine leaves with
+            public static float knockMaxSpeed = 4f;             // m/s cap on the push it's given
+            public static float knockDrop = 0.3f;               // m/s down on top (it falls out of the well as the catch lets go)
+            public static float knockSpin = 1f;                 // its rock off the hinge = the push over the catch's lever to the hinge, times this
+            public static float knockMaxSpin = 7f;              // rad/s cap (Unity's own default cap on a body's spin)
+
+            private static FirearmController knockCatchFor;
+            private static Transform knockCatchPart;
+            private static Renderer knockCatchRenderer;
+            private static Vector3 knockCatchLast;
+            private static float knockCatchLastTime = -1f;
+            private static GameObject knockBodyFor;
+            private static MeshFilter knockBody;                // the held magazine's body (its biggest mesh)
+            private static GameObject knockZoneViz;
+
+            // Runs every Tick, after the grabs: checks the held new magazine against the gun's catch
+            internal static void TickKnockOut()
             {
-                if (!HoldingMagazine || HoldingGunMagazine || magazineInGunHand || onRail || HoldingPalmedMagazine
-                    || HoldingSeatedMagazine || heldProp == null)
+                bool showZone = false;
+                Vector3 zoneAt = Vector3.zero;
+                try
                 {
-                    knockCatchLastTime = -1f;
-                    return;
-                }
-                if (!CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
-                    || weapon.MalfState.State == Weapon.EMalfunctionState.Feed || weapon.GetCurrentMagazine() == null)
-                {
-                    knockCatchLastTime = -1f;
-                    return;
-                }
-                RockIn rockIn = RockInOf(firearmController);
-                if (rockIn == null || rockIn.pivot != Vector3.zero || !TryGetKnockCatch(firearmController, weapon, magazineSlot, out Vector3 catchPoint))
-                {
-                    knockCatchLastTime = -1f;
-                    return;
-                }
-                showZone = debugZones;
-                zoneAt = catchPoint;
-
-                // The gun's own motion at the catch (from the body and the gun hand). The push is the held magazine's motion relative to it.
-                float now = Time.time;
-                float sinceLast = now - knockCatchLastTime;
-                bool measured = knockCatchLastTime > 0f && sinceLast > 1e-4f && sinceLast < 0.1f;
-                Vector3 gunVelocity = measured ? (catchPoint - knockCatchLast) / sinceLast : Vector3.zero;
-                knockCatchLast = catchPoint;
-                knockCatchLastTime = now;
-                if (!measured)
-                    return;
-
-                float distance = DistanceToHeldBody(catchPoint);
-                if (distance > knockContactRadius)
-                    return;
-                Vector3 forward = -firearmController.WeaponRoot.up;
-                float push = Vector3.Dot(HandWorldVelocity(gunHand: false) - gunVelocity, forward);
-                if (push < knockSpeed)
-                    return;
-                KnockOut(firearmController, weapon, magazineSlot, rockIn, catchPoint, forward, push, gunVelocity, distance);
-            }
-            finally
-            {
-                SetZoneViz(ref knockZoneViz, showZone, zoneAt, knockContactRadius, new Color(1f, 0.5f, 0f, 0.35f));
-            }
-        }
-
-        private static void KnockOut(FirearmController firearmController, Weapon weapon, Slot magazineSlot, RockIn rockIn, Vector3 catchPoint,
-            Vector3 forward, float push, Vector3 gunVelocity, float distance)
-        {
-            Magazine magazine = weapon.GetCurrentMagazine();
-            ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
-            Transform well = MagazineWellBone(firearmController, magazineSlot);
-            if (magazine == null || magazineView == null || magazineView.ItemView == null || well == null)
-                return;
-
-            // Tarkov's sounds of the catch and the magazine coming out; the knock in both hands
-            PlayFirstGunSound(firearmController, SoundHand.OffHand, MAG_BUTTON_SOUNDS);
-            PlayFirstGunSound(firearmController, SoundHand.GunBody, MAG_OUT_SOUNDS);
-            Pulse(SoundHand.OffHand, 0.7f, 0.05f);
-            Pulse(SoundHand.GunHand, 0.45f, 0.05f);
-
-            if (CanDropToGround(magazine))
-            {
-                float given = Mathf.Min(push * knockTransfer, knockMaxSpeed);
-                Vector3 velocity = gunVelocity + forward * given + Vector3.down * knockDrop;
-                // The push at the catch turns it about the hinge (the well, its rock-in axis), out the way it rocks by hand
-                float lever = Mathf.Max(0.03f, Vector3.Distance(catchPoint, well.position));
-                float spin = Mathf.Min(given / lever * knockSpin, knockMaxSpin);
-                Vector3 angularVelocity = well.TransformDirection(rockIn.axis).normalized * spin;
-                RunDrop(magazine, firearmController, magazineView.ItemView.position, magazineView.ItemView.rotation, velocity, angularVelocity);
-                return;
-            }
-            // The hideout: into the rig, as B does there
-            if (TryBuildMoveToRig(magazine, out OperationResult<MoveResult> rigMove))
-            {
-                RunMoveToRig(magazine, firearmController, rigMove);
-            }
-        }
-
-        // The catch: the gun's release part as EnsureReleaseParts found it (else the first part named like one), measured at its mesh
-        // if it has one
-        private static bool TryGetKnockCatch(FirearmController firearmController, Weapon weapon, Slot magazineSlot, out Vector3 catchPoint)
-        {
-            catchPoint = Vector3.zero;
-            if (knockCatchFor != firearmController)
-            {
-                knockCatchFor = firearmController;
-                knockCatchPart = null;
-                knockCatchRenderer = null;
-                knockCatchLastTime = -1f;
-                Transform well = MagazineWellBone(firearmController, magazineSlot);
-                if (EnsureReleaseParts(firearmController, weapon, magazineSlot) && releaseParts != null && releaseParts.Length > 0)
-                    knockCatchPart = releaseParts[0];
-                else
-                {
-                    List<Transform> candidates = ReleaseCandidates(firearmController.WeaponRoot, well);
-                    knockCatchPart = candidates.Count > 0 ? candidates[0] : null;
-                }
-                if (knockCatchPart != null)
-                {
-                    foreach (Renderer renderer in knockCatchPart.GetComponentsInChildren<Renderer>(true))
+                    if (!HoldingMagazine || HoldingGunMagazine || magazineInGunHand || onRail || HoldingPalmedMagazine
+                        || HoldingSeatedMagazine || heldProp == null)
                     {
-                        if (well == null || !renderer.transform.IsChildOf(well))
+                        knockCatchLastTime = -1f;
+                        return;
+                    }
+                    if (!CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
+                        || weapon.MalfState.State == Weapon.EMalfunctionState.Feed || weapon.GetCurrentMagazine() == null)
+                    {
+                        knockCatchLastTime = -1f;
+                        return;
+                    }
+                    RockIn rockIn = RockInOf(firearmController);
+                    if (rockIn == null || rockIn.pivot != Vector3.zero || !TryGetKnockCatch(firearmController, weapon, magazineSlot, out Vector3 catchPoint))
+                    {
+                        knockCatchLastTime = -1f;
+                        return;
+                    }
+                    showZone = debugZones;
+                    zoneAt = catchPoint;
+
+                    // The gun's own motion at the catch (from the body and the gun hand). The push is the held magazine's motion relative to it.
+                    float now = Time.time;
+                    float sinceLast = now - knockCatchLastTime;
+                    bool measured = knockCatchLastTime > 0f && sinceLast > 1e-4f && sinceLast < 0.1f;
+                    Vector3 gunVelocity = measured ? (catchPoint - knockCatchLast) / sinceLast : Vector3.zero;
+                    knockCatchLast = catchPoint;
+                    knockCatchLastTime = now;
+                    if (!measured)
+                        return;
+
+                    float distance = DistanceToHeldBody(catchPoint);
+                    if (distance > knockContactRadius)
+                        return;
+                    Vector3 forward = -firearmController.WeaponRoot.up;
+                    float push = Vector3.Dot(HandWorldVelocity(gunHand: false) - gunVelocity, forward);
+                    if (push < knockSpeed)
+                        return;
+                    KnockOut(firearmController, weapon, magazineSlot, rockIn, catchPoint, forward, push, gunVelocity, distance);
+                }
+                finally
+                {
+                    SetZoneViz(ref knockZoneViz, showZone, zoneAt, knockContactRadius, new Color(1f, 0.5f, 0f, 0.35f));
+                }
+            }
+
+            private static void KnockOut(FirearmController firearmController, Weapon weapon, Slot magazineSlot, RockIn rockIn, Vector3 catchPoint,
+                Vector3 forward, float push, Vector3 gunVelocity, float distance)
+            {
+                Magazine magazine = weapon.GetCurrentMagazine();
+                ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
+                Transform well = MagazineWellBone(firearmController, magazineSlot);
+                if (magazine == null || magazineView == null || magazineView.ItemView == null || well == null)
+                    return;
+
+                // Tarkov's sounds of the catch and the magazine coming out; the knock in both hands
+                PlayFirstGunSound(firearmController, SoundHand.OffHand, MAG_BUTTON_SOUNDS);
+                PlayFirstGunSound(firearmController, SoundHand.GunBody, MAG_OUT_SOUNDS);
+                Pulse(SoundHand.OffHand, 0.7f, 0.05f);
+                Pulse(SoundHand.GunHand, 0.45f, 0.05f);
+
+                if (CanDropToGround(magazine))
+                {
+                    float given = Mathf.Min(push * knockTransfer, knockMaxSpeed);
+                    Vector3 velocity = gunVelocity + forward * given + Vector3.down * knockDrop;
+                    // The push at the catch turns it about the hinge (the well, its rock-in axis), out the way it rocks by hand
+                    float lever = Mathf.Max(0.03f, Vector3.Distance(catchPoint, well.position));
+                    float spin = Mathf.Min(given / lever * knockSpin, knockMaxSpin);
+                    Vector3 angularVelocity = well.TransformDirection(rockIn.axis).normalized * spin;
+                    RunDrop(magazine, firearmController, magazineView.ItemView.position, magazineView.ItemView.rotation, velocity, angularVelocity);
+                    return;
+                }
+                // The hideout: into the rig, as B does there
+                if (TryBuildMoveToRig(magazine, out OperationResult<MoveResult> rigMove))
+                {
+                    RunMoveToRig(magazine, firearmController, rigMove);
+                }
+            }
+
+            // The catch: the gun's release part as EnsureReleaseParts found it (else the first part named like one), measured at its mesh
+            // if it has one
+            private static bool TryGetKnockCatch(FirearmController firearmController, Weapon weapon, Slot magazineSlot, out Vector3 catchPoint)
+            {
+                catchPoint = Vector3.zero;
+                if (knockCatchFor != firearmController)
+                {
+                    knockCatchFor = firearmController;
+                    knockCatchPart = null;
+                    knockCatchRenderer = null;
+                    knockCatchLastTime = -1f;
+                    Transform well = MagazineWellBone(firearmController, magazineSlot);
+                    if (EnsureReleaseParts(firearmController, weapon, magazineSlot) && releaseParts != null && releaseParts.Length > 0)
+                        knockCatchPart = releaseParts[0];
+                    else
+                    {
+                        List<Transform> candidates = ReleaseCandidates(firearmController.WeaponRoot, well);
+                        knockCatchPart = candidates.Count > 0 ? candidates[0] : null;
+                    }
+                    if (knockCatchPart != null)
+                    {
+                        foreach (Renderer renderer in knockCatchPart.GetComponentsInChildren<Renderer>(true))
                         {
-                            knockCatchRenderer = renderer;
-                            break;
+                            if (well == null || !renderer.transform.IsChildOf(well))
+                            {
+                                knockCatchRenderer = renderer;
+                                break;
+                            }
                         }
                     }
                 }
+                if (knockCatchPart == null)
+                    return false;
+                catchPoint = knockCatchRenderer != null && knockCatchRenderer.enabled ? knockCatchRenderer.bounds.center : knockCatchPart.position;
+                return true;
             }
-            if (knockCatchPart == null)
-                return false;
-            catchPoint = knockCatchRenderer != null && knockCatchRenderer.enabled ? knockCatchRenderer.bounds.center : knockCatchPart.position;
-            return true;
-        }
 
-        // How far the point is from the held magazine's body: its biggest mesh's own bounds (not the world box, which grows as it turns)
-        private static float DistanceToHeldBody(Vector3 point)
-        {
-            if (knockBodyFor != heldProp)
+            // How far the point is from the held magazine's body: its biggest mesh's own bounds (not the world box, which grows as it turns)
+            private static float DistanceToHeldBody(Vector3 point)
             {
-                knockBodyFor = heldProp;
-                knockBody = null;
-                float biggest = 0f;
-                foreach (MeshFilter meshFilter in heldProp.GetComponentsInChildren<MeshFilter>(true))
+                if (knockBodyFor != heldProp)
                 {
-                    if (meshFilter.sharedMesh == null)
-                        continue;
-                    Vector3 size = Vector3.Scale(meshFilter.sharedMesh.bounds.size, meshFilter.transform.lossyScale);
-                    float volume = Mathf.Abs(size.x * size.y * size.z);
-                    if (volume > biggest)
+                    knockBodyFor = heldProp;
+                    knockBody = null;
+                    float biggest = 0f;
+                    foreach (MeshFilter meshFilter in heldProp.GetComponentsInChildren<MeshFilter>(true))
                     {
-                        biggest = volume;
-                        knockBody = meshFilter;
+                        if (meshFilter.sharedMesh == null)
+                            continue;
+                        Vector3 size = Vector3.Scale(meshFilter.sharedMesh.bounds.size, meshFilter.transform.lossyScale);
+                        float volume = Mathf.Abs(size.x * size.y * size.z);
+                        if (volume > biggest)
+                        {
+                            biggest = volume;
+                            knockBody = meshFilter;
+                        }
                     }
                 }
+                if (knockBody == null)
+                    return float.MaxValue;
+                Transform body = knockBody.transform;
+                Vector3 closest = knockBody.sharedMesh.bounds.ClosestPoint(body.InverseTransformPoint(point));
+                return Vector3.Distance(body.TransformPoint(closest), point);
             }
-            if (knockBody == null)
-                return float.MaxValue;
-            Transform body = knockBody.transform;
-            Vector3 closest = knockBody.sharedMesh.bounds.ClosestPoint(body.InverseTransformPoint(point));
-            return Vector3.Distance(body.TransformPoint(closest), point);
         }
     }
 }

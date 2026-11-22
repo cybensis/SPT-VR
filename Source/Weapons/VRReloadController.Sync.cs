@@ -20,272 +20,276 @@ namespace TarkovVR.Source.Weapons
     // Wrists and props are in the gun's frame (Weapon_root), so on the other side they ride the observed gun as it's placed.
     public static partial class VRReloadController
     {
-        public static bool syncManualReload;                 // magazines by hand: other players skip Tarkov's magazine / rechamber animations
-        public static bool syncManualBolt;                   // the bolt by hand: other players skip Tarkov's bolt cycle after a shot
-        public static bool syncDriveLeft, syncDriveRight;    // that arm goes to its synced wrist (else it's welded on the gun's marker)
-        public static Vector3 syncLeftPosition, syncRightPosition;
-        public static Quaternion syncLeftRotation = Quaternion.identity, syncRightRotation = Quaternion.identity;
-        public static readonly List<string> syncPropItems = new List<string>();
-        public static readonly List<Vector3> syncPropPositions = new List<Vector3>();
-        public static readonly List<Quaternion> syncPropRotations = new List<Quaternion>();
-        public static readonly List<string> syncPartPaths = new List<string>();
-        public static readonly List<Vector3> syncPartPositions = new List<Vector3>();
-        public static readonly List<Quaternion> syncPartRotations = new List<Quaternion>();
-        public static readonly List<bool> syncPartShown = new List<bool>();
-        public static string syncHiddenGroundItem;           // the ground magazine's item while its model is in the hand
-        public static bool syncBoltCatch;
-        public static bool syncBoltOpenDriven;
-        public static float syncBoltOpen;
         public static int syncShellsThrown;
         public static int syncRoundsShown;
 
         // SetBoltOpen's last value and frame. The bolt-open layer counts as driven by hand while it's being written.
         private static float boltOpenWritten;
         private static int boltOpenWrittenFrame = -10;
-        // The magazine whose prop waits in the hand for Tarkov's move (CommitHold)
-        private static Item pendingPropItem;
-        private static readonly Dictionary<Transform, string> partPaths = new Dictionary<Transform, string>();
-        private static Transform partPathsRoot;
-        private static readonly System.Text.StringBuilder pathBuilder = new System.Text.StringBuilder(128);
-        private static readonly List<Transform> pathChain = new List<Transform>(16);
-
-        public static bool TryBuildSync(FirearmController firearmController)
-        {
-            syncPropItems.Clear();
-            syncPropPositions.Clear();
-            syncPropRotations.Clear();
-            syncPartPaths.Clear();
-            syncPartPositions.Clear();
-            syncPartRotations.Clear();
-            syncPartShown.Clear();
-            syncHiddenGroundItem = null;
-            Transform weaponRoot = firearmController != null ? firearmController.WeaponRoot : null;
-            if (weaponRoot == null || VRGlobals.vrPlayer == null || VRGlobals.ikManager == null)
-                return false;
-            if (partPathsRoot != weaponRoot)
-            {
-                partPathsRoot = weaponRoot;
-                partPaths.Clear();
-            }
-
-            syncManualReload = VRSettings.GetManualReloadOn();
-            syncManualBolt = ManualBoltOn(firearmController);
-
-            // On the other side, the gun hand on the grip and the support hand on the foregrip are welded onto the gun's markers. Any
-            // other hand (off the gun, on a part, holding the gun from the left) goes where it's drawn here. The support hand riding an
-            // open pump and the gun hand in a press check are off those markers too.
-            bool gunInLeftHand = Handedness.GunInLeftHand;
-            syncDriveRight = gunInLeftHand || ChestHang.Detached || PressCheckActive || BreakLeverPressing;
-            syncDriveLeft = !(VRGlobals.vrPlayer.isSupporting && !gunInLeftHand) || pumpHandDriving;
-            EnsureWristHooks();
-            SyncWrist(0, VRGlobals.ikManager.leftArmIk, weaponRoot, out syncLeftPosition, out syncLeftRotation);
-            SyncWrist(1, VRGlobals.ikManager.rightArmIk, weaponRoot, out syncRightPosition, out syncRightRotation);
-
-            AddProp(weaponRoot, heldProp, heldMagazine);
-            AddProp(weaponRoot, palmedProp, palmedMagazine);
-            AddProp(weaponRoot, pendingProp, pendingPropItem);
-            AddProp(weaponRoot, heldRoundProp, heldRoundSource);
-
-            // The bolt-action's bolt while it's off its closed pose, and the round riding it
-            if (drivingBolt && boltBonesFor == firearmController)
-            {
-                AddPart(weaponRoot, boltSlider);
-                AddPart(weaponRoot, boltTurner);
-            }
-            if (boltChamberFor == firearmController)
-            {
-                AddPart(weaponRoot, boltChamberBone);
-                AddPart(weaponRoot, boltChamberRound);
-            }
-            // The charging handle and what it moves: the handle model (not our rider on a carrier handle), the carrier, a side
-            // handle's slider / base / knob, the bolts it pulls, and the round riding the bolt
-            if (HoldingChargingHandle && handleForFirearm == firearmController)
-            {
-                if (handleView != handleRider)
-                    AddPart(weaponRoot, handleView);
-                AddPart(weaponRoot, handleCarrier);
-                if (heldSideHandle != null)
-                {
-                    AddPart(weaponRoot, sideSlider);
-                    AddPart(weaponRoot, sideBase);
-                    AddPart(weaponRoot, sideKnob);
-                }
-                foreach (MovedBolt movedBolt in movedBolts)
-                    AddPart(weaponRoot, movedBolt.bone);
-                if (showingChamber)
-                {
-                    AddPart(weaponRoot, chamberBone);
-                    AddPart(weaponRoot, chamberedRound);
-                }
-            }
-            // The MDR's deflector, open or in the hand
-            if (deflectorFor == firearmController && deflectorBone != null && (HoldingDeflector || DeflectorOpen(firearmController)))
-                AddPart(weaponRoot, deflectorBone);
-            // The magazine release pressed in
-            if (releaseParts != null && releasePartsFor == firearmController && releasePressShown > 0f)
-            {
-                foreach (Transform part in releaseParts)
-                    AddPart(weaponRoot, part);
-            }
-            // A pistol's magazine partly out, and the gun's own magazine model while the magazine is in the hand or on its way out
-            if (MagazinePartlyOut && partlyOutFor == firearmController)
-                AddPart(weaponRoot, partlyOutView);
-            AddPart(weaponRoot, hiddenGunMagazineView);
-            AddPart(weaponRoot, pendingHiddenView);
-            // A pump gun's pump off its closed pose, a pistol's slide in a press check
-            AddPumpParts(firearmController, weaponRoot);
-            AddPressCheckParts(firearmController, weaponRoot);
-            // A break-action's barrels and lever off their rest pose
-            AddBreakActionParts(firearmController, weaponRoot);
-
-            if (hiddenRenderersOf != null && hiddenRenderersOf.Item != null)
-                syncHiddenGroundItem = hiddenRenderersOf.Item.Id.ToString();
-
-            FirearmsAnimator firearmsAnimator = firearmController.FirearmsAnimator;
-            syncBoltCatch = firearmsAnimator != null && firearmsAnimator.GetBoltCatch();
-            syncBoltOpenDriven = Time.frameCount - boltOpenWrittenFrame <= 2;
-            syncBoltOpen = syncBoltOpenDriven ? boltOpenWritten : (syncBoltCatch ? 1f : 0f);
-            return true;
-        }
-
-        private static Transform WristOf(RootMotion.FinalIK.LimbIK armIk)
-        {
-            return armIk != null && armIk.solver != null && armIk.solver.bone3 != null ? armIk.solver.bone3.transform : null;
-        }
-
-        // The wrists as the arm IK leaves them, in the gun's frame. Tarkov animates the arms in Player.Update and solves them in
-        // Player.LateUpdate (VisualPass), in no fixed order relative to VRPlayerManager.LateUpdate, where the sync is built. Read there,
-        // a wrist can still be in the animation's right-handed hold. With the gun in the left hand both observed arms go to these.
-        // Instance ids are stored, not references, so nothing raid-scoped is kept alive here.
-        private struct SolvedWrist
-        {
-            public int gunId;
-            public int frame;
-            public Vector3 position;
-            public Quaternion rotation;
-        }
-        private static readonly SolvedWrist[] solvedWrists = { new SolvedWrist { frame = -10 }, new SolvedWrist { frame = -10 } };
-        private static int hookedLeftArmId, hookedRightArmId;
-
-        private static void EnsureWristHooks()
-        {
-            RootMotion.FinalIK.LimbIK left = VRGlobals.ikManager.leftArmIk;
-            if (left != null && left.solver != null && left.GetInstanceID() != hookedLeftArmId)
-            {
-                left.solver.OnPostUpdate -= CaptureLeftWrist;
-                left.solver.OnPostUpdate += CaptureLeftWrist;
-                hookedLeftArmId = left.GetInstanceID();
-            }
-            RootMotion.FinalIK.LimbIK right = VRGlobals.ikManager.rightArmIk;
-            if (right != null && right.solver != null && right.GetInstanceID() != hookedRightArmId)
-            {
-                right.solver.OnPostUpdate -= CaptureRightWrist;
-                right.solver.OnPostUpdate += CaptureRightWrist;
-                hookedRightArmId = right.GetInstanceID();
-            }
-        }
-
-        private static void CaptureLeftWrist() => CaptureWrist(0, VRGlobals.ikManager != null ? VRGlobals.ikManager.leftArmIk : null);
-        private static void CaptureRightWrist() => CaptureWrist(1, VRGlobals.ikManager != null ? VRGlobals.ikManager.rightArmIk : null);
-
-        // Runs on every solve of the arm; the last one in the frame is the pose that is drawn
-        private static void CaptureWrist(int index, RootMotion.FinalIK.LimbIK armIk)
-        {
-            Transform weaponRoot = VRGlobals.firearmController != null ? VRGlobals.firearmController.WeaponRoot : null;
-            Transform wrist = WristOf(armIk);
-            if (weaponRoot == null || wrist == null)
-                return;
-            InGunFrame(weaponRoot, wrist, out solvedWrists[index].position, out solvedWrists[index].rotation);
-            solvedWrists[index].gunId = weaponRoot.GetInstanceID();
-            solvedWrists[index].frame = Time.frameCount;
-        }
-
-        // This frame's or last frame's solved wrist on this gun, else the wrist as it is now
-        private static void SyncWrist(int index, RootMotion.FinalIK.LimbIK armIk, Transform weaponRoot, out Vector3 position, out Quaternion rotation)
-        {
-            SolvedWrist solved = solvedWrists[index];
-            if (solved.gunId == weaponRoot.GetInstanceID() && Time.frameCount - solved.frame <= 1)
-            {
-                position = solved.position;
-                rotation = solved.rotation;
-                return;
-            }
-            InGunFrame(weaponRoot, WristOf(armIk), out position, out rotation);
-        }
-
-        private static void InGunFrame(Transform weaponRoot, Transform thing, out Vector3 position, out Quaternion rotation)
-        {
-            if (thing == null)
-            {
-                position = Vector3.zero;
-                rotation = Quaternion.identity;
-                return;
-            }
-            Quaternion toGun = Quaternion.Inverse(weaponRoot.rotation);
-            position = toGun * (thing.position - weaponRoot.position);
-            rotation = toGun * thing.rotation;
-        }
-
-        private static void AddProp(Transform weaponRoot, GameObject prop, Item item)
-        {
-            if (prop == null || item == null || !prop.activeInHierarchy)
-                return;
-            InGunFrame(weaponRoot, prop.transform, out Vector3 position, out Quaternion rotation);
-            syncPropItems.Add(item.Id.ToString());
-            syncPropPositions.Add(position);
-            syncPropRotations.Add(rotation);
-        }
-
-        private static void AddPart(Transform weaponRoot, Transform part)
-        {
-            if (part != null)
-                AddPartPose(weaponRoot, part, part.localPosition, part.localRotation, part.gameObject.activeSelf);
-        }
 
         // Adds a part with the pose it is drawn with this frame, for parts whose pose is written after the sync may be built
         private static void AddPartPose(Transform weaponRoot, Transform part, Vector3 localPosition, Quaternion localRotation, bool shown)
         {
-            string path = PathUnder(weaponRoot, part);
+            string path = Sync.PathUnder(weaponRoot, part);
             if (path == null)
                 return;
-            syncPartPaths.Add(path);
-            syncPartPositions.Add(localPosition);
-            syncPartRotations.Add(localRotation);
-            syncPartShown.Add(shown);
+            Sync.syncPartPaths.Add(path);
+            Sync.syncPartPositions.Add(localPosition);
+            Sync.syncPartRotations.Add(localRotation);
+            Sync.syncPartShown.Add(shown);
         }
 
-        // The names from under the gun's root down to the part, joined by '/' (the other side's copy of the gun is built from the same
-        // prefab, so it finds the part by the same path). Null when it isn't under the root, or sits under one of our own transforms (VR*).
-        private static string PathUnder(Transform weaponRoot, Transform part)
+        public static class Sync
         {
-            if (partPaths.TryGetValue(part, out string cached))
-                return cached;
-            pathChain.Clear();
-            Transform walk = part;
-            while (walk != null && walk != weaponRoot)
+            public static bool syncManualReload;                 // magazines by hand: other players skip Tarkov's magazine / rechamber animations
+            public static bool syncManualBolt;                   // the bolt by hand: other players skip Tarkov's bolt cycle after a shot
+            public static bool syncDriveLeft, syncDriveRight;    // that arm goes to its synced wrist (else it's welded on the gun's marker)
+            public static Vector3 syncLeftPosition, syncRightPosition;
+            public static Quaternion syncLeftRotation = Quaternion.identity, syncRightRotation = Quaternion.identity;
+            public static readonly List<string> syncPropItems = new List<string>();
+            public static readonly List<Vector3> syncPropPositions = new List<Vector3>();
+            public static readonly List<Quaternion> syncPropRotations = new List<Quaternion>();
+            public static readonly List<string> syncPartPaths = new List<string>();
+            public static readonly List<Vector3> syncPartPositions = new List<Vector3>();
+            public static readonly List<Quaternion> syncPartRotations = new List<Quaternion>();
+            public static readonly List<bool> syncPartShown = new List<bool>();
+            public static string syncHiddenGroundItem;           // the ground magazine's item while its model is in the hand
+            public static bool syncBoltCatch;
+            public static bool syncBoltOpenDriven;
+            public static float syncBoltOpen;
+            // The magazine whose prop waits in the hand for Tarkov's move (CommitHold)
+            internal static Item pendingPropItem;
+            private static readonly Dictionary<Transform, string> partPaths = new Dictionary<Transform, string>();
+            private static Transform partPathsRoot;
+            private static readonly System.Text.StringBuilder pathBuilder = new System.Text.StringBuilder(128);
+            private static readonly List<Transform> pathChain = new List<Transform>(16);
+
+            public static bool TryBuildSync(FirearmController firearmController)
             {
-                pathChain.Add(walk);
-                walk = walk.parent;
-            }
-            string path = null;
-            if (walk == weaponRoot)
-            {
-                pathBuilder.Clear();
-                bool ours = false;
-                for (int index = pathChain.Count - 1; index >= 0; index--)
+                syncPropItems.Clear();
+                syncPropPositions.Clear();
+                syncPropRotations.Clear();
+                syncPartPaths.Clear();
+                syncPartPositions.Clear();
+                syncPartRotations.Clear();
+                syncPartShown.Clear();
+                syncHiddenGroundItem = null;
+                Transform weaponRoot = firearmController != null ? firearmController.WeaponRoot : null;
+                if (weaponRoot == null || VRGlobals.vrPlayer == null || VRGlobals.ikManager == null)
+                    return false;
+                if (partPathsRoot != weaponRoot)
                 {
-                    string name = pathChain[index].name;
-                    if (name.StartsWith("VR"))
-                        ours = true;
-                    if (pathBuilder.Length > 0)
-                        pathBuilder.Append('/');
-                    pathBuilder.Append(name);
+                    partPathsRoot = weaponRoot;
+                    partPaths.Clear();
                 }
-                if (!ours)
-                    path = pathBuilder.ToString();
+
+                syncManualReload = VRSettings.GetManualReloadOn();
+                syncManualBolt = ManualBoltOn(firearmController);
+
+                // On the other side, the gun hand on the grip and the support hand on the foregrip are welded onto the gun's markers. Any
+                // other hand (off the gun, on a part, holding the gun from the left) goes where it's drawn here. The support hand riding an
+                // open pump and the gun hand in a press check are off those markers too.
+                bool gunInLeftHand = Handedness.GunInLeftHand;
+                syncDriveRight = gunInLeftHand || ChestHang.Detached || PressCheckActive || BreakLeverPressing;
+                syncDriveLeft = !(VRGlobals.vrPlayer.isSupporting && !gunInLeftHand) || pumpHandDriving;
+                EnsureWristHooks();
+                SyncWrist(0, VRGlobals.ikManager.leftArmIk, weaponRoot, out syncLeftPosition, out syncLeftRotation);
+                SyncWrist(1, VRGlobals.ikManager.rightArmIk, weaponRoot, out syncRightPosition, out syncRightRotation);
+
+                AddProp(weaponRoot, heldProp, heldMagazine);
+                AddProp(weaponRoot, palmedProp, palmedMagazine);
+                AddProp(weaponRoot, pendingProp, pendingPropItem);
+                AddProp(weaponRoot, heldRoundProp, heldRoundSource);
+
+                // The bolt-action's bolt while it's off its closed pose, and the round riding it
+                if (drivingBolt && boltBonesFor == firearmController)
+                {
+                    AddPart(weaponRoot, boltSlider);
+                    AddPart(weaponRoot, boltTurner);
+                }
+                if (boltChamberFor == firearmController)
+                {
+                    AddPart(weaponRoot, boltChamberBone);
+                    AddPart(weaponRoot, boltChamberRound);
+                }
+                // The charging handle and what it moves: the handle model (not our rider on a carrier handle), the carrier, a side
+                // handle's slider / base / knob, the bolts it pulls, and the round riding the bolt
+                if (HoldingChargingHandle && handleForFirearm == firearmController)
+                {
+                    if (handleView != handleRider)
+                        AddPart(weaponRoot, handleView);
+                    AddPart(weaponRoot, handleCarrier);
+                    if (heldSideHandle != null)
+                    {
+                        AddPart(weaponRoot, sideSlider);
+                        AddPart(weaponRoot, sideBase);
+                        AddPart(weaponRoot, sideKnob);
+                    }
+                    foreach (MovedBolt movedBolt in movedBolts)
+                        AddPart(weaponRoot, movedBolt.bone);
+                    if (showingChamber)
+                    {
+                        AddPart(weaponRoot, chamberBone);
+                        AddPart(weaponRoot, chamberedRound);
+                    }
+                }
+                // The MDR's deflector, open or in the hand
+                if (deflectorFor == firearmController && deflectorBone != null && (HoldingDeflector || DeflectorOpen(firearmController)))
+                    AddPart(weaponRoot, deflectorBone);
+                // The magazine release pressed in
+                if (releaseParts != null && releasePartsFor == firearmController && releasePressShown > 0f)
+                {
+                    foreach (Transform part in releaseParts)
+                        AddPart(weaponRoot, part);
+                }
+                // A pistol's magazine partly out, and the gun's own magazine model while the magazine is in the hand or on its way out
+                if (MagazinePartlyOut && partlyOutFor == firearmController)
+                    AddPart(weaponRoot, partlyOutView);
+                AddPart(weaponRoot, hiddenGunMagazineView);
+                AddPart(weaponRoot, pendingHiddenView);
+                // A pump gun's pump off its closed pose, a pistol's slide in a press check
+                AddPumpParts(firearmController, weaponRoot);
+                AddPressCheckParts(firearmController, weaponRoot);
+                // A break-action's barrels and lever off their rest pose
+                AddBreakActionParts(firearmController, weaponRoot);
+
+                if (hiddenRenderersOf != null && hiddenRenderersOf.Item != null)
+                    syncHiddenGroundItem = hiddenRenderersOf.Item.Id.ToString();
+
+                FirearmsAnimator firearmsAnimator = firearmController.FirearmsAnimator;
+                syncBoltCatch = firearmsAnimator != null && firearmsAnimator.GetBoltCatch();
+                syncBoltOpenDriven = Time.frameCount - boltOpenWrittenFrame <= 2;
+                syncBoltOpen = syncBoltOpenDriven ? boltOpenWritten : (syncBoltCatch ? 1f : 0f);
+                return true;
             }
-            partPaths[part] = path;
-            return path;
+
+            private static Transform WristOf(RootMotion.FinalIK.LimbIK armIk)
+            {
+                return armIk != null && armIk.solver != null && armIk.solver.bone3 != null ? armIk.solver.bone3.transform : null;
+            }
+
+            // The wrists as the arm IK leaves them, in the gun's frame. Tarkov animates the arms in Player.Update and solves them in
+            // Player.LateUpdate (VisualPass), in no fixed order relative to VRPlayerManager.LateUpdate, where the sync is built. Read there,
+            // a wrist can still be in the animation's right-handed hold. With the gun in the left hand both observed arms go to these.
+            // Instance ids are stored, not references, so nothing raid-scoped is kept alive here.
+            private struct SolvedWrist
+            {
+                public int gunId;
+                public int frame;
+                public Vector3 position;
+                public Quaternion rotation;
+            }
+            private static readonly SolvedWrist[] solvedWrists = { new SolvedWrist { frame = -10 }, new SolvedWrist { frame = -10 } };
+            private static int hookedLeftArmId, hookedRightArmId;
+
+            private static void EnsureWristHooks()
+            {
+                RootMotion.FinalIK.LimbIK left = VRGlobals.ikManager.leftArmIk;
+                if (left != null && left.solver != null && left.GetInstanceID() != hookedLeftArmId)
+                {
+                    left.solver.OnPostUpdate -= CaptureLeftWrist;
+                    left.solver.OnPostUpdate += CaptureLeftWrist;
+                    hookedLeftArmId = left.GetInstanceID();
+                }
+                RootMotion.FinalIK.LimbIK right = VRGlobals.ikManager.rightArmIk;
+                if (right != null && right.solver != null && right.GetInstanceID() != hookedRightArmId)
+                {
+                    right.solver.OnPostUpdate -= CaptureRightWrist;
+                    right.solver.OnPostUpdate += CaptureRightWrist;
+                    hookedRightArmId = right.GetInstanceID();
+                }
+            }
+
+            private static void CaptureLeftWrist() => CaptureWrist(0, VRGlobals.ikManager != null ? VRGlobals.ikManager.leftArmIk : null);
+            private static void CaptureRightWrist() => CaptureWrist(1, VRGlobals.ikManager != null ? VRGlobals.ikManager.rightArmIk : null);
+
+            // Runs on every solve of the arm; the last one in the frame is the pose that is drawn
+            private static void CaptureWrist(int index, RootMotion.FinalIK.LimbIK armIk)
+            {
+                Transform weaponRoot = VRGlobals.firearmController != null ? VRGlobals.firearmController.WeaponRoot : null;
+                Transform wrist = WristOf(armIk);
+                if (weaponRoot == null || wrist == null)
+                    return;
+                InGunFrame(weaponRoot, wrist, out solvedWrists[index].position, out solvedWrists[index].rotation);
+                solvedWrists[index].gunId = weaponRoot.GetInstanceID();
+                solvedWrists[index].frame = Time.frameCount;
+            }
+
+            // This frame's or last frame's solved wrist on this gun, else the wrist as it is now
+            private static void SyncWrist(int index, RootMotion.FinalIK.LimbIK armIk, Transform weaponRoot, out Vector3 position, out Quaternion rotation)
+            {
+                SolvedWrist solved = solvedWrists[index];
+                if (solved.gunId == weaponRoot.GetInstanceID() && Time.frameCount - solved.frame <= 1)
+                {
+                    position = solved.position;
+                    rotation = solved.rotation;
+                    return;
+                }
+                InGunFrame(weaponRoot, WristOf(armIk), out position, out rotation);
+            }
+
+            private static void InGunFrame(Transform weaponRoot, Transform thing, out Vector3 position, out Quaternion rotation)
+            {
+                if (thing == null)
+                {
+                    position = Vector3.zero;
+                    rotation = Quaternion.identity;
+                    return;
+                }
+                Quaternion toGun = Quaternion.Inverse(weaponRoot.rotation);
+                position = toGun * (thing.position - weaponRoot.position);
+                rotation = toGun * thing.rotation;
+            }
+
+            private static void AddProp(Transform weaponRoot, GameObject prop, Item item)
+            {
+                if (prop == null || item == null || !prop.activeInHierarchy)
+                    return;
+                InGunFrame(weaponRoot, prop.transform, out Vector3 position, out Quaternion rotation);
+                syncPropItems.Add(item.Id.ToString());
+                syncPropPositions.Add(position);
+                syncPropRotations.Add(rotation);
+            }
+
+            private static void AddPart(Transform weaponRoot, Transform part)
+            {
+                if (part != null)
+                    AddPartPose(weaponRoot, part, part.localPosition, part.localRotation, part.gameObject.activeSelf);
+            }
+
+            // The names from under the gun's root down to the part, joined by '/' (the other side's copy of the gun is built from the same
+            // prefab, so it finds the part by the same path). Null when it isn't under the root, or sits under one of our own transforms (VR*).
+            internal static string PathUnder(Transform weaponRoot, Transform part)
+            {
+                if (partPaths.TryGetValue(part, out string cached))
+                    return cached;
+                pathChain.Clear();
+                Transform walk = part;
+                while (walk != null && walk != weaponRoot)
+                {
+                    pathChain.Add(walk);
+                    walk = walk.parent;
+                }
+                string path = null;
+                if (walk == weaponRoot)
+                {
+                    pathBuilder.Clear();
+                    bool ours = false;
+                    for (int index = pathChain.Count - 1; index >= 0; index--)
+                    {
+                        string name = pathChain[index].name;
+                        if (name.StartsWith("VR"))
+                            ours = true;
+                        if (pathBuilder.Length > 0)
+                            pathBuilder.Append('/');
+                        pathBuilder.Append(name);
+                    }
+                    if (!ours)
+                        path = pathBuilder.ToString();
+                }
+                partPaths[part] = path;
+                return path;
+            }
         }
     }
 }

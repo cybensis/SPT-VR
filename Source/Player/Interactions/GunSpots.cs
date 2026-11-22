@@ -209,7 +209,7 @@ namespace TarkovVR.Source.Player.Interactions
             // OffHandHolds, not OwnsOffHand: OwnsOffHand's zones are grip zones, and the chest pouch zone overlaps the chest sling
             GunInteractionController parts = WeaponPatches.currentGunInteractController;
             return !VRGlobals.vrPlayer.isSupporting && !ChestHang.SupportOnly && !VRReloadController.OffHandHolds
-                && !VRReloadController.OffHandAtChargingHandle && !VRReloadController.OffHandAtBolt && hands.scopeTransform == null
+                && !VRReloadController.OffHandAtChargingHandle && !VRReloadController.Bolt.OffHandAtBolt && hands.scopeTransform == null
                 && !InputHandlers.BreathingHandler.isHoldingBreath && (parts == null || parts.lastHitCompIndex == -1);
         }
 

@@ -310,7 +310,7 @@ namespace TarkovVR.Source.Player.Interactions
                 // on A/B/the stick, finger on the trigger, one hand on a pistol) also holds the gun, so releasing the grip for it
                 // doesn't sling the gun (VRReloadController.PressCheck).
                 bool gunHandHolds = Handedness.GunHandGrip.state
-                    || (!ChestHang.Detached && !VRGlobals.vrPlayer.isSupporting && VRReloadController.PressCheckHoldsGun);
+                    || (!ChestHang.Detached && !VRGlobals.vrPlayer.isSupporting && VRReloadController.PressCheck.PressCheckHoldsGun);
                 ChestHang.UpdateInput(gunHandHolds, hangGripOwnedElsewhere, VRGlobals.vrPlayer.isSupporting);
                 // Placing a gun's body spot by hand (the trigger held on it)
                 GunSpots.Tick();
@@ -406,16 +406,16 @@ namespace TarkovVR.Source.Player.Interactions
             // Holding a magazine: apply the reload animation's finger pose on top
             VRReloadController.ApplyHeldFingerPose();
             // Pulling the charging handle: a handle on the bolt brings the carrier back, then the chambered round rides the bolt
-            VRReloadController.ApplyHandleCarrier();
-            VRReloadController.ApplyChamberView();
+            VRReloadController.ChargingHandle.ApplyHandleCarrier();
+            VRReloadController.ChargingHandle.ApplyChamberView();
             // The knob the hand holds, folded out (the MDR's paddles), and a press check's slide
-            VRReloadController.ApplyKnobFold();
-            VRReloadController.ApplyPressCheck();
+            VRReloadController.ChargingHandle.ApplyKnobFold();
+            VRReloadController.PressCheck.ApplyPressCheck();
             // A bolt-action's bolt, left open or being worked: its bones are set after the animator
-            VRReloadController.ApplyBolt();
+            VRReloadController.Bolt.ApplyBolt();
             // The MDR's deflector held open or being worked
-            VRReloadController.ApplyDeflector();
-            VRReloadController.ApplyMagazineReleaseButton();
+            VRReloadController.Deflector.ApplyDeflector();
+            VRReloadController.GunParts.ApplyMagazineReleaseButton();
             // A magazine picked up off the ground: its ground item stays hidden while our model of it is held
             VRReloadController.KeepGroundMagazineHidden();
 

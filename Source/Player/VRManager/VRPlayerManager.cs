@@ -39,7 +39,7 @@ namespace TarkovVR.Source.Player.VRManager
         public static Vector3 SupportGripPoint()
         {
             // A gun with two support spots (the PKM: the handguard, or the box as its aiming clip holds it) uses the one nearer the hand
-            if (VRReloadController.SupportSpotPoint(out Vector3 spotPoint))
+            if (VRReloadController.Belt.SupportSpotPoint(out Vector3 spotPoint))
                 return spotPoint;
             Vector3 point = leftHandGunIK.position;
             if (Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
@@ -967,7 +967,7 @@ namespace TarkovVR.Source.Player.VRManager
             // check. The same applies while holding or reaching for a magazine, so the grab never turns into a foregrip snap, and with
             // the gun slung, where the scope grab and the foregrip snap below would lock the hand onto the hanging gun.
             if (HandsInteractionController.HoldingLoot
-                || VRReloadController.OwnsOffHand || VRReloadController.ShellInOffHand || TarkovVR.Source.Player.Interactions.ChestHang.Hanging)
+                || VRReloadController.OwnsOffHand || VRReloadController.Shotgun.ShellInOffHand || TarkovVR.Source.Player.Interactions.ChestHang.Hanging)
             {
                 handLock = false;
                 supportZoneBlip.Rearm();

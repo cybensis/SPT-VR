@@ -10,22 +10,13 @@ namespace TarkovVR.Source.Weapons
     // How far it turns comes from the gun's clips. The lift only counts from full pull onward, so a plain rack can't end up in the notch.
     public static partial class VRReloadController
     {
-        public static float handleNotchLift = 0.03f;        // m the hand lifts from full pull to turn the handle all the way into the notch
-        public static float handleNotchHold = 0.6f;         // fraction of that turn needed at the let-go for the handle to stay in the notch
-
-        private sealed class HandleNotch
+        internal sealed class HandleNotch
         {
             public Vector3 axis;        // in the handle bone's frame
             public float angle;         // degrees
         }
 
         private static readonly Dictionary<string, HandleNotch> handleNotches = new Dictionary<string, HandleNotch>();
-        private static HandleNotch heldNotch;               // null = this pull can't end in a notch
-        private static float notchTurn;                     // 0 to 1
-        private static bool notchClicked;
-        private static float notchStartHeight;
-        private static Vector3 notchPointOnHand;            // the grab point on the handle in the controller's frame, so a wrist roll lifts it too
-        private static Quaternion handleCarrierRestLocalRotation;
 
         private static HandleNotch HandleNotchOf(FirearmController firearmController)
         {
@@ -40,59 +31,71 @@ namespace TarkovVR.Source.Weapons
         // A bolt already held back has its handle in the notch, so this pull can only take it out
         private static void StartHandleNotch(FirearmController firearmController, Vector3 backWorld)
         {
-            notchTurn = 0f;
-            notchClicked = false;
-            heldNotch = handleCarrier != null && !BoltLockedBack ? HandleNotchOf(firearmController) : null;
-            if (heldNotch == null)
+            HandleNotches.notchTurn = 0f;
+            HandleNotches.notchClicked = false;
+            HandleNotches.heldNotch = handleCarrier != null && !BoltLockedBack ? HandleNotchOf(firearmController) : null;
+            if (HandleNotches.heldNotch == null)
                 return;
-            notchPointOnHand = LatchedHandRig.InverseTransformPoint(ChargingHandleGrabPoint(backWorld));
-            handleCarrierRestLocalRotation = handleCarrier.localRotation;
+            HandleNotches.notchPointOnHand = LatchedHandRig.InverseTransformPoint(ChargingHandleGrabPoint(backWorld));
+            HandleNotches.handleCarrierRestLocalRotation = handleCarrier.localRotation;
         }
 
         private static void UpdateHandleNotch()
         {
-            if (heldNotch == null)
+            if (HandleNotches.heldNotch == null)
                 return;
             // +z of the gun's body is up
-            float height = handleCarrier.parent.InverseTransformPoint(LatchedHandRig.TransformPoint(notchPointOnHand)).z;
+            float height = handleCarrier.parent.InverseTransformPoint(LatchedHandRig.TransformPoint(HandleNotches.notchPointOnHand)).z;
             if (handlePull < heldHandleTravel * handleFullPull)
             {
-                notchStartHeight = height;
-                notchTurn = 0f;
-                notchClicked = false;
+                HandleNotches.notchStartHeight = height;
+                HandleNotches.notchTurn = 0f;
+                HandleNotches.notchClicked = false;
             }
             else
             {
-                notchTurn = Mathf.Clamp01((height - notchStartHeight) / handleNotchLift);
-                if (notchTurn >= handleNotchHold && !notchClicked)
+                HandleNotches.notchTurn = Mathf.Clamp01((height - HandleNotches.notchStartHeight) / HandleNotches.handleNotchLift);
+                if (HandleNotches.notchTurn >= HandleNotches.handleNotchHold && !HandleNotches.notchClicked)
                 {
-                    notchClicked = true;
+                    HandleNotches.notchClicked = true;
                     PlayFirstGunSound(handleForFirearm, HandleSoundHand, "OnCatch", "BoltCatch", "BoltUp");
                     PulseHandleHand(0.5f, 0.04f);
                 }
             }
-            handleRider.localRotation = Quaternion.AngleAxis(heldNotch.angle * notchTurn, heldNotch.axis);
+            handleRider.localRotation = Quaternion.AngleAxis(HandleNotches.heldNotch.angle * HandleNotches.notchTurn, HandleNotches.heldNotch.axis);
         }
 
         // LateUpdate, together with the carrier: the animator's held pose turns the handle with the pull, and this adds the hand's turn
         private static void ApplyHandleNotch()
         {
-            if (heldNotch != null)
-                handleCarrier.localRotation = handleCarrierRestLocalRotation * Quaternion.AngleAxis(heldNotch.angle * notchTurn, heldNotch.axis);
+            if (HandleNotches.heldNotch != null)
+                handleCarrier.localRotation = HandleNotches.handleCarrierRestLocalRotation * Quaternion.AngleAxis(HandleNotches.heldNotch.angle * HandleNotches.notchTurn, HandleNotches.heldNotch.axis);
         }
 
         private static bool EndHandleNotch()
         {
-            bool staysBack = heldNotch != null && handleFullyBack && notchTurn >= handleNotchHold;
-            if (heldNotch != null)
+            bool staysBack = HandleNotches.heldNotch != null && handleFullyBack && HandleNotches.notchTurn >= HandleNotches.handleNotchHold;
+            if (HandleNotches.heldNotch != null)
             {
                 if (handleCarrier != null)
-                    handleCarrier.localRotation = handleCarrierRestLocalRotation;
+                    handleCarrier.localRotation = HandleNotches.handleCarrierRestLocalRotation;
                 if (handleRider != null)
                     handleRider.localRotation = Quaternion.identity;
             }
-            heldNotch = null;
+            HandleNotches.heldNotch = null;
             return staysBack;
+        }
+
+        public static class HandleNotches
+        {
+            public static float handleNotchLift = 0.03f;        // m the hand lifts from full pull to turn the handle all the way into the notch
+            public static float handleNotchHold = 0.6f;         // fraction of that turn needed at the let-go for the handle to stay in the notch
+            internal static HandleNotch heldNotch;               // null = this pull can't end in a notch
+            internal static float notchTurn;                     // 0 to 1
+            internal static bool notchClicked;
+            internal static float notchStartHeight;
+            internal static Vector3 notchPointOnHand;            // the grab point on the handle in the controller's frame, so a wrist roll lifts it too
+            internal static Quaternion handleCarrierRestLocalRotation;
         }
     }
 }

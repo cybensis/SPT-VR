@@ -20,14 +20,14 @@ namespace TarkovVR.Patches.Core.Player
             if (!(__instance is EFT.Player.FirearmController.BoltActionFireOperation))
             {
                 EFT.Player.FirearmController shotgunController = __instance.Controller;
-                if (shotgunController != null && shotgunController.CurrentOperation == __instance && VRReloadController.PumpShotFired(shotgunController))
+                if (shotgunController != null && shotgunController.CurrentOperation == __instance && VRReloadController.Shotgun.PumpShotFired(shotgunController))
                     shotgunController.FastForwardCurrentState();
                 return;
             }
             EFT.Player.FirearmController controller = __instance.Controller;
             if (controller == null || controller.CurrentOperation != __instance)
                 return;
-            if (VRReloadController.BoltShotFired(controller))
+            if (VRReloadController.Bolt.BoltShotFired(controller))
             {
                 // Co-op: FIKA sends the bolt cycle (the next round into the chamber on the other players' copies) from this operation
                 // only once the trigger is let go, and this skip ends the operation first, so their magazine would drift from yours.
@@ -52,7 +52,7 @@ namespace TarkovVR.Patches.Core.Player
             new[] { typeof(EFT.InventoryLogic.Operations.IInventoryOperation), typeof(Callback) })]
         private static bool LetSingleRoundIn(EFT.Player.FirearmController.Idling __instance, EFT.InventoryLogic.Operations.IInventoryOperation operation, Comfort.Common.Callback callback)
         {
-            if (!VRReloadController.LetsSingleRoundIn(__instance.Controller, operation))
+            if (!VRReloadController.Rounds.LetsSingleRoundIn(__instance.Controller, operation))
                 return true;
             callback?.Succeed();
             return false;

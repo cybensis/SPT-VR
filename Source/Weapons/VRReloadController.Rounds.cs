@@ -29,33 +29,10 @@ namespace TarkovVR.Source.Weapons
     // carrier go chambers the top one (the charging handle's own release).
     public static partial class VRReloadController
     {
-        public static float roundLoadRadius = 0.06f;        // m from the round's middle to the chamber that loads it
-        public static float roundOutPastPinch = 0.25f;      // share of the round's length its middle sits past the pinch (the fingers hold its base)
-        public static bool flipHeldRound = false;           // holds the round reversed in the fingers, in case a round model breaks PointRoundAlongBore's rule (pinch only)
-
-        // The hold from Tarkov's own single-round load (mosin_reload_loop at t 0.5: the right hand carrying the round to the action, fingers
-        // closed on it): the round (its patron_in_weapon bone) in the right palm's frame, and the finger pose. The left hand holds its mirror
-        // image. The fallback is the magazine pull's thumb-and-index pinch (its fingertips are a magazine's width apart, so the round floats
-        // between them).
-        public static Vector3 roundHoldPosition = new Vector3(-0.1188f, -0.0273f, -0.0473f);
-        public static Quaternion roundHoldBoneRotation = new Quaternion(0.57807f, 0.67472f, 0.36482f, -0.27837f);
-
-        private static readonly Vector3[] ROUND_HOLD_FINGERS =
-        {
-            Vector3.zero,
-            new Vector3(295.71f, 307.6f, 25.05f), new Vector3(345.88f, 4.51f, 19.87f), new Vector3(0.36f, 357.99f, 22.93f),    // thumb
-            new Vector3(355.1f, 1.35f, 15.81f), new Vector3(357.44f, 2.39f, 81.46f), new Vector3(357.77f, 1.18f, 45.82f),      // index
-            new Vector3(1.03f, 359.78f, 31.33f), new Vector3(359.58f, 6.44f, 90.79f), new Vector3(2.61f, 358.7f, 70.52f),      // middle
-            new Vector3(8.59f, 9.79f, 31.66f), new Vector3(357.29f, 0.67f, 92.33f), new Vector3(358.31f, 3.6f, 61.32f),        // ring
-            new Vector3(14.53f, 16.8f, 36.97f), new Vector3(355.63f, 8.69f, 89.05f), new Vector3(1.12f, 0.02f, 73.76f),        // pinky
-        };
-
         public static bool HoldingRound { get; private set; }
-        public static bool RoundInGunHand => HoldingRound && roundInGunHand;
 
         private static bool roundInGunHand;
         private static bool roundOnRightArm;                // the arm drawing that hand (OnRightArm), as it was at the grab
-        private static bool previousGunHandGripState;
         private static Ammo heldRoundSource;               // the stack the round comes from (it stays there until it's loaded)
         private static GameObject heldRoundProp;
         private static FirearmController heldRoundFor;
@@ -63,51 +40,7 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 roundCenterInProp;
         private static float roundLength;
         private static bool roundLoading;                   // the move is running
-        private static GameObject roundZoneViz;
         private static readonly List<Ammo> reachableRounds = new List<Ammo>();
-
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-        // True when rounds can go in now: a bolt-action Tarkov loads through the action, our bolt on it all the way back, and room in the gun
-        private static bool CanLoadRounds(out FirearmController firearmController, out Weapon weapon, out Magazine magazine)
-        {
-            firearmController = VRGlobals.firearmController;
-            weapon = null;
-            magazine = null;
-            if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
-                return false;
-            bool boltAction = ManualBoltOn(firearmController);
-            if ((!boltAction && !ManualTopLoader(firearmController)) || firearmController.IsInLauncherMode() || HoldingBolt)
-                return false;
-            weapon = firearmController.Item;
-            if (!weapon.SupportsInternalReload || !weapon.MustBoltBeOpennedForInternalReload || weapon.MalfState.State != Weapon.EMalfunctionState.None)
-                return false;
-            if (!GunIdle(firearmController))
-                return false;
-            if (HandsInteractionController.HoldingLoot)
-                return false;
-            // Open: a bolt-action's bolt all the way back, a self-loader's carrier on the catch
-            if (boltAction ? !boltStates.TryGetValue(weapon, out BoltState state) || state.slide < boltFullBack : !BoltLockedBack || HoldingChargingHandle)
-                return false;
-            magazine = weapon.GetCurrentMagazine();
-            if (magazine == null)
-                return false;
-            return magazine.Count < magazine.MaxCount || (boltAction && weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0);
-        }
-
-        // A self-loader Tarkov loads through its open action, with its fixed magazine in (the SKS's internal 10-round, not a detachable box)
-        private static bool LoadsFixedMagazineThroughAction(Weapon weapon)
-        {
-            return weapon != null && !weapon.BoltAction && weapon.SupportsInternalReload && weapon.MustBoltBeOpennedForInternalReload
-                && weapon.GetCurrentMagazine() is Magazine magazine && magazine.Template is MagazineTemplate template
-                && template.ReloadMagType == Weapon.EReloadMode.InternalMagazine;
-        }
-
-        private static bool ManualTopLoader(FirearmController firearmController)
-        {
-            return enabled && VRSettings.GetManualReloadOn() && firearmController != null && firearmController._player != null && firearmController._player.IsYourPlayer
-                && LoadsFixedMagazineThroughAction(firearmController.Item);
-        }
 
         // The shared start of taking a round or a shell: this hand is free for one and at the chest pouch, a round that fits is found, and
         // its prop is made and noted as held. False = not a round's grip. True with prop null = it was, but there was nothing to take (no
@@ -121,7 +54,7 @@ namespace TarkovVR.Source.Weapons
                 return false;
             if (!InChestPouchZone(HandPalm(gunHand)))
                 return false;
-            source = FindRoundToLoad(weapon, magazine);
+            source = Rounds.FindRoundToLoad(weapon, magazine);
             if (source == null)
             {
                 PulseRoundHand(gunHand, 0.2f, 0.03f);
@@ -140,28 +73,6 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // A grip at the chest: true when it was a round's grip (taken, or nothing fits), so nothing else takes that press
-        private static bool TryGrabRound(bool gunHand)
-        {
-            if (!CanLoadRounds(out FirearmController firearmController, out Weapon weapon, out Magazine magazine))
-                return false;
-            if (!TryTakeRoundFromPouch(firearmController, weapon, magazine, gunHand, out Ammo source, out GameObject prop))
-                return false;
-            if (prop == null)
-                return true;
-            MeasureRound(prop);
-            PointRoundAlongBore(firearmController);
-            HoldingRound = true;
-            PlaceHeldRound();
-            // The round taken (ak74_round_catch, where the gun has it)
-            PlayFirstGunSound(firearmController, gunHand ? SoundHand.GunHandAlone : SoundHand.OffHandAlone, "AmmoCatch");
-            PulseRoundHand(gunHand, 0.25f, 0.03f);
-            if (debugLog)
-                LogAction($"[VRReload] took a round of {source.LocalizedShortName()} ({source.StackObjectsCount} in that stack) in the {(gunHand ? "gun" : "off")} hand, "
-                    + $"gun {magazine.Count}/{magazine.MaxCount} + chamber {weapon.ChamberAmmoCount}");
-            return true;
-        }
-
         // The palm of the hand you see, chosen by the arm drawing it (OnRightArm), not by the controller
         private static Vector3 HandPalm(bool gunHand)
         {
@@ -176,81 +87,13 @@ namespace TarkovVR.Source.Weapons
             Pulse(gunHand ? SoundHand.GunHandAlone : SoundHand.OffHandAlone, amplitude, duration, delay);
         }
 
-        // A loose stack (in a container's grid: not the rounds in another magazine) the gun takes, the type already in it first
-        private static Ammo FindRoundToLoad(Weapon weapon, Magazine magazine)
-        {
-            reachableRounds.Clear();
-            VRGlobals.player.InventoryController.GetReachableItemsOfTypeNonAlloc(reachableRounds, (Ammo ammo) => ammo.StackObjectsCount > 0 && ammo.Parent is GridItemAddress);
-            Item inGun = weapon.Chambers.Length > 0 && weapon.Chambers[0].ContainedItem != null ? weapon.Chambers[0].ContainedItem : magazine.Cartridges.Last;
-            for (int pass = 0; pass < 2; pass++)
-            {
-                foreach (Ammo ammo in reachableRounds)
-                {
-                    if (pass == 0 && (inGun == null || ammo.TemplateId != inGun.TemplateId))
-                        continue;
-                    if (TryBuildLoadOne(ammo, weapon, magazine, out _, out _))
-                        return ammo;
-                }
-            }
-            return null;
-        }
-
-        // The gun's hands controller asks about an inventory move (BoltActionPatches.LetSingleRoundIn). True = our own round, from outside
-        // an open bolt-action into its chamber or magazine, while the move is running: it goes through with no animation. Other peers'
-        // copies of a VR player are handled by the FIKA sync module (SptVrFikaSync.BoltRoundSync, the same rule): the host has to accept
-        // the move before our client applies it.
-        internal static bool LetsSingleRoundIn(FirearmController controller, IInventoryOperation operation)
-        {
-            // A break-action's chamber by hand (VRReloadController.BreakAction): a shell in, a round out
-            if (LetsBreakMoveThrough(controller, operation))
-                return true;
-            if (controller == null || controller._player == null || !controller._player.IsYourPlayer || !roundLoading || heldRoundFor != controller)
-                return false;
-            Weapon weapon = controller.Item;
-            // A tube shotgun's shell by hand too (VRReloadController.Shotgun): its chamber or its tube
-            if (weapon == null || !weapon.SupportsInternalReload || !(weapon.MustBoltBeOpennedForInternalReload || TryGetShotgun(controller, out _)))
-                return false;
-            // A merge asks with a sub-operation of its own (AddSuboperation / RemoveSuboperation); the operation it belongs to says where it goes
-            if (operation is ISubOperation subOperation && subOperation.BaseInventoryOperation != null && IsRoundIntoGun(weapon, subOperation.BaseInventoryOperation))
-                return true;
-            return IsRoundIntoGun(weapon, operation);
-        }
-
-        // One round from outside the gun into its chamber or its magazine. The destination is To1 for a move / split, To2 for a transfer
-        // or merge onto the stack on top of the magazine (a transfer's To1 is its own source). Not Tarkov's reload.
-        private static bool IsRoundIntoGun(Weapon weapon, IInventoryOperation operation)
-        {
-            if (operation is LoadMagOperation || !(operation is IOneItemOperation move) || !(move.Item1 is Ammo))
-                return false;
-            // From outside the gun, not a round moving inside it (Tarkov's own discharge / chambering)
-            if (move.From1 != null && move.From1.IsChildOf(weapon))
-                return false;
-            return IntoGun(weapon, move.To1) || (operation is ITwoItemOperation twoItems && IntoGun(weapon, twoItems.To2));
-        }
-
-        private static bool IntoGun(Weapon weapon, ItemAddress address)
-        {
-            if (address == null)
-                return false;
-            object into = address.Container;
-            Magazine magazine = weapon.GetCurrentMagazine();
-            if (magazine != null && ReferenceEquals(into, magazine.Cartridges))
-                return true;
-            foreach (Slot chamber in weapon.Chambers)
-            {
-                if (ReferenceEquals(into, chamber))
-                    return true;
-            }
-            return false;
-        }
-
         // One round from the stack: into an empty chamber, else onto the top of the magazine (merged with a stack of the same type, or a
         // new one). Tarkov's ApplySingleItemToAddress, simulated.
         private static bool TryBuildLoadOne(Ammo source, Weapon weapon, Magazine magazine, out OperationResult<IItemOperationResult> operation, out bool intoChamber)
         {
             InventoryController inventoryController = VRGlobals.player.InventoryController;
             // A self-loader's rounds go on top of its magazine: the carrier chambers one as it goes home
-            intoChamber = weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0 && !LoadsFixedMagazineThroughAction(weapon);
+            intoChamber = weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0 && !Rounds.LoadsFixedMagazineThroughAction(weapon);
             ItemAddress to = intoChamber ? weapon.Chambers[0].CreateItemAddress() : magazine.Cartridges.CreateItemAddress();
             Item top = intoChamber ? null : magazine.Cartridges.Last;
             if (top != null && top.TemplateId == source.TemplateId)
@@ -267,42 +110,6 @@ namespace TarkovVR.Source.Weapons
             return operation.Succeeded;
         }
 
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // From Tick
-
-        // gripReleased / gunHandGripReleased: the two hands' grips let go this frame; the one holding the round counts
-        private static void UpdateHeldRound(bool gripReleased, bool gunHandGripReleased)
-        {
-            // A break-action's shell goes in along a chamber's bore (VRReloadController.BreakAction)
-            if (breakShellHeld)
-            {
-                UpdateHeldBreakShell(gripReleased);
-                return;
-            }
-            // A tube shotgun's shell has its own ports and paths (VRReloadController.Shotgun)
-            if (HoldingShell)
-            {
-                UpdateHeldShell(gripReleased, gunHandGripReleased);
-                return;
-            }
-            if (roundLoading)
-                return;
-            if (!HeldRoundIsStillValid())
-            {
-                PutRoundBack();
-                return;
-            }
-            if (roundInGunHand ? gunHandGripReleased : gripReleased)
-            {
-                PutRoundBack();
-                PulseRoundHand(roundInGunHand, 0.15f, 0.02f);
-                return;
-            }
-            if (CanLoadRounds(out FirearmController firearmController, out Weapon weapon, out Magazine magazine) && firearmController == heldRoundFor
-                && TryGetLoadPoint(firearmController, out Vector3 loadPoint) && (RoundCenterWorld() - loadPoint).sqrMagnitude <= roundLoadRadius * roundLoadRadius)
-                LoadHeldRound(firearmController, weapon, magazine);
-        }
-
         private static bool HeldRoundIsStillValid()
         {
             if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
@@ -314,52 +121,6 @@ namespace TarkovVR.Source.Weapons
                 return false;
             // The stack went somewhere else meanwhile (moved in the inventory, FIKA)
             return heldRoundSource.StackObjectsCount > 0 && heldRoundSource.Parent is GridItemAddress;
-        }
-
-        private static void LoadHeldRound(FirearmController firearmController, Weapon weapon, Magazine magazine)
-        {
-            if (!TryBuildLoadOne(heldRoundSource, weapon, magazine, out OperationResult<IItemOperationResult> operation, out bool intoChamber))
-            {
-                if (debugLog)
-                    LogAction($"[VRReload] the round won't go in: {operation.Error}");
-                bool gunHand = roundInGunHand;
-                PutRoundBack();
-                PulseRoundHand(gunHand, 0.2f, 0.03f);
-                PulseRoundHand(gunHand, 0.2f, 0.03f, 0.08f);
-                return;
-            }
-            roundLoading = true;
-            DestroyRoundProp();
-            // Pushed in at the gun: the hand holding the gun feels it go in
-            SoundHand loadingHand = roundInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
-            // Into the chamber by hand (the Mosin's AmmoInHand = ak74_round_in_chamber), or into the magazine through the top (its RoundIn =
-            // mosin_round_load). Not AmmoIn / PatronIn / MagIn first: a Mosin has none but MagIn, and a round would sound like a magazine.
-            if (intoChamber)
-                PlayFirstGunSound(firearmController, loadingHand, "RoundInChamber", "AmmoInChamber", "AmmoInHand", "RoundIn", "AmmoIn");
-            else
-                PlayFirstGunSound(firearmController, loadingHand, "RoundIn", "AmmoIn", "ShellInGun", "AmmoInHand");
-            Pulse(loadingHand, 0.4f, 0.04f);
-            VRGlobals.player.InventoryController.TryRunNetworkTransaction(operation, result =>
-            {
-                if (result.Succeed)
-                {
-                    // In the chamber for Tarkov, but it waits for the bolt like one a magazine brought in; closing the bolt puts its
-                    // model in (roundShown is cleared because a full stroke's rechamber marked the chamber shown with nothing in it)
-                    if (intoChamber)
-                    {
-                        weaponsWaitingForRack.Add(weapon);
-                        BoltStateOf(weapon).roundShown = false;
-                    }
-                    if (firearmController.FirearmsAnimator != null)
-                    {
-                        firearmController.FirearmsAnimator.SetAmmoOnMag(magazine.Count);
-                        firearmController.FirearmsAnimator.SetAmmoInChamber(weapon.ChamberAmmoCount);
-                    }
-                }
-                if (debugLog)
-                    LogAction($"[VRReload] round {(result.Succeed ? "in" : "NOT in: " + result.Error)} ({(intoChamber ? "chamber, waits for the bolt" : "magazine")}), gun {magazine.Count}/{magazine.MaxCount} + chamber {weapon.ChamberAmmoCount}");
-                EndRoundHold();
-            });
         }
 
         // Puts the round back where it was: it never left its stack
@@ -452,13 +213,8 @@ namespace TarkovVR.Source.Weapons
                 if (Vector3.Dot(roundAxisInProp, bulletInRound) < 0f)
                     roundAxisInProp = -roundAxisInProp;
             }
-            if (flipHeldRound)
+            if (Rounds.flipHeldRound)
                 roundAxisInProp = -roundAxisInProp;
-        }
-
-        private static Vector3 RoundCenterWorld()
-        {
-            return heldRoundProp != null ? heldRoundProp.transform.TransformPoint(roundCenterInProp) : Vector3.zero;
         }
 
         // Runs after the holding hand's fingers are posed (the end of ApplyHeldFingerPose / ApplyGunHandFingerPose). Uses the clip's hold
@@ -480,7 +236,7 @@ namespace TarkovVR.Source.Weapons
             Transform palm = ArmPalm(roundOnRightArm);
             if (palm == null && !roundOnRightArm)
                 palm = InitVRPatches.leftPalm;
-            if (palm != null && RoundHoldInPalm(roundOnRightArm, out Vector3 holdPosition, out Quaternion holdRotation))
+            if (palm != null && Rounds.RoundHoldInPalm(roundOnRightArm, out Vector3 holdPosition, out Quaternion holdRotation))
             {
                 SetPoseIn(palm, heldRoundProp.transform, holdPosition, holdRotation);
                 return;
@@ -494,25 +250,16 @@ namespace TarkovVR.Source.Weapons
             along.Normalize();
             Transform prop = heldRoundProp.transform;
             prop.rotation = Quaternion.FromToRotation(prop.rotation * roundAxisInProp, along) * prop.rotation;
-            Vector3 center = pinch + along * (roundLength * roundOutPastPinch);
+            Vector3 center = pinch + along * (roundLength * Rounds.roundOutPastPinch);
             prop.position += center - prop.TransformPoint(roundCenterInProp);
-        }
-
-        // The round's pose in an arm's palm frame. The prop is the round's model, which Tarkov seats at the chamber bone's pose turned
-        // 90 deg about x (Firearms.ParentShellToTransform), so the clip's bone pose is converted to the model's the same way. The left
-        // palm's pose is the mirror image through a plane along the round's length: a round is its own mirror image across any such plane
-        // (the choice only spins it about its length). False until HandMirror has the hands mesh.
-        private static bool RoundHoldInPalm(bool rightArm, out Vector3 position, out Quaternion rotation)
-        {
-            return HoldInPalm(rightArm, heldRoundProp.transform, roundAxisInProp, roundCenterInProp, out position, out rotation);
         }
 
         // The same hold for anything shaped like a round, from its own measurements (MeasureLongAxis). The stuck case of a failure to eject is
         // the same model with the bullet hidden (AmmoPoolObject.SetUsed), seated the same way (ParentShellToTransform).
         private static bool HoldInPalm(bool rightArm, Transform prop, Vector3 axisInProp, Vector3 centerInProp, out Vector3 position, out Quaternion rotation)
         {
-            position = roundHoldPosition;
-            rotation = roundHoldBoneRotation.normalized * Quaternion.Euler(90f, 0f, 0f);
+            position = Rounds.roundHoldPosition;
+            rotation = Rounds.roundHoldBoneRotation.normalized * Quaternion.Euler(90f, 0f, 0f);
             if (rightArm)
                 return true;
             Vector3 axis = axisInProp.sqrMagnitude > 1e-6f ? axisInProp.normalized : Vector3.forward;
@@ -521,65 +268,321 @@ namespace TarkovVR.Source.Weapons
             return MirrorHold(normal, point, leftToRight: false, ref position, ref rotation);
         }
 
-        // The finger pose holding a round on an arm (pose order, palm first): the clip's on the right, mirrored on the left. The pinch is
-        // the magazine pull's on the left, mirrored on the right (falling back to the bolt clip's closed hand there).
-        private static Vector3[] RoundFingers(bool rightArm)
-        {
-            if (breakShellHeld)
-                return BreakShellFingers(rightArm);
-            if (HoldingShell)
-                return ShellFingers(rightArm);
-            return rightArm ? ROUND_HOLD_FINGERS : MirroredPose(ROUND_HOLD_FINGERS, rightToLeft: true, mirroredRoundHold) ?? MAGAZINE_PULL_FINGERS;
-        }
-
-        // Converts one hand's finger pose (pose-order eulers) to the other hand's. Worked out on each call, because HandMirror's rest poses
-        // come from the body's hands mesh, which a change of clothes can swap. Null until that mesh is found.
-        private static readonly Vector3[] mirroredRoundHold = new Vector3[16];
-        private static readonly Quaternion[] mirrorFromScratch = new Quaternion[16];
-        private static readonly Quaternion[] mirrorToScratch = new Quaternion[16];
-
         private static Vector3[] MirroredPose(Vector3[] pose, bool rightToLeft, Vector3[] into)
         {
             for (int index = 0; index < 16; index++)
             {
-                mirrorFromScratch[index] = index < pose.Length ? Quaternion.Euler(pose[index]) : Quaternion.identity;
-                mirrorToScratch[index] = Quaternion.identity;
+                Rounds.mirrorFromScratch[index] = index < pose.Length ? Quaternion.Euler(pose[index]) : Quaternion.identity;
+                Rounds.mirrorToScratch[index] = Quaternion.identity;
             }
-            if (!TarkovVR.Source.Player.Body.HandMirror.TryMirrorPose(mirrorFromScratch, rightToLeft, mirrorToScratch))
+            if (!TarkovVR.Source.Player.Body.HandMirror.TryMirrorPose(Rounds.mirrorFromScratch, rightToLeft, Rounds.mirrorToScratch))
                 return null;
             for (int index = 0; index < 16; index++)
-                into[index] = mirrorToScratch[index].eulerAngles;
+                into[index] = Rounds.mirrorToScratch[index].eulerAngles;
             return into;
         }
 
-        // Where the round goes in: the chamber (Tarkov's patron_in_weapon bone), with the open action right behind it
-        private static bool TryGetLoadPoint(FirearmController firearmController, out Vector3 loadPoint)
+        public static class Rounds
         {
-            loadPoint = Vector3.zero;
-            Transform[] chamberBones = firearmController.Firearms != null ? firearmController.Firearms._patronInWeaponTransforms : null;
-            if (chamberBones == null || chamberBones.Length == 0 || chamberBones[0] == null)
-                return false;
-            loadPoint = chamberBones[0].position;
-            return true;
-        }
+            public static float roundLoadRadius = 0.06f;        // m from the round's middle to the chamber that loads it
+            public static float roundOutPastPinch = 0.25f;      // share of the round's length its middle sits past the pinch (the fingers hold its base)
+            public static bool flipHeldRound = false;           // holds the round reversed in the fingers, in case a round model breaks PointRoundAlongBore's rule (pinch only)
 
-        // debugZones: the load zone while a round is in the hand (green once the round is in it)
-        private static void UpdateRoundViz()
-        {
-            if (!HoldingShell || shellPath != null)
+            // The hold from Tarkov's own single-round load (mosin_reload_loop at t 0.5: the right hand carrying the round to the action, fingers
+            // closed on it): the round (its patron_in_weapon bone) in the right palm's frame, and the finger pose. The left hand holds its mirror
+            // image. The fallback is the magazine pull's thumb-and-index pinch (its fingertips are a magazine's width apart, so the round floats
+            // between them).
+            public static Vector3 roundHoldPosition = new Vector3(-0.1188f, -0.0273f, -0.0473f);
+            public static Quaternion roundHoldBoneRotation = new Quaternion(0.57807f, 0.67472f, 0.36482f, -0.27837f);
+
+            private static readonly Vector3[] ROUND_HOLD_FINGERS =
             {
-                SetZoneViz(ref tubeZoneViz, false, Vector3.zero, 0f, Color.clear);
-                SetZoneViz(ref portZoneViz, false, Vector3.zero, 0f, Color.clear);
-            }
-            bool show = debugZones && HoldingRound && !HoldingShell && heldRoundFor != null && TryGetLoadPoint(heldRoundFor, out Vector3 loadPoint);
-            if (!show)
+                Vector3.zero,
+                new Vector3(295.71f, 307.6f, 25.05f), new Vector3(345.88f, 4.51f, 19.87f), new Vector3(0.36f, 357.99f, 22.93f),    // thumb
+                new Vector3(355.1f, 1.35f, 15.81f), new Vector3(357.44f, 2.39f, 81.46f), new Vector3(357.77f, 1.18f, 45.82f),      // index
+                new Vector3(1.03f, 359.78f, 31.33f), new Vector3(359.58f, 6.44f, 90.79f), new Vector3(2.61f, 358.7f, 70.52f),      // middle
+                new Vector3(8.59f, 9.79f, 31.66f), new Vector3(357.29f, 0.67f, 92.33f), new Vector3(358.31f, 3.6f, 61.32f),        // ring
+                new Vector3(14.53f, 16.8f, 36.97f), new Vector3(355.63f, 8.69f, 89.05f), new Vector3(1.12f, 0.02f, 73.76f),        // pinky
+            };
+            public static bool RoundInGunHand => HoldingRound && roundInGunHand;
+            internal static bool previousGunHandGripState;
+            private static GameObject roundZoneViz;
+
+            //------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+            // True when rounds can go in now: a bolt-action Tarkov loads through the action, our bolt on it all the way back, and room in the gun
+            internal static bool CanLoadRounds(out FirearmController firearmController, out Weapon weapon, out Magazine magazine)
             {
-                SetZoneViz(ref roundZoneViz, false, Vector3.zero, 0f, Color.clear);
-                return;
+                firearmController = VRGlobals.firearmController;
+                weapon = null;
+                magazine = null;
+                if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
+                    return false;
+                bool boltAction = ManualBoltOn(firearmController);
+                if ((!boltAction && !ManualTopLoader(firearmController)) || firearmController.IsInLauncherMode() || HoldingBolt)
+                    return false;
+                weapon = firearmController.Item;
+                if (!weapon.SupportsInternalReload || !weapon.MustBoltBeOpennedForInternalReload || weapon.MalfState.State != Weapon.EMalfunctionState.None)
+                    return false;
+                if (!GunIdle(firearmController))
+                    return false;
+                if (HandsInteractionController.HoldingLoot)
+                    return false;
+                // Open: a bolt-action's bolt all the way back, a self-loader's carrier on the catch
+                if (boltAction ? !boltStates.TryGetValue(weapon, out BoltState state) || state.slide < boltFullBack : !BoltLockedBack || HoldingChargingHandle)
+                    return false;
+                magazine = weapon.GetCurrentMagazine();
+                if (magazine == null)
+                    return false;
+                return magazine.Count < magazine.MaxCount || (boltAction && weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0);
             }
-            TryGetLoadPoint(heldRoundFor, out loadPoint);
-            bool inZone = (RoundCenterWorld() - loadPoint).sqrMagnitude <= roundLoadRadius * roundLoadRadius;
-            SetZoneViz(ref roundZoneViz, true, loadPoint, roundLoadRadius, inZone ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.5f, 0.8f, 0.3f));
+
+            // A self-loader Tarkov loads through its open action, with its fixed magazine in (the SKS's internal 10-round, not a detachable box)
+            internal static bool LoadsFixedMagazineThroughAction(Weapon weapon)
+            {
+                return weapon != null && !weapon.BoltAction && weapon.SupportsInternalReload && weapon.MustBoltBeOpennedForInternalReload
+                    && weapon.GetCurrentMagazine() is Magazine magazine && magazine.Template is MagazineTemplate template
+                    && template.ReloadMagType == Weapon.EReloadMode.InternalMagazine;
+            }
+
+            private static bool ManualTopLoader(FirearmController firearmController)
+            {
+                return enabled && VRSettings.GetManualReloadOn() && firearmController != null && firearmController._player != null && firearmController._player.IsYourPlayer
+                    && LoadsFixedMagazineThroughAction(firearmController.Item);
+            }
+
+            // A grip at the chest: true when it was a round's grip (taken, or nothing fits), so nothing else takes that press
+            internal static bool TryGrabRound(bool gunHand)
+            {
+                if (!CanLoadRounds(out FirearmController firearmController, out Weapon weapon, out Magazine magazine))
+                    return false;
+                if (!TryTakeRoundFromPouch(firearmController, weapon, magazine, gunHand, out Ammo source, out GameObject prop))
+                    return false;
+                if (prop == null)
+                    return true;
+                MeasureRound(prop);
+                PointRoundAlongBore(firearmController);
+                HoldingRound = true;
+                PlaceHeldRound();
+                // The round taken (ak74_round_catch, where the gun has it)
+                PlayFirstGunSound(firearmController, gunHand ? SoundHand.GunHandAlone : SoundHand.OffHandAlone, "AmmoCatch");
+                PulseRoundHand(gunHand, 0.25f, 0.03f);
+                if (debugLog)
+                    LogAction($"[VRReload] took a round of {source.LocalizedShortName()} ({source.StackObjectsCount} in that stack) in the {(gunHand ? "gun" : "off")} hand, "
+                        + $"gun {magazine.Count}/{magazine.MaxCount} + chamber {weapon.ChamberAmmoCount}");
+                return true;
+            }
+
+            // A loose stack (in a container's grid: not the rounds in another magazine) the gun takes, the type already in it first
+            internal static Ammo FindRoundToLoad(Weapon weapon, Magazine magazine)
+            {
+                reachableRounds.Clear();
+                VRGlobals.player.InventoryController.GetReachableItemsOfTypeNonAlloc(reachableRounds, (Ammo ammo) => ammo.StackObjectsCount > 0 && ammo.Parent is GridItemAddress);
+                Item inGun = weapon.Chambers.Length > 0 && weapon.Chambers[0].ContainedItem != null ? weapon.Chambers[0].ContainedItem : magazine.Cartridges.Last;
+                for (int pass = 0; pass < 2; pass++)
+                {
+                    foreach (Ammo ammo in reachableRounds)
+                    {
+                        if (pass == 0 && (inGun == null || ammo.TemplateId != inGun.TemplateId))
+                            continue;
+                        if (TryBuildLoadOne(ammo, weapon, magazine, out _, out _))
+                            return ammo;
+                    }
+                }
+                return null;
+            }
+
+            // The gun's hands controller asks about an inventory move (BoltActionPatches.LetSingleRoundIn). True = our own round, from outside
+            // an open bolt-action into its chamber or magazine, while the move is running: it goes through with no animation. Other peers'
+            // copies of a VR player are handled by the FIKA sync module (SptVrFikaSync.BoltRoundSync, the same rule): the host has to accept
+            // the move before our client applies it.
+            internal static bool LetsSingleRoundIn(FirearmController controller, IInventoryOperation operation)
+            {
+                // A break-action's chamber by hand (VRReloadController.BreakAction): a shell in, a round out
+                if (LetsBreakMoveThrough(controller, operation))
+                    return true;
+                if (controller == null || controller._player == null || !controller._player.IsYourPlayer || !roundLoading || heldRoundFor != controller)
+                    return false;
+                Weapon weapon = controller.Item;
+                // A tube shotgun's shell by hand too (VRReloadController.Shotgun): its chamber or its tube
+                if (weapon == null || !weapon.SupportsInternalReload || !(weapon.MustBoltBeOpennedForInternalReload || TryGetShotgun(controller, out _)))
+                    return false;
+                // A merge asks with a sub-operation of its own (AddSuboperation / RemoveSuboperation); the operation it belongs to says where it goes
+                if (operation is ISubOperation subOperation && subOperation.BaseInventoryOperation != null && IsRoundIntoGun(weapon, subOperation.BaseInventoryOperation))
+                    return true;
+                return IsRoundIntoGun(weapon, operation);
+            }
+
+            // One round from outside the gun into its chamber or its magazine. The destination is To1 for a move / split, To2 for a transfer
+            // or merge onto the stack on top of the magazine (a transfer's To1 is its own source). Not Tarkov's reload.
+            private static bool IsRoundIntoGun(Weapon weapon, IInventoryOperation operation)
+            {
+                if (operation is LoadMagOperation || !(operation is IOneItemOperation move) || !(move.Item1 is Ammo))
+                    return false;
+                // From outside the gun, not a round moving inside it (Tarkov's own discharge / chambering)
+                if (move.From1 != null && move.From1.IsChildOf(weapon))
+                    return false;
+                return IntoGun(weapon, move.To1) || (operation is ITwoItemOperation twoItems && IntoGun(weapon, twoItems.To2));
+            }
+
+            private static bool IntoGun(Weapon weapon, ItemAddress address)
+            {
+                if (address == null)
+                    return false;
+                object into = address.Container;
+                Magazine magazine = weapon.GetCurrentMagazine();
+                if (magazine != null && ReferenceEquals(into, magazine.Cartridges))
+                    return true;
+                foreach (Slot chamber in weapon.Chambers)
+                {
+                    if (ReferenceEquals(into, chamber))
+                        return true;
+                }
+                return false;
+            }
+
+            //------------------------------------------------------------------------------------------------------------------------------------------------------------
+            // From Tick
+
+            // gripReleased / gunHandGripReleased: the two hands' grips let go this frame; the one holding the round counts
+            internal static void UpdateHeldRound(bool gripReleased, bool gunHandGripReleased)
+            {
+                // A break-action's shell goes in along a chamber's bore (VRReloadController.BreakAction)
+                if (breakShellHeld)
+                {
+                    UpdateHeldBreakShell(gripReleased);
+                    return;
+                }
+                // A tube shotgun's shell has its own ports and paths (VRReloadController.Shotgun)
+                if (HoldingShell)
+                {
+                    UpdateHeldShell(gripReleased, gunHandGripReleased);
+                    return;
+                }
+                if (roundLoading)
+                    return;
+                if (!HeldRoundIsStillValid())
+                {
+                    PutRoundBack();
+                    return;
+                }
+                if (roundInGunHand ? gunHandGripReleased : gripReleased)
+                {
+                    PutRoundBack();
+                    PulseRoundHand(roundInGunHand, 0.15f, 0.02f);
+                    return;
+                }
+                if (CanLoadRounds(out FirearmController firearmController, out Weapon weapon, out Magazine magazine) && firearmController == heldRoundFor
+                    && TryGetLoadPoint(firearmController, out Vector3 loadPoint) && (RoundCenterWorld() - loadPoint).sqrMagnitude <= roundLoadRadius * roundLoadRadius)
+                    LoadHeldRound(firearmController, weapon, magazine);
+            }
+
+            private static void LoadHeldRound(FirearmController firearmController, Weapon weapon, Magazine magazine)
+            {
+                if (!TryBuildLoadOne(heldRoundSource, weapon, magazine, out OperationResult<IItemOperationResult> operation, out bool intoChamber))
+                {
+                    if (debugLog)
+                        LogAction($"[VRReload] the round won't go in: {operation.Error}");
+                    bool gunHand = roundInGunHand;
+                    PutRoundBack();
+                    PulseRoundHand(gunHand, 0.2f, 0.03f);
+                    PulseRoundHand(gunHand, 0.2f, 0.03f, 0.08f);
+                    return;
+                }
+                roundLoading = true;
+                DestroyRoundProp();
+                // Pushed in at the gun: the hand holding the gun feels it go in
+                SoundHand loadingHand = roundInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
+                // Into the chamber by hand (the Mosin's AmmoInHand = ak74_round_in_chamber), or into the magazine through the top (its RoundIn =
+                // mosin_round_load). Not AmmoIn / PatronIn / MagIn first: a Mosin has none but MagIn, and a round would sound like a magazine.
+                if (intoChamber)
+                    PlayFirstGunSound(firearmController, loadingHand, "RoundInChamber", "AmmoInChamber", "AmmoInHand", "RoundIn", "AmmoIn");
+                else
+                    PlayFirstGunSound(firearmController, loadingHand, "RoundIn", "AmmoIn", "ShellInGun", "AmmoInHand");
+                Pulse(loadingHand, 0.4f, 0.04f);
+                VRGlobals.player.InventoryController.TryRunNetworkTransaction(operation, result =>
+                {
+                    if (result.Succeed)
+                    {
+                        // In the chamber for Tarkov, but it waits for the bolt like one a magazine brought in; closing the bolt puts its
+                        // model in (roundShown is cleared because a full stroke's rechamber marked the chamber shown with nothing in it)
+                        if (intoChamber)
+                        {
+                            weaponsWaitingForRack.Add(weapon);
+                            BoltStateOf(weapon).roundShown = false;
+                        }
+                        if (firearmController.FirearmsAnimator != null)
+                        {
+                            firearmController.FirearmsAnimator.SetAmmoOnMag(magazine.Count);
+                            firearmController.FirearmsAnimator.SetAmmoInChamber(weapon.ChamberAmmoCount);
+                        }
+                    }
+                    if (debugLog)
+                        LogAction($"[VRReload] round {(result.Succeed ? "in" : "NOT in: " + result.Error)} ({(intoChamber ? "chamber, waits for the bolt" : "magazine")}), gun {magazine.Count}/{magazine.MaxCount} + chamber {weapon.ChamberAmmoCount}");
+                    EndRoundHold();
+                });
+            }
+
+            private static Vector3 RoundCenterWorld()
+            {
+                return heldRoundProp != null ? heldRoundProp.transform.TransformPoint(roundCenterInProp) : Vector3.zero;
+            }
+
+            // The round's pose in an arm's palm frame. The prop is the round's model, which Tarkov seats at the chamber bone's pose turned
+            // 90 deg about x (Firearms.ParentShellToTransform), so the clip's bone pose is converted to the model's the same way. The left
+            // palm's pose is the mirror image through a plane along the round's length: a round is its own mirror image across any such plane
+            // (the choice only spins it about its length). False until HandMirror has the hands mesh.
+            internal static bool RoundHoldInPalm(bool rightArm, out Vector3 position, out Quaternion rotation)
+            {
+                return HoldInPalm(rightArm, heldRoundProp.transform, roundAxisInProp, roundCenterInProp, out position, out rotation);
+            }
+
+            // The finger pose holding a round on an arm (pose order, palm first): the clip's on the right, mirrored on the left. The pinch is
+            // the magazine pull's on the left, mirrored on the right (falling back to the bolt clip's closed hand there).
+            internal static Vector3[] RoundFingers(bool rightArm)
+            {
+                if (breakShellHeld)
+                    return BreakShellFingers(rightArm);
+                if (HoldingShell)
+                    return ShellFingers(rightArm);
+                return rightArm ? ROUND_HOLD_FINGERS : MirroredPose(ROUND_HOLD_FINGERS, rightToLeft: true, mirroredRoundHold) ?? MAGAZINE_PULL_FINGERS;
+            }
+
+            // Converts one hand's finger pose (pose-order eulers) to the other hand's. Worked out on each call, because HandMirror's rest poses
+            // come from the body's hands mesh, which a change of clothes can swap. Null until that mesh is found.
+            private static readonly Vector3[] mirroredRoundHold = new Vector3[16];
+            internal static readonly Quaternion[] mirrorFromScratch = new Quaternion[16];
+            internal static readonly Quaternion[] mirrorToScratch = new Quaternion[16];
+
+            // Where the round goes in: the chamber (Tarkov's patron_in_weapon bone), with the open action right behind it
+            private static bool TryGetLoadPoint(FirearmController firearmController, out Vector3 loadPoint)
+            {
+                loadPoint = Vector3.zero;
+                Transform[] chamberBones = firearmController.Firearms != null ? firearmController.Firearms._patronInWeaponTransforms : null;
+                if (chamberBones == null || chamberBones.Length == 0 || chamberBones[0] == null)
+                    return false;
+                loadPoint = chamberBones[0].position;
+                return true;
+            }
+
+            // debugZones: the load zone while a round is in the hand (green once the round is in it)
+            internal static void UpdateRoundViz()
+            {
+                if (!HoldingShell || shellPath != null)
+                {
+                    SetZoneViz(ref tubeZoneViz, false, Vector3.zero, 0f, Color.clear);
+                    SetZoneViz(ref portZoneViz, false, Vector3.zero, 0f, Color.clear);
+                }
+                bool show = debugZones && HoldingRound && !HoldingShell && heldRoundFor != null && TryGetLoadPoint(heldRoundFor, out Vector3 loadPoint);
+                if (!show)
+                {
+                    SetZoneViz(ref roundZoneViz, false, Vector3.zero, 0f, Color.clear);
+                    return;
+                }
+                TryGetLoadPoint(heldRoundFor, out loadPoint);
+                bool inZone = (RoundCenterWorld() - loadPoint).sqrMagnitude <= roundLoadRadius * roundLoadRadius;
+                SetZoneViz(ref roundZoneViz, true, loadPoint, roundLoadRadius, inZone ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.5f, 0.8f, 0.3f));
+            }
         }
     }
 }
