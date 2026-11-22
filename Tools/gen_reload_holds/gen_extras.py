@@ -89,6 +89,9 @@ def knobAxisAngle(q):
 # runs forward, mounted turned 90 deg about x): box centre and outer edge. Outer edges matched across (the hand comes from outside),
 # centres along and up the gun.
 OVER_TOP_FROM_M4=('dt_mdr',)
+# Over the top from a clip of the gun's own that shows it: the SA-58's chamber check hooks the fingers down over its side knob (the
+# knuckles 2-3 cm above it), its racks come up from below. The left palm on the handle bone with the handle at the check's furthest back.
+OVER_TOP_CLIPS={'dsa_sa58':'sa58_check_chamber'}
 AR_WING_CENTRE=np.array([-0.0226,-0.0098,0.0038]); AR_WING_OUTER_X=-0.0272
 def meshPartBox(folder,container,frameLeaf,partLeaf):
     from UnityPy.helpers.MeshHelper import MeshHandler
@@ -364,6 +367,10 @@ for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
         axis,angle=knobAxisAngle(fold)
         handleKnobFolds[family]=[dict(bone=HANDLE_KNOB_FOLDS[rig],axis=axis,angle=angle)]
         print(f'{family} knob fold {handleKnobFolds[family]} (clip {hold["clip"]} t {t:.2f})',flush=True)
+    if rig in OVER_TOP_CLIPS and family in extraHandles and OVER_TOP_CLIPS[rig] in clips:
+        h=holdAtFullBack(setup(tree,clips[OVER_TOP_CLIPS[rig]]),charge,wp,'L')
+        handleOverTop[family]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],travel=extraHandles[family]['travel'])
+        print(f'{family} over the top from {OVER_TOP_CLIPS[rig]} at {h["t"]:.2f}s (handle {h["travel"]*100:.1f} cm back): palm {np.round(np.array(h["position"])*100,1)} cm',flush=True)
     print(f'{family} handle bone {boneName}: left',{k:v for k,v in (extraHandles.get(family) or {}).items() if k!='fingers'},
           'right',{k:v for k,v in (extraGunHandHandles.get(family) or {}).items() if k!='fingers'},'moves with bolt',family in extraMovesWithBolt,flush=True)
 
