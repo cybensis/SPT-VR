@@ -130,7 +130,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (rightFingers.weight < 0.5f)
                     Plugin.MyLog.LogWarning($"[RightHandPose] capture skipped - the open pose isn't active (blend={rightFingers.weight:0.00}); sling the gun first so the hand shows the pose you want to bake.");
                 else
-                    rightRestPoseEuler = CaptureFingerPose(rightFingers, "RightHandPose", "rightRestPoseEuler");
+                    rightRestPoseEuler = CaptureFingerPose(rightFingers, animatedPose: false, "RightHandPose", "rightRestPoseEuler");
             }
         }
 

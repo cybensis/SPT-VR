@@ -645,6 +645,7 @@ namespace TarkovVR.Source.Player.Interactions
                 tarkovPoses.Remove(model);
                 weaponRoots.Remove(model);
                 gripMarkers.Remove(model);
+                gripMissedAt.Remove(model);
             }
         }
 
@@ -715,6 +716,8 @@ namespace TarkovVR.Source.Player.Interactions
             tarkovPoses.Clear();
             weaponRoots.Clear();
             gripMarkers.Clear();
+            gripMissedAt.Clear();
+            noGripWarned.Clear();
             EndSwitch();
         }
 
@@ -738,33 +741,71 @@ namespace TarkovVR.Source.Player.Interactions
             return renderer != null ? renderer.bounds.center : model.transform.position;
         }
 
-        // The R-hand marker in the model's Weapon_root frame (rotation only): tells which side of the bore the grip is on
+        // The R-hand marker in the model's Weapon_root frame (rotation only): tells which side of the bore the grip is on. The spots
+        // put the grip there, so without a marker it's zero: the Weapon_root goes to the spot.
         private static Vector3 GripInWeaponRoot(GameObject model)
         {
             Transform grip = GripMarkerOf(model);
             Transform root = WeaponRootOf(model);
-            return grip != null ? Quaternion.Inverse(root.rotation) * (grip.position - root.position) : Vector3.forward;
+            if (grip == null)
+            {
+                WarnNoGripMarker(model);
+                return Vector3.zero;
+            }
+            return Quaternion.Inverse(root.rotation) * (grip.position - root.position);
         }
 
+        // Only Tarkov's own Weapon_root is kept; until the model's links are there it's the model itself, asked again next time
         private static Transform WeaponRootOf(GameObject model)
         {
-            if (!weaponRoots.TryGetValue(model, out Transform root) || root == null)
-            {
-                root = LinksOf(model)?.GetTransform(ECharacterWeaponBones.Weapon_root) ?? model.transform;
-                weaponRoots[model] = root;
-            }
+            if (weaponRoots.TryGetValue(model, out Transform root) && root != null)
+                return root;
+            root = LinksOf(model)?.GetTransform(ECharacterWeaponBones.Weapon_root);
+            if (root == null)
+                return model.transform;
+            weaponRoots[model] = root;
             return root;
         }
 
+        // A marker is kept only while it's on this model. A miss (the model's links not there yet, or no marker: the knife) is asked
+        // again after gripRetryInterval.
+        private const float gripRetryInterval = 0.5f;
+        private static readonly Dictionary<GameObject, float> gripMissedAt = new Dictionary<GameObject, float>();
+
         private static Transform GripMarkerOf(GameObject model)
         {
-            if (!gripMarkers.TryGetValue(model, out Transform grip))
+            if (gripMarkers.TryGetValue(model, out Transform grip) && grip != null && grip.IsChildOf(model.transform))
+                return grip;
+            if (gripMissedAt.TryGetValue(model, out float missedAt) && Time.time - missedAt < gripRetryInterval)
+                return null;
+            // Its own marker, or a stand-in for a gun whose marker is off the grip (WeaponPatches.RightGripMarker)
+            grip = WeaponPatches.RightGripMarker(model.GetComponent<WeaponPrefab>(), LinksOf(model), WeaponRootOf(model));
+            if (grip != null && grip.IsChildOf(model.transform))
             {
-                // Its own marker, or a stand-in for a gun whose marker is off the grip (WeaponPatches.RightGripMarker)
-                grip = WeaponPatches.RightGripMarker(model.GetComponent<WeaponPrefab>(), LinksOf(model), WeaponRootOf(model));
                 gripMarkers[model] = grip;
+                gripMissedAt.Remove(model);
+                return grip;
             }
-            return grip;
+            gripMarkers.Remove(model);
+            gripMissedAt[model] = Time.time;
+            return null;
+        }
+
+        // Once a model: why a gun drawn at its spot has no right-grip marker of its own
+        private static readonly HashSet<GameObject> noGripWarned = new HashSet<GameObject>();
+
+        private static void WarnNoGripMarker(GameObject model)
+        {
+            if (!noGripWarned.Add(model))
+                return;
+            WeaponPrefab prefab = model.GetComponent<WeaponPrefab>();
+            TransformLinks links = LinksOf(model);
+            Transform found = WeaponPatches.RightGripMarker(prefab, links, WeaponRootOf(model));
+            string why = prefab == null ? "no WeaponPrefab on the model"
+                : links == null ? "its TransformLinks aren't there"
+                : found == null ? "no right-hand marker in its links"
+                : $"the marker found is under {found.root.name}, not this model";
+            Plugin.MyLog.LogWarning($"[BodyWeapons] {model.name}: no right-grip marker yet ({why}); placed at its spot by its Weapon_root");
         }
 
         private static TransformLinks LinksOf(GameObject model)

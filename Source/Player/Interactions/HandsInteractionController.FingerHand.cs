@@ -71,9 +71,10 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //--- Authoring a rest-pose bake (UnityExplorer) -----------------------------
-        // The rendered local eulers of every joint, 3 per finger in joints order (the order the bake replays read), logged as a
-        // paste-ready array for arrayName
-        private static Vector3[] CaptureFingerPose(FingerHand hand, string logLabel, string arrayName)
+        // The local eulers of every joint, 3 per finger in joints order (the order the bake replays read), logged as a paste-ready
+        // array for arrayName: as drawn now, or (animatedPose) the animator's own pose under the mod's (RecoverAnimated: right even
+        // on a frame the animator didn't rewrite the fingers, when they still hold the mod's last write)
+        private Vector3[] CaptureFingerPose(FingerHand hand, bool animatedPose, string logLabel, string arrayName)
         {
             var list = new List<Vector3>();
             var builder = new System.Text.StringBuilder();
@@ -84,7 +85,8 @@ namespace TarkovVR.Source.Player.Interactions
                 bool isThumb = hand.isThumb != null && fingerIndex < hand.isThumb.Length && hand.isThumb[fingerIndex];
                 for (int j = 0; j < joints.Length && j < 3; j++)
                 {
-                    Vector3 euler = joints[j] != null ? joints[j].localEulerAngles : Vector3.zero;
+                    Vector3 euler = joints[j] == null ? Vector3.zero
+                        : animatedPose ? RecoverAnimated(joints[j]).eulerAngles : joints[j].localEulerAngles;
                     list.Add(euler);
                     builder.Append($"    new Vector3({euler.x:F2}f, {euler.y:F2}f, {euler.z:F2}f), // {(isThumb ? "thumb" : ("finger" + fingerIndex))} joint{j}\n");
                 }

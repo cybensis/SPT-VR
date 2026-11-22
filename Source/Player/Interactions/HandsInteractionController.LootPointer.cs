@@ -831,11 +831,12 @@ namespace TarkovVR.Source.Player.Interactions
             if (leftFingers.joints == null)
                 return;
 
-            // One-shot capture of whatever pose is rendered right now (set in UnityExplorer).
+            // One-shot capture (set in UnityExplorer) of the animator's own pose, not the drawn one: this bake is the base the flex
+            // and spread deltas go on (ReplayRestPose), so baking the drawn pose would add them twice
             if (captureRestPose)
             {
                 captureRestPose = false;
-                restPoseEuler = CaptureFingerPose(leftFingers, "LootPointer", "restPoseEuler");
+                restPoseEuler = CaptureFingerPose(leftFingers, animatedPose: true, "LootPointer", "restPoseEuler");
             }
             if (logRestPose)
             {
