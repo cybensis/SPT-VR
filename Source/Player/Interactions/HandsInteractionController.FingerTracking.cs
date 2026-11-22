@@ -58,8 +58,13 @@ namespace TarkovVR.Source.Player.Interactions
         // driven by the live curls. leftDeltas first layers the left hand's idle flex and spread deltas on the bake, like
         // ReplayRestPose (the left's authored look is bake + deltas; the right's bake stands alone). Returns false if there's
         // no curl data this frame (the caller falls back to the static baked pose).
-        private bool ApplySkeletalCurls(bool dominant, Transform[][] fingerJoints, bool[] isThumb, Vector3[] basePose, float sign, float weight, bool leftDeltas)
+        private bool ApplySkeletalCurls(FingerHand hand, Vector3[] basePose, bool leftDeltas)
         {
+            bool dominant = hand.dominant;
+            Transform[][] fingerJoints = hand.joints;
+            bool[] isThumb = hand.isThumb;
+            float sign = CurlSign(hand);
+            float weight = hand.weight;
             var skeleton = HandSkeleton(dominant);
             float[] curls = skeleton != null ? skeleton.fingerCurls : null;
             if (curls == null || curls.Length < 5 || fingerJoints == null || basePose == null)
@@ -75,8 +80,8 @@ namespace TarkovVR.Source.Player.Interactions
                 // Recentred: the resting curl gives the authored pose exactly; the open side is clamped
                 float bendBase = Mathf.Max((curls[CurlIndex(isThumb, fingerIndex)] - rest) * gain, -maxExtendDeg);
                 float flexBase = leftDeltas ? PerFingerFlex(fingerIndex) : 0f;
-                float spread = leftDeltas && leftFingerSpread != null && fingerIndex < leftFingerSpread.Length
-                    ? leftFingerSpread[fingerIndex] * fingerSpreadDeg : 0f;
+                float spread = leftDeltas && leftFingers.spread != null && fingerIndex < leftFingers.spread.Length
+                    ? leftFingers.spread[fingerIndex] * fingerSpreadDeg : 0f;
                 for (int j = 0; j < joints.Length && j < 3; j++, packedIndex++)
                 {
                     if (joints[j] == null || packedIndex >= basePose.Length)
@@ -88,11 +93,7 @@ namespace TarkovVR.Source.Player.Interactions
                     Quaternion target = Quaternion.Euler(basePose[packedIndex])
                         * Quaternion.AngleAxis(bend, curlAxis)
                         * Quaternion.AngleAxis(j == 0 ? spread : 0f, spreadAxis);
-                    Quaternion animated = RecoverAnimated(joints[j]);
-                    Quaternion outRot = Quaternion.Slerp(animated, target, weight);
-                    joints[j].localRotation = outRot;
-                    fingerBaseRot[joints[j]] = animated;
-                    fingerOutRot[joints[j]] = outRot;
+                    BlendJoint(joints[j], target, weight);
                 }
             }
 
@@ -117,12 +118,12 @@ namespace TarkovVR.Source.Player.Interactions
             // A press check's fingers on the slide (PressCheckHook) are sent too: the gun hand's, or the left one's with the gun in the left hand
             bool pressCheck = VRReloadController.PressCheck.PressCheckProgress > 0f;
             bool pressCheckLeft = pressCheck && VRReloadController.PressCheck.PressCheckOnLeftHand;
-            syncLeftFingersActive = (handWeightBlend >= 0.01f || pressCheckLeft) && leftFingerJoints != null;
-            syncRightFingersActive = (rightHandWeightBlend >= 0.01f || (pressCheck && !pressCheckLeft)) && rightFingerJoints != null;
+            syncLeftFingersActive = (leftFingers.weight >= 0.01f || pressCheckLeft) && leftFingers.joints != null;
+            syncRightFingersActive = (rightFingers.weight >= 0.01f || (pressCheck && !pressCheckLeft)) && rightFingers.joints != null;
             if (syncLeftFingersActive)
-                PackFingerEulers(leftFingerJoints, syncLeftFingerEuler);
+                PackFingerEulers(leftFingers.joints, syncLeftFingerEuler);
             if (syncRightFingersActive)
-                PackFingerEulers(rightFingerJoints, syncRightFingerEuler);
+                PackFingerEulers(rightFingers.joints, syncRightFingerEuler);
         }
 
         private static void PackFingerEulers(Transform[][] fingers, Vector3[] destination)

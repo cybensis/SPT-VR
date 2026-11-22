@@ -163,12 +163,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Hand-opener state.
         private bool lootDotPresent;
-        private bool fingersResolved;
-        private Transform[][] leftFingerJoints; // [finger][joint] under "Base HumanLPalm"
-        private bool[] leftFingerIsThumb;       // parallel to leftFingerJoints
-        private float[] leftFingerSpread;       // signed centered ordinal per finger (fan amount)
         private int lastPoseEditJoint = -2;     // tracks poseEditJoint changes for the live editor
-        private float handWeightBlend;          // eased override weight (0..1)
         private float flexProgress;             // eased 0 (idle) -> 1 (loot dot in view)
         private readonly Dictionary<Transform, Quaternion> fingerBaseRot = new Dictionary<Transform, Quaternion>();
         private readonly Dictionary<Transform, Quaternion> fingerOutRot = new Dictionary<Transform, Quaternion>();
@@ -567,13 +562,9 @@ namespace TarkovVR.Source.Player.Interactions
         internal bool TryGetPinch(bool dominant, out Vector3 thumbTip, out Vector3 indexTip, out Vector3 indexBase)
         {
             thumbTip = indexTip = indexBase = Vector3.zero;
-            if (dominant)
-            {
-                if (!rightFingersResolved) ResolveRightFingers();
-            }
-            else if (!fingersResolved) ResolveLeftFingers();
-            Transform[][] fingerJoints = dominant ? rightFingerJoints : leftFingerJoints;
-            bool[] isThumb = dominant ? rightFingerIsThumb : leftFingerIsThumb;
+            FingerHand hand = ResolvedFingers(dominant);
+            Transform[][] fingerJoints = hand.joints;
+            bool[] isThumb = hand.isThumb;
             if (fingerJoints == null || isThumb == null)
                 return false;
             Transform[] thumb = null, index = null, firstFinger = null;
@@ -604,12 +595,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             points.Clear();
             points.Add(PalmOrigin(dominant));
-            if (dominant)
-            {
-                if (!rightFingersResolved) ResolveRightFingers();
-            }
-            else if (!fingersResolved) ResolveLeftFingers();
-            Transform[][] fingerJoints = dominant ? rightFingerJoints : leftFingerJoints;
+            Transform[][] fingerJoints = ResolvedFingers(dominant).joints;
             if (fingerJoints == null)
                 return;
             foreach (Transform[] joints in fingerJoints)
@@ -629,10 +615,10 @@ namespace TarkovVR.Source.Player.Interactions
         internal Vector3 PalmOrigin(bool dominant)
         {
             // The thumb is skipped: it's off to the side and would pull the origin sideways.
-            if (!fingersResolved) ResolveLeftFingers();
-            if (!rightFingersResolved) ResolveRightFingers();
-            Transform[][] fingers = dominant ? rightFingerJoints : leftFingerJoints;
-            bool[] thumbs = dominant ? rightFingerIsThumb : leftFingerIsThumb;
+            if (!leftFingers.resolved) ResolveLeftFingers();
+            if (!rightFingers.resolved) ResolveRightFingers();
+            Transform[][] fingers = dominant ? rightFingers.joints : leftFingers.joints;
+            bool[] thumbs = dominant ? rightFingers.isThumb : leftFingers.isThumb;
             Transform palmBone = dominant
                 ? (VRGlobals.ikManager?.rightArmIk?.solver?.bone3 != null ? VRGlobals.ikManager.rightArmIk.solver.bone3.transform : null)
                 : InitVRPatches.leftPalm;
@@ -840,7 +826,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             // EFT raises the "ReloadFloat" animator param to 1 while a left-hand weapon animation plays (reload, examine,
             // check ammo/chamber, malfunction fix). VRPlayerManager releases leftArmIk on it; the fingers yield too
-            // (free = false eases handWeightBlend to 0 and stops touching the bones).
+            // (free = false eases leftFingers.weight to 0 and stops touching the bones).
             // VRGunController keeps the left hand on the controller during those animations, so the fingers stay ours too
             bool leftHandAnimating = !VRGunController.KeepLeftHandOnController()
                 && VRGlobals.player != null && VRGlobals.player.BodyAnimatorCommon != null
@@ -858,60 +844,60 @@ namespace TarkovVR.Source.Player.Interactions
 
             float wTarget = free ? Mathf.Clamp01(handPoseWeight) : 0f;
             float k = 1f - Mathf.Exp(-handOpenLerp * Time.deltaTime);
-            handWeightBlend = Mathf.Lerp(handWeightBlend, wTarget, k);
+            leftFingers.weight = Mathf.Lerp(leftFingers.weight, wTarget, k);
             flexProgress = Mathf.Lerp(flexProgress, lootDotPresent ? 1f : 0f, k);
 
-            if (!fingersResolved)
+            if (!leftFingers.resolved)
                 ResolveLeftFingers();
-            if (leftFingerJoints == null)
+            if (leftFingers.joints == null)
                 return;
 
             // One-shot capture of whatever pose is rendered right now (set in UnityExplorer).
             if (captureRestPose)
             {
                 captureRestPose = false;
-                CaptureRestPose();
+                restPoseEuler = CaptureFingerPose(leftFingers, "LootPointer", "restPoseEuler");
             }
             if (logRestPose)
             {
                 logRestPose = false;
-                LogRestPose();
+                LogFingerPose("LootPointer", "restPoseEuler", restPoseEuler);
             }
 
             // Replay the baked rest pose instead of the procedural flatten/flex/spread.
             if (restPoseEuler != null && restPoseEuler.Length > 0)
             {
-                EditRestPoseLive();
+                EditFingerPoseLive(restPoseEuler, ref poseEditJoint, ref poseEditEuler, ref lastPoseEditJoint, "LootPointer", "captureRestPose");
                 // The right hand's open pose mirrored (HandsInteractionController.MirroredOpenHand), else the left bake with its own deltas
                 bool mirrored = TryGetMirroredLeftRest(out Vector3[] mirroredPose);
                 Vector3[] basePose = mirrored ? mirroredPose : restPoseEuler;
-                if (handWeightBlend >= 0.01f)
+                if (leftFingers.weight >= 0.01f)
                 {
                     // Index controllers curl the fingers from the baked pose (with the left's flex/spread deltas, as in
                     // ReplayRestPose); everything else replays the baked pose. Holding a loot item in this hand suppresses
                     // the skeletal curls: the grip squeeze would clench the fist through the item.
                     bool holdingInThisHand = HoldsLoot(false) || PhysicalDoors.HoldsDoor(false);
                     // An empty hand blends Tarkov's own relaxed / open / fist poses by the finger curls (HandsInteractionController.NaturalHands)
-                    if (!holdingInThisHand && naturalHands && ApplyNaturalPose(false, leftFingerJoints, leftFingerIsThumb, handWeightBlend, rightBones: false, ready: flexProgress))
+                    if (!holdingInThisHand && naturalHands && ApplyNaturalPose(leftFingers, ready: flexProgress))
                     {
                     }
                     else if (holdingInThisHand
-                        || !(SkeletalActive(false) && ApplySkeletalCurls(false, leftFingerJoints, leftFingerIsThumb, basePose, leftCurlSign, handWeightBlend, leftDeltas: !mirrored)))
+                        || !(SkeletalActive(false) && ApplySkeletalCurls(leftFingers, basePose, leftDeltas: !mirrored)))
                         ReplayRestPose(basePose, staticDeltas: !mirrored);
                     // Closes the fingers on a held loot item (HandsInteractionController.Grasp), starting from the pose just written
-                    ApplyGrasp(false, leftFingerJoints, leftFingerIsThumb, leftCurlSign, handWeightBlend);
+                    ApplyGrasp(leftFingers);
                 }
                 return;
             }
 
-            if (handWeightBlend < 0.01f)
+            if (leftFingers.weight < 0.01f)
                 return; // fully back to the animated pose — stop touching the bones
 
-            for (int fingerIndex = 0; fingerIndex < leftFingerJoints.Length; fingerIndex++)
+            for (int fingerIndex = 0; fingerIndex < leftFingers.joints.Length; fingerIndex++)
             {
-                Transform[] joints = leftFingerJoints[fingerIndex];
-                float fingerSpread = (leftFingerSpread != null && fingerIndex < leftFingerSpread.Length)
-                    ? leftFingerSpread[fingerIndex] * fingerSpreadDeg : 0f;
+                Transform[] joints = leftFingers.joints[fingerIndex];
+                float fingerSpread = (leftFingers.spread != null && fingerIndex < leftFingers.spread.Length)
+                    ? leftFingers.spread[fingerIndex] * fingerSpreadDeg : 0f;
                 // The thumb is flattened like the fingers but has its own flex value (it over-curls with the fingers').
                 float flexBase = PerFingerFlex(fingerIndex);
                 for (int j = 0; j < joints.Length && j < 3; j++) // base, middle and tip
@@ -920,10 +906,10 @@ namespace TarkovVR.Source.Player.Interactions
                     // Flex tapers down the finger; the flatten weight is full on every joint. Spread is only at the knuckle.
                     float flex = flexBase * Mathf.Pow(midJointScale, j) * flexSign;
                     float sp = (j == 0) ? fingerSpread : 0f;
-                    ApplyFlatFlex(joints[j], flex, sp, handWeightBlend);
+                    ApplyFlatFlex(joints[j], flex, sp, leftFingers.weight);
                 }
             }
-            ApplyGrasp(false, leftFingerJoints, leftFingerIsThumb, leftCurlSign, handWeightBlend);
+            ApplyGrasp(leftFingers);
         }
 
         // The animated pose of a bone. If its localRotation differs from our last output, EFT re-animated it this frame and
@@ -936,64 +922,6 @@ namespace TarkovVR.Source.Player.Interactions
                 && fingerBaseRot.TryGetValue(t, out Quaternion lastBase))
                 return lastBase;
             return cur;
-        }
-
-        // Captures the rendered left-finger local rotations into restPoseEuler (+ a paste-ready log). Same iteration order
-        // as ReplayRestPose, so the flat indices line up.
-        private void CaptureRestPose()
-        {
-            var list = new List<Vector3>();
-            var builder = new System.Text.StringBuilder();
-            builder.Append("[LootPointer] restPoseEuler = new Vector3[] {\n");
-            for (int fingerIndex = 0; fingerIndex < leftFingerJoints.Length; fingerIndex++)
-            {
-                Transform[] joints = leftFingerJoints[fingerIndex];
-                bool isThumb = leftFingerIsThumb != null && fingerIndex < leftFingerIsThumb.Length && leftFingerIsThumb[fingerIndex];
-                for (int j = 0; j < joints.Length && j < 3; j++)
-                {
-                    Vector3 e = joints[j] != null ? joints[j].localEulerAngles : Vector3.zero;
-                    list.Add(e);
-                    builder.Append($"    new Vector3({e.x:F2}f, {e.y:F2}f, {e.z:F2}f), // {(isThumb ? "thumb" : ("finger" + fingerIndex))} joint{j}\n");
-                }
-            }
-            builder.Append("};");
-            restPoseEuler = list.ToArray();
-            Plugin.MyLog.LogInfo(builder.ToString());
-        }
-
-        // Live per-joint editing: changing poseEditJoint loads that joint's Euler; otherwise poseEditEuler writes back into
-        // the baked array each frame.
-        private void EditRestPoseLive()
-        {
-            if (poseEditJoint < 0 || restPoseEuler == null || poseEditJoint >= restPoseEuler.Length)
-            {
-                lastPoseEditJoint = -2;
-                return;
-            }
-            if (poseEditJoint != lastPoseEditJoint)
-            {
-                lastPoseEditJoint = poseEditJoint;
-                poseEditEuler = restPoseEuler[poseEditJoint]; // load for continued tweaking
-            }
-            else
-            {
-                restPoseEuler[poseEditJoint] = poseEditEuler; // write your live edits
-            }
-        }
-
-        // Print the current baked restPoseEuler as a paste-ready array (after live editing).
-        private void LogRestPose()
-        {
-            if (restPoseEuler == null) { Plugin.MyLog.LogInfo("[LootPointer] restPoseEuler is null."); return; }
-            var builder = new System.Text.StringBuilder();
-            builder.Append("[LootPointer] restPoseEuler = new Vector3[] {\n");
-            for (int i = 0; i < restPoseEuler.Length; i++)
-            {
-                Vector3 e = restPoseEuler[i];
-                builder.Append($"    new Vector3({e.x:F2}f, {e.y:F2}f, {e.z:F2}f), // index {i}\n");
-            }
-            builder.Append("};");
-            Plugin.MyLog.LogInfo(builder.ToString());
         }
 
         // Per-finger flex delta (0 = thumb), eased between the idle and "dot in view" arrays by flexProgress.
@@ -1011,18 +939,18 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // Drives every left-finger joint to its baked local rotation with the flex and spread deltas on top (0 = the baked
-        // pose exactly), Slerped from the live animation by handWeightBlend. Same iteration order as CaptureRestPose.
+        // pose exactly), Slerped from the live animation by leftFingers.weight. Same iteration order as CaptureRestPose.
         // basePose is the left bake, or the right hand's open pose mirrored. staticDeltas adds the idle flex and spread tuned for
         // the left bake; it is off for the mirrored pose, which is already the intended look. The loot-dot "ready" curl (its
         // change from idle) is applied either way.
         private void ReplayRestPose(Vector3[] basePose, bool staticDeltas)
         {
             int index = 0;
-            for (int fingerIndex = 0; fingerIndex < leftFingerJoints.Length; fingerIndex++)
+            for (int fingerIndex = 0; fingerIndex < leftFingers.joints.Length; fingerIndex++)
             {
-                Transform[] joints = leftFingerJoints[fingerIndex];
-                float fingerSpread = staticDeltas && leftFingerSpread != null && fingerIndex < leftFingerSpread.Length
-                    ? leftFingerSpread[fingerIndex] * fingerSpreadDeg : 0f;
+                Transform[] joints = leftFingers.joints[fingerIndex];
+                float fingerSpread = staticDeltas && leftFingers.spread != null && fingerIndex < leftFingers.spread.Length
+                    ? leftFingers.spread[fingerIndex] * fingerSpreadDeg : 0f;
                 float flexBase = staticDeltas ? PerFingerFlex(fingerIndex) : PerFingerFlex(fingerIndex) - IdleFlex(fingerIndex);
                 for (int j = 0; j < joints.Length && j < 3; j++, index++)
                 {
@@ -1033,10 +961,7 @@ namespace TarkovVR.Source.Player.Interactions
                     Quaternion target = Quaternion.Euler(basePose[index])
                         * Quaternion.AngleAxis(flex, Vector3.forward)
                         * Quaternion.AngleAxis(sp, spreadAxis);
-                    Quaternion outRot = Quaternion.Slerp(animated, target, handWeightBlend);
-                    joints[j].localRotation = outRot;
-                    fingerBaseRot[joints[j]] = animated;
-                    fingerOutRot[joints[j]] = outRot;
+                    BlendJoint(joints[j], animated, target, leftFingers.weight);
                 }
             }
         }
@@ -1054,10 +979,7 @@ namespace TarkovVR.Source.Player.Interactions
                 * Quaternion.AngleAxis(flexDeg, Vector3.forward)
                 * Quaternion.AngleAxis(spreadDeg, spreadAxis);
 
-            Quaternion outRot = Quaternion.Slerp(animated, flatPose, weight);
-            t.localRotation = outRot;
-            fingerBaseRot[t] = animated;
-            fingerOutRot[t] = outRot;
+            BlendJoint(t, animated, flatPose, weight);
         }
 
         // The component of q that is a rotation about 'axis' (swing-twist decomposition).
@@ -1099,33 +1021,24 @@ namespace TarkovVR.Source.Player.Interactions
         // The left hand's finger chains, under "Base HumanLPalm"
         private void ResolveLeftFingers()
         {
-            fingersResolved = true;
-            leftFingerJoints = null;
             Transform palm = InitVRPatches.leftPalm;
-            if (palm == null)
+            var thumbs = new List<bool>();
+            if (!ResolveFingerChains(leftFingers, palm, thumbs))
             {
-                Plugin.MyLog.LogWarning("[LootPointer] leftPalm not resolved yet — hand opener idle.");
+                if (palm == null)
+                    Plugin.MyLog.LogWarning("[LootPointer] leftPalm not resolved yet — hand opener idle.");
                 return;
             }
 
-            var fingers = new List<Transform[]>();
-            var thumbs = new List<bool>();
-            FingerChainsUnder(palm, fingers, thumbs);
-            if (fingers.Count > 0)
-            {
-                leftFingerJoints = fingers.ToArray();
-                leftFingerIsThumb = thumbs.ToArray();
-
-                // Signed centered ordinal among the non-thumb fingers (e.g. 4 fingers -> -1.5,-0.5,0.5,1.5), so the knuckle
-                // fan splays outward from the middle.
-                int nonThumb = 0;
-                for (int i = 0; i < thumbs.Count; i++) if (!thumbs[i]) nonThumb++;
-                float center = (nonThumb - 1) * 0.5f;
-                leftFingerSpread = new float[fingers.Count];
-                int k = 0;
-                for (int i = 0; i < fingers.Count; i++)
-                    leftFingerSpread[i] = thumbs[i] ? 0f : (k++ - center);
-            }
+            // Signed centered ordinal among the non-thumb fingers (e.g. 4 fingers -> -1.5,-0.5,0.5,1.5), so the knuckle
+            // fan splays outward from the middle.
+            int nonThumb = 0;
+            for (int i = 0; i < thumbs.Count; i++) if (!thumbs[i]) nonThumb++;
+            float center = (nonThumb - 1) * 0.5f;
+            leftFingers.spread = new float[thumbs.Count];
+            int k = 0;
+            for (int i = 0; i < thumbs.Count; i++)
+                leftFingers.spread[i] = thumbs[i] ? 0f : (k++ - center);
         }
 
         // NearestBoxSurfacePoint: the point on an oriented BoxCollider's surface nearest a world point. Unlike

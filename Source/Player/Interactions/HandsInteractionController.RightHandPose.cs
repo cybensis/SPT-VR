@@ -40,10 +40,6 @@ namespace TarkovVR.Source.Player.Interactions
         public static Vector3 rightPoseEditEuler = Vector3.zero;
         private int lastRightPoseEditJoint = -2;
 
-        private bool rightFingersResolved;
-        private Transform[][] rightFingerJoints;            // [finger][joint] under the right palm bone
-        private bool[] rightFingerIsThumb;
-        private float rightHandWeightBlend;
 
         // Runs in LateUpdate, after UpdateLeftHandFingers and after EFT animates the hand.
         private void UpdateRightHandFingers()
@@ -61,32 +57,32 @@ namespace TarkovVR.Source.Player.Interactions
                             || (MountedGun.Mounted && !MountedGun.HandOnHandle(left: false)));
 
             float k = 1f - Mathf.Exp(-handOpenLerp * Time.deltaTime);
-            rightHandWeightBlend = Mathf.Lerp(rightHandWeightBlend, free ? Mathf.Clamp01(handPoseWeight) : 0f, k);
+            rightFingers.weight = Mathf.Lerp(rightFingers.weight, free ? Mathf.Clamp01(handPoseWeight) : 0f, k);
 
-            if (!rightFingersResolved)
+            if (!rightFingers.resolved)
                 ResolveRightFingers();
-            if (rightFingerJoints == null)
+            if (rightFingers.joints == null)
                 return;
 
             if (logRightRestPose)
             {
                 logRightRestPose = false;
-                LogRightRestPose();
+                LogFingerPose("RightHandPose", "rightRestPoseEuler", rightRestPoseEuler);
             }
-            EditRightPoseLive();
+            EditFingerPoseLive(rightRestPoseEuler, ref rightPoseEditJoint, ref rightPoseEditEuler, ref lastRightPoseEditJoint, "RightHandPose", "captureRightRestPose");
 
-            if (rightHandWeightBlend >= 0.01f)
+            if (rightFingers.weight >= 0.01f)
             {
                 // Index controllers curl the fingers from the baked pose; other controllers replay the baked or procedural open pose.
                 // While this hand holds loot or a door, the natural and skeletal poses are skipped: the grip squeeze would clench the
                 // fist through the item.
                 bool holdingInThisHand = HoldsLoot(true) || PhysicalDoors.HoldsDoor(true);
                 // Empty hand: Tarkov's own relaxed / open / fist poses, blended by the finger curls (HandsInteractionController.NaturalHands)
-                if (!holdingInThisHand && naturalHands && ApplyNaturalPose(true, rightFingerJoints, rightFingerIsThumb, rightHandWeightBlend, rightBones: true, ready: 0f))
+                if (!holdingInThisHand && naturalHands && ApplyNaturalPose(rightFingers, ready: 0f))
                 {
                 }
                 else if (!holdingInThisHand
-                    && SkeletalActive(true) && ApplySkeletalCurls(true, rightFingerJoints, rightFingerIsThumb, rightRestPoseEuler, rightCurlSign, rightHandWeightBlend, leftDeltas: false))
+                    && SkeletalActive(true) && ApplySkeletalCurls(rightFingers, rightRestPoseEuler, leftDeltas: false))
                 {
                     // driven by skeletal curls
                 }
@@ -94,18 +90,14 @@ namespace TarkovVR.Source.Player.Interactions
                 {
                     // A captured right bake replays exactly (same mechanism as the left hand).
                     int poseIndex = 0;
-                    for (int fingerIndex = 0; fingerIndex < rightFingerJoints.Length; fingerIndex++)
+                    for (int fingerIndex = 0; fingerIndex < rightFingers.joints.Length; fingerIndex++)
                     {
-                        Transform[] joints = rightFingerJoints[fingerIndex];
+                        Transform[] joints = rightFingers.joints[fingerIndex];
                         for (int j = 0; j < joints.Length && j < 3; j++, poseIndex++)
                         {
                             if (joints[j] == null || poseIndex >= rightRestPoseEuler.Length)
                                 continue;
-                            Quaternion animated = RecoverAnimated(joints[j]);
-                            Quaternion outRot = Quaternion.Slerp(animated, Quaternion.Euler(rightRestPoseEuler[poseIndex]), rightHandWeightBlend);
-                            joints[j].localRotation = outRot;
-                            fingerBaseRot[joints[j]] = animated;
-                            fingerOutRot[joints[j]] = outRot;
+                            BlendJoint(joints[j], Quaternion.Euler(rightRestPoseEuler[poseIndex]), rightFingers.weight);
                         }
                     }
                 }
@@ -113,21 +105,21 @@ namespace TarkovVR.Source.Player.Interactions
                 {
                     // No bake: the procedural flatten strips the animated grip curl in the right rig's own frame
                     // (swing-twist, ApplyFlatFlex) and applies the idle flex.
-                    for (int fingerIndex = 0; fingerIndex < rightFingerJoints.Length; fingerIndex++)
+                    for (int fingerIndex = 0; fingerIndex < rightFingers.joints.Length; fingerIndex++)
                     {
-                        Transform[] joints = rightFingerJoints[fingerIndex];
+                        Transform[] joints = rightFingers.joints[fingerIndex];
                         float flexBase = RightFlex(fingerIndex);
                         for (int j = 0; j < joints.Length && j < 3; j++)
                         {
                             if (joints[j] == null)
                                 continue;
                             float flex = flexBase * Mathf.Pow(midJointScale, j) * rightFlexSign;
-                            ApplyFlatFlex(joints[j], flex, 0f, rightHandWeightBlend);
+                            ApplyFlatFlex(joints[j], flex, 0f, rightFingers.weight);
                         }
                     }
                 }
                 // Close the fingers on a held loot item (HandsInteractionController.Grasp), starting from the pose just written
-                ApplyGrasp(true, rightFingerJoints, rightFingerIsThumb, rightCurlSign, rightHandWeightBlend);
+                ApplyGrasp(rightFingers);
             }
 
             // Capture last, after the pose is written: the animator overwrites the fingers every frame before this
@@ -135,10 +127,10 @@ namespace TarkovVR.Source.Player.Interactions
             if (captureRightRestPose)
             {
                 captureRightRestPose = false;
-                if (rightHandWeightBlend < 0.5f)
-                    Plugin.MyLog.LogWarning($"[RightHandPose] capture skipped - the open pose isn't active (blend={rightHandWeightBlend:0.00}); sling the gun first so the hand shows the pose you want to bake.");
+                if (rightFingers.weight < 0.5f)
+                    Plugin.MyLog.LogWarning($"[RightHandPose] capture skipped - the open pose isn't active (blend={rightFingers.weight:0.00}); sling the gun first so the hand shows the pose you want to bake.");
                 else
-                    CaptureRightRestPose();
+                    rightRestPoseEuler = CaptureFingerPose(rightFingers, "RightHandPose", "rightRestPoseEuler");
             }
         }
 
@@ -146,107 +138,26 @@ namespace TarkovVR.Source.Player.Interactions
         // index 0 = thumb; the right palm's child order may differ).
         private float RightFlex(int fingerIndex)
         {
-            bool isThumb = rightFingerIsThumb != null && fingerIndex < rightFingerIsThumb.Length && rightFingerIsThumb[fingerIndex];
+            bool isThumb = rightFingers.isThumb != null && fingerIndex < rightFingers.isThumb.Length && rightFingers.isThumb[fingerIndex];
             if (isThumb)
                 return fingerFlexDeg != null && fingerFlexDeg.Length > 0 ? fingerFlexDeg[0] : 0f;
             // ordinal among the non-thumb fingers -> flex array entries 1..4
             int k = 1;
-            for (int i = 0; i < fingerIndex && i < rightFingerIsThumb.Length; i++)
-                if (!rightFingerIsThumb[i])
+            for (int i = 0; i < fingerIndex && i < rightFingers.isThumb.Length; i++)
+                if (!rightFingers.isThumb[i])
                     k++;
             return fingerFlexDeg != null && k < fingerFlexDeg.Length ? fingerFlexDeg[k] : 0f;
-        }
-
-        // Like the left's EditRestPoseLive: changing the joint index loads its current euler; further edits write back
-        // each frame.
-        private void EditRightPoseLive()
-        {
-            if (rightPoseEditJoint < 0)
-            {
-                lastRightPoseEditJoint = -2;
-                return;
-            }
-            if (rightRestPoseEuler == null || rightPoseEditJoint >= rightRestPoseEuler.Length)
-            {
-                if (lastRightPoseEditJoint != rightPoseEditJoint)
-                {
-                    lastRightPoseEditJoint = rightPoseEditJoint;
-                    Plugin.MyLog.LogWarning("[RightHandPose] no right bake to edit - set captureRightRestPose=true first (while the procedural pose looks good).");
-                }
-                return;
-            }
-            if (rightPoseEditJoint != lastRightPoseEditJoint)
-            {
-                lastRightPoseEditJoint = rightPoseEditJoint;
-                rightPoseEditEuler = rightRestPoseEuler[rightPoseEditJoint];
-            }
-            else
-            {
-                rightRestPoseEuler[rightPoseEditJoint] = rightPoseEditEuler;
-            }
         }
 
         // The right palm is the right arm IK's wrist bone (solver.bone3, the bone eating pins). Its children are the
         // finger roots, like "Base HumanLPalm" on the left.
         private void ResolveRightFingers()
         {
-            rightFingersResolved = true;
-            rightFingerJoints = null;
             Transform palm = VRGlobals.ikManager != null && VRGlobals.ikManager.rightArmIk != null &&
                              VRGlobals.ikManager.rightArmIk.solver != null && VRGlobals.ikManager.rightArmIk.solver.bone3 != null
                 ? VRGlobals.ikManager.rightArmIk.solver.bone3.transform : null;
-            if (palm == null)
-            {
+            if (!ResolveFingerChains(rightFingers, palm, new List<bool>()) && palm == null)
                 Plugin.MyLog.LogWarning("[RightHandPose] right palm not resolved yet - open-hand idle.");
-                return;
-            }
-
-            var fingers = new List<Transform[]>();
-            var thumbs = new List<bool>();
-            FingerChainsUnder(palm, fingers, thumbs);
-            if (fingers.Count > 0)
-            {
-                rightFingerJoints = fingers.ToArray();
-                rightFingerIsThumb = thumbs.ToArray();
-            }
-        }
-
-        private void CaptureRightRestPose()
-        {
-            var list = new List<Vector3>();
-            var builder = new System.Text.StringBuilder();
-            builder.Append("[RightHandPose] rightRestPoseEuler = new Vector3[] {\n");
-            for (int fingerIndex = 0; fingerIndex < rightFingerJoints.Length; fingerIndex++)
-            {
-                Transform[] joints = rightFingerJoints[fingerIndex];
-                for (int j = 0; j < joints.Length && j < 3; j++)
-                {
-                    Vector3 euler = joints[j] != null ? joints[j].localEulerAngles : Vector3.zero;
-                    list.Add(euler);
-                    builder.Append($"    new Vector3({euler.x:F2}f, {euler.y:F2}f, {euler.z:F2}f), // finger{fingerIndex} joint{j}\n");
-                }
-            }
-            builder.Append("};");
-            rightRestPoseEuler = list.ToArray();
-            Plugin.MyLog.LogInfo(builder.ToString());
-        }
-
-        private void LogRightRestPose()
-        {
-            if (rightRestPoseEuler == null)
-            {
-                Plugin.MyLog.LogInfo("[RightHandPose] rightRestPoseEuler is null.");
-                return;
-            }
-            var builder = new System.Text.StringBuilder();
-            builder.Append("[RightHandPose] rightRestPoseEuler = new Vector3[] {\n");
-            for (int i = 0; i < rightRestPoseEuler.Length; i++)
-            {
-                Vector3 euler = rightRestPoseEuler[i];
-                builder.Append($"    new Vector3({euler.x:F2}f, {euler.y:F2}f, {euler.z:F2}f), // index {i}\n");
-            }
-            builder.Append("};");
-            Plugin.MyLog.LogInfo(builder.ToString());
         }
     }
 }

@@ -21,16 +21,16 @@ namespace TarkovVR.Source.Player.Interactions
         private bool TryGetMirroredLeftRest(out Vector3[] pose)
         {
             pose = null;
-            if (!mirrorOpenHand || rightRestPoseEuler == null || rightRestPoseEuler.Length == 0 || leftFingerJoints == null)
+            if (!mirrorOpenHand || rightRestPoseEuler == null || rightRestPoseEuler.Length == 0 || leftFingers.joints == null)
                 return false;
-            if (!rightFingersResolved)
+            if (!rightFingers.resolved)
                 ResolveRightFingers();
-            if (rightFingerJoints == null)
+            if (rightFingers.joints == null)
                 return false;
 
             mirrorRightLocals.Clear();
             int index = 0;
-            foreach (Transform[] joints in rightFingerJoints)
+            foreach (Transform[] joints in rightFingers.joints)
             {
                 for (int joint = 0; joint < joints.Length && joint < 3; joint++, index++)
                 {
@@ -42,12 +42,12 @@ namespace TarkovVR.Source.Player.Interactions
                 return false;
 
             int count = 0;
-            foreach (Transform[] joints in leftFingerJoints)
+            foreach (Transform[] joints in leftFingers.joints)
                 count += Mathf.Min(joints.Length, 3);
             if (mirroredLeftRest == null || mirroredLeftRest.Length != count)
                 mirroredLeftRest = new Vector3[count];
             index = 0;
-            foreach (Transform[] joints in leftFingerJoints)
+            foreach (Transform[] joints in leftFingers.joints)
             {
                 for (int joint = 0; joint < joints.Length && joint < 3; joint++, index++)
                 {

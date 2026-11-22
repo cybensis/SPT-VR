@@ -177,14 +177,10 @@ namespace TarkovVR.Source.Player.Interactions
         private bool TryGetGraspContact(bool dominant, bool pinch, out Vector3 contact, out Vector3 normal, out Vector3 along)
         {
             contact = normal = along = Vector3.zero;
-            if (dominant)
-            {
-                if (!rightFingersResolved) ResolveRightFingers();
-            }
-            else if (!fingersResolved) ResolveLeftFingers();
-            Transform[][] fingers = dominant ? rightFingerJoints : leftFingerJoints;
-            bool[] thumbs = dominant ? rightFingerIsThumb : leftFingerIsThumb;
-            float curlSign = dominant ? rightCurlSign : leftCurlSign;
+            FingerHand hand = ResolvedFingers(dominant);
+            Transform[][] fingers = hand.joints;
+            bool[] thumbs = hand.isThumb;
+            float curlSign = CurlSign(hand);
             Transform palm = FingersPalm(fingers);
             if (palm == null)
                 return false;
@@ -237,8 +233,13 @@ namespace TarkovVR.Source.Player.Interactions
         // Every frame, from the finger passes
 
         // Runs after a hand's finger pass has written its pose (weight = that pass's own blend). dominant = this is the dominant hand's pass.
-        private void ApplyGrasp(bool dominant, Transform[][] fingers, bool[] thumbs, float curlSign, float weight)
+        private void ApplyGrasp(FingerHand fingerHand)
         {
+            bool dominant = fingerHand.dominant;
+            Transform[][] fingers = fingerHand.joints;
+            bool[] thumbs = fingerHand.isThumb;
+            float curlSign = CurlSign(fingerHand);
+            float weight = fingerHand.weight;
             GraspHand hand = graspHands[dominant ? 1 : 0];
             // What this hand holds: a loot item, or a door's handle / the door itself (PhysicalDoors)
             bool lootHere = HoldsLoot(dominant) && GraspRig(dominant) != null && HeldItemAlive();
@@ -586,15 +587,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // The palm bone a hand's fingers hang from (PhysicalDoors parents the key to it)
-        internal Transform PalmBone(bool dominant)
-        {
-            if (dominant)
-            {
-                if (!rightFingersResolved) ResolveRightFingers();
-            }
-            else if (!fingersResolved) ResolveLeftFingers();
-            return FingersPalm(dominant ? rightFingerJoints : leftFingerJoints);
-        }
+        internal Transform PalmBone(bool dominant) => FingersPalm(ResolvedFingers(dominant).joints);
 
         private static Transform FingersPalm(Transform[][] fingers)
         {

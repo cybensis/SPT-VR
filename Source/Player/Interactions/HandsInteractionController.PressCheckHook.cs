@@ -37,9 +37,9 @@ namespace TarkovVR.Source.Player.Interactions
             float progress = VRReloadController.PressCheck.PressCheckProgress;
             if (progress <= 0f || rightRestPoseEuler == null || rightRestPoseEuler.Length == 0)
                 return;
-            if (!rightFingersResolved)
+            if (!rightFingers.resolved)
                 ResolveRightFingers();
-            if (rightFingerJoints == null)
+            if (rightFingers.joints == null)
                 return;
             bool mirrored = VRReloadController.PressCheck.PressCheckOnLeftHand;
             if (mirrored)
@@ -51,10 +51,10 @@ namespace TarkovVR.Source.Player.Interactions
             // While the slide is drawn back, each finger tilts back with it from its knuckle (below, using its own knuckle-to-tip direction)
             bool dragging = VRReloadController.PressCheck.TryGetPressCheckDrag(out Vector3 backInPalm, out float pull);
             int poseIndex = 0;
-            for (int finger = 0; finger < rightFingerJoints.Length; finger++)
+            for (int finger = 0; finger < rightFingers.joints.Length; finger++)
             {
-                Transform[] joints = rightFingerJoints[finger];
-                bool thumb = rightFingerIsThumb != null && finger < rightFingerIsThumb.Length && rightFingerIsThumb[finger];
+                Transform[] joints = rightFingers.joints[finger];
+                bool thumb = rightFingers.isThumb != null && finger < rightFingers.isThumb.Length && rightFingers.isThumb[finger];
                 if (thumb)
                 {
                     KeepThumbOnGun(joints, Mathf.SmoothStep(0f, 1f, progress), mirrored);

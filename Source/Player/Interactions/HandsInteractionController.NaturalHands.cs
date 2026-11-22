@@ -123,10 +123,15 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // Blends the free hand's fingers between the poses by their curls (Index), else uses the relaxed pose moved toward the fist by
-        // ready. The result is slerped from the animated pose by weight. dominant picks whose controller curls are read; rightBones
-        // picks whose poses are used (the arm the bones are on).
-        private bool ApplyNaturalPose(bool dominant, Transform[][] fingerJoints, bool[] isThumb, float weight, bool rightBones, float ready)
+        // ready. The result is slerped from the animated pose by the hand's weight. dominant picks whose controller curls are read,
+        // rightBones whose poses are used (the arm the bones are on): both are the hand's side.
+        private bool ApplyNaturalPose(FingerHand hand, float ready)
         {
+            bool dominant = hand.dominant;
+            bool rightBones = hand.dominant;
+            Transform[][] fingerJoints = hand.joints;
+            bool[] isThumb = hand.isThumb;
+            float weight = hand.weight;
             if (fingerJoints == null)
                 return false;
             NaturalPose pose = NaturalPoseOf(rightBones);
@@ -157,11 +162,7 @@ namespace TarkovVR.Source.Player.Interactions
                         float open = curl <= rest ? 1f : 1f - (curl - rest) / (1f - rest);
                         target = Quaternion.AngleAxis(naturalRestSpread * steps * open * (rightBones ? -1f : 1f), Vector3.up) * target;
                     }
-                    Quaternion animated = RecoverAnimated(joint);
-                    Quaternion outRot = Quaternion.Slerp(animated, target, weight);
-                    joint.localRotation = outRot;
-                    fingerBaseRot[joint] = animated;
-                    fingerOutRot[joint] = outRot;
+                    BlendJoint(joint, target, weight);
                 }
             }
             return true;
