@@ -4,6 +4,7 @@ using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -46,14 +47,14 @@ namespace TarkovVR.Source.Player.Interactions
         private static void ReleaseArms()
         {
             if (VRGlobals.ikManager == null) return;
-            if (VRGlobals.ikManager.rightArmIk != null) { VRGlobals.ikManager.rightArmIk.solver.target = null; VRGlobals.ikManager.rightArmIk.enabled = false; }
-            if (VRGlobals.ikManager.leftArmIk != null) { VRGlobals.ikManager.leftArmIk.solver.target = null; VRGlobals.ikManager.leftArmIk.enabled = false; }
+            if (VRGlobals.ikManager.rightArmIk != null) { HandTargets.Set(VRGlobals.ikManager.rightArmIk, null, HandOwner.Eating); VRGlobals.ikManager.rightArmIk.enabled = false; }
+            if (VRGlobals.ikManager.leftArmIk != null) { HandTargets.Set(VRGlobals.ikManager.leftArmIk, null, HandOwner.Eating); VRGlobals.ikManager.leftArmIk.enabled = false; }
         }
 
         private static void SetArmIk(LimbIK armIk, Transform target)
         {
             if (armIk == null || target == null) return;
-            if (armIk.solver.target != target) armIk.solver.target = target;
+            if (armIk.solver.target != target) HandTargets.Set(armIk, target, HandOwner.Eating);
             if (!armIk.enabled) armIk.enabled = true;
         }
 

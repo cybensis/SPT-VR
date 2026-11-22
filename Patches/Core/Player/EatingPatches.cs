@@ -5,6 +5,7 @@ using UnityEngine;
 using TarkovVR.Source.Controls;
 using static EFT.Player;
 using static EFT.Player.MedsController;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -147,7 +148,7 @@ namespace TarkovVR.Patches.Core.Player
             // after the eat Tick aimed the IK at the latch, and would pull the hand off the item mid-pull.
             if (VRGlobals.ikManager?.leftArmIk != null && !EatingInteractionController.OffHandLatched)
             {
-                VRGlobals.ikManager.leftArmIk.solver.target = lh.transform;
+                HandTargets.Set(VRGlobals.ikManager.leftArmIk, lh.transform, HandOwner.Eating);
                 VRGlobals.ikManager.leftArmIk.enabled = true;
             }
             return false; // skip the original (which would freeze the left hand)

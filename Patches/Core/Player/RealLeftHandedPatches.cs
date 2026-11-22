@@ -75,7 +75,7 @@ namespace TarkovVR.Patches.Core.Player
             {
                 freeRightOn = false;
                 if (player._limbs[1].solver.target == freeRightTarget)
-                    player._limbs[1].solver.target = rightTargetOriginal;
+                    HandTargets.Set(player._limbs[1], rightTargetOriginal, HandOwner.LeftHandedGun);
             }
             if (limbUpdatesOff)
             {
@@ -249,7 +249,7 @@ namespace TarkovVR.Patches.Core.Player
                 return;
             freeLeftOn = false;
             if (player._limbs[0].solver.target == freeLeftTarget)
-                player._limbs[0].solver.target = leftTargetOriginal;
+                HandTargets.Set(player._limbs[0], leftTargetOriginal, HandOwner.LeftHandedGun);
         }
 
         [HarmonyPostfix]
@@ -259,9 +259,9 @@ namespace TarkovVR.Patches.Core.Player
             if (!(leftSwapped || rightSwapped) || !__instance.IsYourPlayer || __instance._limbs == null || __instance._limbs.Length < 2)
                 return;
             if (leftSwapped)
-                __instance._limbs[0].solver.target = leftTargetBefore;
+                HandTargets.Set(__instance._limbs[0], leftTargetBefore, HandOwner.LeftHandedGun);
             if (rightSwapped)
-                __instance._limbs[1].solver.target = rightTargetBefore;
+                HandTargets.Set(__instance._limbs[1], rightTargetBefore, HandOwner.LeftHandedGun);
             leftSwapped = rightSwapped = false;
         }
 

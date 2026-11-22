@@ -14,6 +14,7 @@ using RootMotion.FinalIK;
 using UnityEngine;
 using Valve.VR;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -1854,7 +1855,7 @@ namespace TarkovVR.Source.Weapons
                 handLatch.SetParent(null, worldPositionStays: true);
             LimbIK armIk = LatchedArmIk;
             if (handLatched && armIk != null && VRGlobals.vrPlayer != null && armIk.solver.target == handLatch)
-                armIk.solver.target = LatchedHandRig;
+                HandTargets.Set(armIk, LatchedHandRig, HandOwner.ReloadLatch);
             handLatched = false;
             handLatchReleasing = false;
         }
@@ -1866,7 +1867,7 @@ namespace TarkovVR.Source.Weapons
             if (armIk == null || handLatch == null)
                 return;
             if (armIk.solver.target != handLatch)
-                armIk.solver.target = handLatch;
+                HandTargets.Set(armIk, handLatch, HandOwner.ReloadLatch);
         }
 
         private static void UpdateHandLatch()
@@ -1885,7 +1886,7 @@ namespace TarkovVR.Source.Weapons
                 handLatch.SetParent(null, worldPositionStays: true);
                 LimbIK armIk = LatchedArmIk;
                 if (armIk != null && armIk.solver.target == handLatch)
-                    armIk.solver.target = null;
+                    HandTargets.Set(armIk, null, HandOwner.ReloadLatch);
                 handLatched = false;
                 handLatchReleasing = false;
                 handLatchSnapping = false;
@@ -1902,7 +1903,7 @@ namespace TarkovVR.Source.Weapons
                     handLatch.SetParent(null, worldPositionStays: true);
                     LimbIK armIk = LatchedArmIk;
                     if (armIk != null && armIk.solver.target == handLatch)
-                        armIk.solver.target = null;
+                        HandTargets.Set(armIk, null, HandOwner.ReloadLatch);
                     handLatched = false;
                     handLatchReleasing = false;
                     return;

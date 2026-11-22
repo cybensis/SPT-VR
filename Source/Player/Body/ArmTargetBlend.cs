@@ -100,6 +100,7 @@ namespace TarkovVR.Source.Player.Body
                     goalRotation = Quaternion.Slerp(body.rotation * fromRotationInBody, goalRotation, blend);
                     heldTarget = source;
                     targetHeld = true;
+                    // lifted for this solve and put back after it: not a handover, so not through HandTargets
                     solver.target = null;
                     solver.IKPosition = goal;
                     solver.IKRotation = goalRotation;

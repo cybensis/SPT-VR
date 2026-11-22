@@ -18,6 +18,7 @@ using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using static EFT.Player.FirearmController;
 using static PhysicsExtensions;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -71,9 +72,9 @@ namespace TarkovVR.Patches.Core.Player
             {
                 VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
                 VRGlobals.player._markers[1] = VRGlobals.vrPlayer.RightHand.transform;
-                VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+                HandTargets.Set(VRGlobals.ikManager.leftArmIk, VRGlobals.vrPlayer.LeftHand.transform, HandOwner.EmptyHands);
                 VRGlobals.ikManager.leftArmIk.enabled = true;
-                VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
+                HandTargets.Set(VRGlobals.ikManager.rightArmIk, VRGlobals.vrPlayer.RightHand.transform, HandOwner.EmptyHands);
                 VRGlobals.ikManager.rightArmIk.enabled = true;
             }
             if (grenadeEquipped)
@@ -116,7 +117,7 @@ namespace TarkovVR.Patches.Core.Player
 
             if (VRGlobals.vrPlayer)
             {
-                VRGlobals.ikManager.rightArmIk.solver.target = null;
+                HandTargets.Set(VRGlobals.ikManager.rightArmIk, null, HandOwner.HandsChange);
                 VRGlobals.ikManager.rightArmIk.enabled = false;
             }
         }
@@ -1570,9 +1571,9 @@ namespace TarkovVR.Patches.Core.Player
                 
                 if (VRGlobals.ikManager != null)
                 {
-                    VRGlobals.ikManager.rightArmIk.solver.target = null;
+                    HandTargets.Set(VRGlobals.ikManager.rightArmIk, null, HandOwner.Meds);
                     VRGlobals.ikManager.rightArmIk.enabled = false;
-                    VRGlobals.ikManager.leftArmIk.solver.target = null;
+                    HandTargets.Set(VRGlobals.ikManager.leftArmIk, null, HandOwner.Meds);
                     VRGlobals.ikManager.leftArmIk.enabled = false;
                 }
                 

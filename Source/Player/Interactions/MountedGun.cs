@@ -12,6 +12,7 @@ using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -588,7 +589,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (arm == null || target == null)
                 return;
-            arm.solver.target = target;
+            HandTargets.Set(arm, target, HandOwner.MountedGun);
             arm.enabled = true;
         }
 

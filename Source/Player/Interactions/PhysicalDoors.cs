@@ -10,6 +10,7 @@ using TarkovVR.Source.Misc;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -355,7 +356,7 @@ namespace TarkovVR.Source.Player.Interactions
             // The hand stays where it took hold, riding the handle (which turns) or the door
             hold.latch.SetParent(onHandle ? run.handle.transform : door.transform, worldPositionStays: false);
             hold.latch.SetPositionAndRotation(rig.position, rig.rotation);
-            armIk.solver.target = hold.latch;
+            HandTargets.Set(armIk, hold.latch, HandOwner.Door);
             // On a handle, the hand eases onto its surface: the mesh near the palm, not the lever on the far side of the door
             hold.grabTime = Time.time;
             hold.latchBaseLocal = hold.latch.localPosition;
@@ -756,7 +757,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 // Two-handing changes and the equip paths also set the arm's target; while the door is held it must be the latch
                 if (hold.armIk != null && hold.armIk.solver.target != hold.latch)
-                    hold.armIk.solver.target = hold.latch;
+                    HandTargets.Set(hold.armIk, hold.latch, HandOwner.Door);
                 if (hold.latch != null && hold.latchSnapLocal != Vector3.zero)
                 {
                     float snap = Mathf.SmoothStep(0f, 1f, (Time.time - hold.grabTime) / Mathf.Max(handleSnapTime, 0.001f));
@@ -783,7 +784,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static void EndRelease(Hold hold)
         {
             if (hold.armIk != null && hold.latch != null && hold.armIk.solver.target == hold.latch)
-                hold.armIk.solver.target = hold.savedTarget;
+                HandTargets.Set(hold.armIk, hold.savedTarget, HandOwner.Door);
             hold.releasing = false;
             hold.savedTarget = null;
             hold.rig = null;
@@ -798,7 +799,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (hold.held || hold.releasing)
                 {
                     if (hold.armIk != null && hold.latch != null && hold.armIk.solver.target == hold.latch)
-                        hold.armIk.solver.target = hold.savedTarget;
+                        HandTargets.Set(hold.armIk, hold.savedTarget, HandOwner.Door);
                     if (hold.latch != null)
                         hold.latch.SetParent(null, worldPositionStays: true);
                 }

@@ -5,6 +5,7 @@ using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -937,7 +938,7 @@ namespace TarkovVR.Source.Weapons
                     handleHandPin = new GameObject("VRReloadHandleHandPin").transform;
                 handleHandPin.SetParent(handleView, worldPositionStays: false);
                 handleHandPin.SetPositionAndRotation(handLatch.position, handLatch.rotation);
-                armIk.solver.target = handleHandPin;
+                HandTargets.Set(armIk, handleHandPin, HandOwner.ChargingHandle);
                 handleHandArm = armIk;
                 handleHandPinned = true;
                 // Free the shared latch for the other hand where it is (the arm already aims at the pin)
@@ -955,7 +956,7 @@ namespace TarkovVR.Source.Weapons
                     return;
                 handleHandPinned = false;
                 if (handleHandArm != null && handleHandArm.solver.target == handleHandPin)
-                    handleHandArm.solver.target = HandRig(gunHand: true);
+                    HandTargets.Set(handleHandArm, HandRig(gunHand: true), HandOwner.ChargingHandle);
                 handleHandArm = null;
                 if (handleHandPin != null)
                     handleHandPin.SetParent(null, worldPositionStays: false);

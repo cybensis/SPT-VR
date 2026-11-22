@@ -11,6 +11,7 @@ using RootMotion.FinalIK;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Misc;
 using UnityEngine;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -518,7 +519,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!keyHold.easingBack)
                 keyHold.savedTarget = armIk.solver.target;
             keyHold.easingBack = false;
-            armIk.solver.target = keyHold.latch;
+            HandTargets.Set(armIk, keyHold.latch, HandOwner.DoorKey);
             keyHold.latchTime = Time.time;
             SetKeyState(keyHold, KeyState.Seated);
             PulseHand(keyHold.dominant, 0.35f, 0.03f, 140f, 0f);
@@ -659,7 +660,7 @@ namespace TarkovVR.Source.Player.Interactions
                     return;
                 // The two-handing edges and the equip paths also set the arm's target; it stays ours while the key is in.
                 if (keyHold.armIk.solver.target != keyHold.latch)
-                    keyHold.armIk.solver.target = keyHold.latch;
+                    HandTargets.Set(keyHold.armIk, keyHold.latch, HandOwner.DoorKey);
                 if (!SeatedLatchPose(keyHold, out Vector3 position, out Quaternion rotation))
                     return;
                 float ease = Mathf.SmoothStep(0f, 1f, (Time.time - keyHold.latchTime) / Mathf.Max(keyInsertTime, 0.001f));
@@ -724,7 +725,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static void EndKeyLatch(KeyHold keyHold)
         {
             if (keyHold.armIk != null && keyHold.latch != null && keyHold.armIk.solver.target == keyHold.latch)
-                keyHold.armIk.solver.target = keyHold.savedTarget;
+                HandTargets.Set(keyHold.armIk, keyHold.savedTarget, HandOwner.DoorKey);
             keyHold.easingBack = false;
             keyHold.savedTarget = null;
             keyHold.armIk = null;

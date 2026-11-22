@@ -2,6 +2,7 @@ using RootMotion.FinalIK;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -131,7 +132,7 @@ namespace TarkovVR.Source.Player.Interactions
             bool secondDominant = !heldInDominantHand;
             LimbIK arm = HandArmIk(secondDominant);
             if (arm != null && arm.solver != null && arm.solver.target != secondHandLatch)
-                arm.solver.target = secondHandLatch;
+                HandTargets.Set(arm, secondHandLatch, HandOwner.TwoHandedLoot);
             int marker = secondDominant ? 1 : 0;
             if (VRGlobals.player != null && VRGlobals.player._markers != null && VRGlobals.player._markers.Length > marker
                 && VRGlobals.player._markers[marker] != secondHandLatch)
@@ -160,7 +161,7 @@ namespace TarkovVR.Source.Player.Interactions
             Transform rig = HandRigTransform(secondDominant);
             LimbIK arm = HandArmIk(secondDominant);
             if (arm != null && arm.solver != null && (arm.solver.target == null || arm.solver.target == secondHandLatch))
-                arm.solver.target = rig;
+                HandTargets.Set(arm, rig, HandOwner.TwoHandedLoot);
             int marker = secondDominant ? 1 : 0;
             if (VRGlobals.player != null && VRGlobals.player._markers != null && VRGlobals.player._markers.Length > marker
                 && (VRGlobals.player._markers[marker] == null || VRGlobals.player._markers[marker] == secondHandLatch))

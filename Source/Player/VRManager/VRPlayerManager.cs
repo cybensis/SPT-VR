@@ -7,6 +7,7 @@ using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -169,14 +170,14 @@ namespace TarkovVR.Source.Player.VRManager
 
             if (VRGlobals.player.HandsIsEmpty)
             {
-                VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
+                HandTargets.Set(VRGlobals.ikManager.leftArmIk, LeftHand.transform, HandOwner.Rig);
                 VRGlobals.ikManager.leftArmIk.enabled = true;
-                VRGlobals.ikManager.rightArmIk.solver.target = RightHand.transform;
+                HandTargets.Set(VRGlobals.ikManager.rightArmIk, RightHand.transform, HandOwner.Rig);
                 VRGlobals.ikManager.rightArmIk.enabled = true;
             }
             else
             {
-                VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
+                HandTargets.Set(VRGlobals.ikManager.leftArmIk, LeftHand.transform, HandOwner.Rig);
                 VRGlobals.ikManager.leftArmIk.enabled = true;
             }
 
@@ -527,7 +528,7 @@ namespace TarkovVR.Source.Player.VRManager
                 // Only touch it when actually wrong, so the steady state has zero churn on the solver.
                 if (!rik.enabled || rik.solver.target != RightHand.transform)
                 {
-                    rik.solver.target = RightHand.transform;
+                    HandTargets.Set(rik, RightHand.transform, HandOwner.EmptyHands);
                     rik.enabled = true;
                 }
             }
@@ -807,7 +808,7 @@ namespace TarkovVR.Source.Player.VRManager
                 {
                     framesAfterSwitching = 0;
                     // Disable other left hand IK tracking
-                    VRGlobals.ikManager.leftArmIk.solver.target = null;
+                    HandTargets.Set(VRGlobals.ikManager.leftArmIk, null, HandOwner.SupportGrip);
                     VRGlobals.ikManager.leftArmIk.enabled = false;
                     // Set the left hand IK back to the original gun position
                     VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
@@ -873,13 +874,13 @@ namespace TarkovVR.Source.Player.VRManager
                 if (isWeapPistol && isSupporting && !isEnteringTwoHandedMode)
                 {
                     // Disable other left hand IK tracking
-                    VRGlobals.ikManager.leftArmIk.solver.target = null;
+                    HandTargets.Set(VRGlobals.ikManager.leftArmIk, null, HandOwner.SupportGrip);
                     VRGlobals.ikManager.leftArmIk.enabled = false;
                     isEnteringTwoHandedMode = true;
                 }
                 if (isWeapPistol && !isSupporting && isEnteringTwoHandedMode)
                 {
-                    VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
+                    HandTargets.Set(VRGlobals.ikManager.leftArmIk, LeftHand.transform, HandOwner.SupportGrip);
                     VRGlobals.ikManager.leftArmIk.enabled = true;
                     isEnteringTwoHandedMode = false;
                 }
@@ -888,7 +889,7 @@ namespace TarkovVR.Source.Player.VRManager
                     framesAfterSwitching = 0;
                     isEnteringTwoHandedMode = false;
                     VRGlobals.player._markers[0] = LeftHand.transform;
-                    VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
+                    HandTargets.Set(VRGlobals.ikManager.leftArmIk, LeftHand.transform, HandOwner.SupportGrip);
                     VRGlobals.ikManager.leftArmIk.enabled = true;
                     rawRightHand.transform.rotation = RightHand.transform.rotation;
                 }
@@ -990,7 +991,7 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 if (!leftHandInAnimation)
                 {
-                    VRGlobals.ikManager.leftArmIk.solver.target = null;
+                    HandTargets.Set(VRGlobals.ikManager.leftArmIk, null, HandOwner.TarkovAnimation);
                     VRGlobals.ikManager.leftArmIk.enabled = false;
                     VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
                     leftHandInAnimation = true;
@@ -1003,7 +1004,7 @@ namespace TarkovVR.Source.Player.VRManager
                     VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
                 else
                 {
-                    VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
+                    HandTargets.Set(VRGlobals.ikManager.leftArmIk, LeftHand.transform, HandOwner.SupportGrip);
                     VRGlobals.ikManager.leftArmIk.enabled = true;
                     VRGlobals.player._markers[0] = LeftHand.transform;
                 }
@@ -1167,7 +1168,7 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 if (VRGlobals.player != null)
                     VRGlobals.player._markers[0] = LeftHand.transform;
-                leftArmIk.solver.target = LeftHand.transform;
+                HandTargets.Set(leftArmIk, LeftHand.transform, HandOwner.SupportGrip);
                 leftArmIk.enabled = true;
                 isEnteringTwoHandedMode = false;
             }

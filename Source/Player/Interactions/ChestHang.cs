@@ -8,6 +8,7 @@ using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -528,7 +529,7 @@ namespace TarkovVR.Source.Player.Interactions
             else if (VRGlobals.ikManager != null && VRGlobals.ikManager.leftArmIk != null && VRGlobals.vrPlayer.LeftHand != null)
             {
                 // The left hand off the gun: a free hand on its own controller, as on any equip (GunInteractionController.OnEnable)
-                VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+                HandTargets.Set(VRGlobals.ikManager.leftArmIk, VRGlobals.vrPlayer.LeftHand.transform, HandOwner.Sling);
                 VRGlobals.ikManager.leftArmIk.enabled = true;
             }
             // Bound to the new gun hand's grip if it's closed (it is for a grab; a pistol's support hand with the toggle setting holds
@@ -658,7 +659,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             // The gun hand on the charging handle (VRReloadController's latch) keeps its own target
             if (arm.solver.target == null)
-                arm.solver.target = rightHand.transform;
+                HandTargets.Set(arm, rightHand.transform, HandOwner.Sling);
             if (!arm.enabled)
                 arm.enabled = true;
             Transform aim = arm.solver.target;
@@ -732,7 +733,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (VRGlobals.ikManager != null && VRGlobals.ikManager.rightArmIk != null)
             {
                 // Back to gun-held: the gun drives the right side directly (same as the equip path)
-                VRGlobals.ikManager.rightArmIk.solver.target = null;
+                HandTargets.Set(VRGlobals.ikManager.rightArmIk, null, HandOwner.Sling);
                 VRGlobals.ikManager.rightArmIk.enabled = false;
             }
             if (wasDetached)
@@ -872,7 +873,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             if (arm.enabled && arm.solver.target == rightHand.transform)
             {
-                arm.solver.target = null;
+                HandTargets.Set(arm, null, HandOwner.Sling);
                 arm.enabled = false;
                 if (debugLog)
                     Plugin.MyLog.LogInfo("[ChestHang] gave the gun arm back to the gun in hand");

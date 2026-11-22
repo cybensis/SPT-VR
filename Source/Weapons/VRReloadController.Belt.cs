@@ -8,6 +8,7 @@ using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -1723,7 +1724,7 @@ namespace TarkovVR.Source.Weapons
                 if (supportSpotTarget.parent != weaponBone)
                     supportSpotTarget.SetParent(weaponBone, worldPositionStays: false);
                 supportSpotTarget.SetPositionAndRotation(grip != null ? grip.position : markerPosition, grip != null ? grip.rotation : markerRotation);
-                leftArmIk.solver.target = supportSpotTarget;
+                HandTargets.Set(leftArmIk, supportSpotTarget, HandOwner.BeltSupportSpot);
                 supportSpotDriving = true;
                 if (supportSpotLogged != supportSpot)
                 {
@@ -1765,12 +1766,12 @@ namespace TarkovVR.Source.Weapons
                 bool supporting = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting;
                 if (supporting || VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.LeftHand == null)
                 {
-                    leftArmIk.solver.target = null;
+                    HandTargets.Set(leftArmIk, null, HandOwner.BeltSupportSpot);
                     return;
                 }
                 if (VRGlobals.player != null)
                     VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
-                leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+                HandTargets.Set(leftArmIk, VRGlobals.vrPlayer.LeftHand.transform, HandOwner.BeltSupportSpot);
                 leftArmIk.enabled = true;
             }
 

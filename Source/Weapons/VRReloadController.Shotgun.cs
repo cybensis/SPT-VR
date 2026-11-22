@@ -7,6 +7,7 @@ using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -1307,7 +1308,7 @@ namespace TarkovVR.Source.Weapons
                 if (pumpHandTarget.parent != frame)
                     pumpHandTarget.SetParent(frame, worldPositionStays: false);
                 pumpHandTarget.SetPositionAndRotation(markerPosition + markerRotation * palmInMarkerPosition, markerRotation * palmInMarkerRotation);
-                VRGlobals.ikManager.leftArmIk.solver.target = pumpHandTarget;
+                HandTargets.Set(VRGlobals.ikManager.leftArmIk, pumpHandTarget, HandOwner.ShotgunPump);
                 pumpHandDriving = true;
                 pumpHandWanted = true;
             }
@@ -1322,7 +1323,7 @@ namespace TarkovVR.Source.Weapons
                 if (leftArmIk == null || leftArmIk.solver.target != pumpHandTarget)
                     return;
                 bool supporting = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting;
-                leftArmIk.solver.target = supporting || VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.LeftHand == null ? null : VRGlobals.vrPlayer.LeftHand.transform;
+                HandTargets.Set(leftArmIk, supporting || VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.LeftHand == null ? null : VRGlobals.vrPlayer.LeftHand.transform, HandOwner.ShotgunPump);
             }
 
             private static bool EnsurePumpBones(FirearmController firearmController, ShotgunData data, Transform frame)

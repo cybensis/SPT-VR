@@ -6,6 +6,7 @@ using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using UnityEngine;
 using GrenadeHandsController = EFT.Player.GrenadeHandsController;
+using TarkovVR.Source.Player.Body;
 
 namespace TarkovVR.Source.Weapons
 {
@@ -585,13 +586,13 @@ namespace TarkovVR.Source.Weapons
             }
             latch.SetPositionAndRotation(position, rotation);
             if (!latchedOnRightArm && latchedArm != null && latchedArm.solver.target != latch)
-                latchedArm.solver.target = latch;
+                HandTargets.Set(latchedArm, latch, HandOwner.Grenade);
         }
 
         private static void Unlatch()
         {
             if (ringLatched && !latchedOnRightArm && latchedArm != null && latchedArm.solver.target == latch)
-                latchedArm.solver.target = latchedArmTargetBefore != null ? latchedArmTargetBefore : VRGlobals.vrPlayer?.LeftHand?.transform;
+                HandTargets.Set(latchedArm, latchedArmTargetBefore != null ? latchedArmTargetBefore : VRGlobals.vrPlayer?.LeftHand?.transform, HandOwner.Grenade);
             ringLatched = false;
             pushingIn = false;
             if (!pinInHand)

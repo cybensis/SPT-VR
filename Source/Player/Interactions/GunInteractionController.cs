@@ -10,6 +10,7 @@ using TarkovVR.Source.Weapons;
 using UnityEngine;
 using static HighLightMesh;
 using static TarkovVR.Source.Controls.InputHandlers;
+using TarkovVR.Source.Player.Body;
 
 
 public class GunInteractionController : MonoBehaviour
@@ -117,11 +118,11 @@ public class GunInteractionController : MonoBehaviour
             }
             else
             {
-                VRGlobals.ikManager.rightArmIk.solver.target = null;
+                HandTargets.Set(VRGlobals.ikManager.rightArmIk, null, HandOwner.Gun);
                 VRGlobals.ikManager.rightArmIk.enabled = false;
             }
             if (!VRGlobals.vrPlayer.isSupporting) {
-                VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+                HandTargets.Set(VRGlobals.ikManager.leftArmIk, VRGlobals.vrPlayer.LeftHand.transform, HandOwner.Gun);
                 VRGlobals.ikManager.leftArmIk.enabled = true;
             }
         }
