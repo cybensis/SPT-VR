@@ -418,10 +418,11 @@ namespace TarkovVR.Patches.Core.VR
 
             if (__instance.transform.parent.parent.GetComponent<IKManager>() == null) {
                 VRGlobals.ikManager = __instance.transform.parent.parent.gameObject.AddComponent<IKManager>();
-                if (ModSupport.InstalledMods.FIKAInstalled) {
-                    VRGlobals.ikManager.enabled = false;
+                // Off until the raid start screen (DisableLaser): never on in the hideout, where its body follow leaves the
+                // left arm short of the controller
+                VRGlobals.ikManager.enabled = false;
+                if (ModSupport.InstalledMods.FIKAInstalled)
                     VRGlobals.camRoot.transform.position = new Vector3(0, -999.8f, -0.5f);
-                }
                 // New rig: clear the wrist-twist binds so the collarbone blocks below capture them again from this rig's spawn rest pose.
                 // Only once per rig: this method runs again on every weapon equip (rightArmIk gets disabled) and must not reset them
                 // from a live pose.
