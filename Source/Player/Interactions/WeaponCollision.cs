@@ -49,7 +49,7 @@ namespace TarkovVR.Source.Player.Interactions
         // in the rig's frame so walking and turning don't count) against the hand's own shake, how deep the hand is in, and the substeps.
         // The drawn gun shaking more than the hand points at the contact solve; the same amount is the hand's own tremor carried along
         // the surface.
-        public static bool contactJitterLog = true;
+        public static bool contactJitterLog = false;
 
         public static int proxyLayerOverride = -1;         // force the proxy/sandbox layer if the automatic pick misbehaves
         // Solves on the gun's final pose of the frame (Player.IkProcess prefix, after LateGunPlacement) instead of in Update. The gun's

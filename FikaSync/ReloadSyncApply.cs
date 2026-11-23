@@ -93,7 +93,17 @@ namespace SptVrFikaSync
         public static void Store(VRReloadPacket packet)
         {
             Remote remote = RemoteOf(packet.NetId);
-            remote.packet = packet;
+            // Kept until LateUpdate draws it, so the arrays are copied into this player's own: FIKA reuses the packet's for the next
+            // reload packet, from any player
+            VRReloadPacket kept = packet;
+            kept.PropItems = PacketArrays.CopyInto(remote.packet.PropItems, packet.PropItems, packet.PropCount);
+            kept.PropPositions = PacketArrays.CopyInto(remote.packet.PropPositions, packet.PropPositions, packet.PropCount);
+            kept.PropRotations = PacketArrays.CopyInto(remote.packet.PropRotations, packet.PropRotations, packet.PropCount);
+            kept.PartPaths = PacketArrays.CopyInto(remote.packet.PartPaths, packet.PartPaths, packet.PartCount);
+            kept.PartPositions = PacketArrays.CopyInto(remote.packet.PartPositions, packet.PartPositions, packet.PartCount);
+            kept.PartRotations = PacketArrays.CopyInto(remote.packet.PartRotations, packet.PartRotations, packet.PartCount);
+            kept.PartShown = PacketArrays.CopyInto(remote.packet.PartShown, packet.PartShown, packet.PartCount);
+            remote.packet = kept;
             remote.hasPacket = true;
             remote.receivedAt = Time.time;
         }

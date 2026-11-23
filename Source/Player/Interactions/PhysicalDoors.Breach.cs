@@ -20,7 +20,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         [Tunable("Sling, stock & weight", TunableKind.Log, "A [Doors] line for each hard gun hit on a door that didn't breach, saying why: locked, already open, free to "
             + "swing, held, hit from the side it opens toward, glancing, too soft.")]
-        public static bool logGunHits = true;           // one line per hard gun hit on a door that didn't breach, with the reason
+        public static bool logGunHits = false;           // one line per hard gun hit on a door that didn't breach, with the reason
         private static float lastLockedHitTime = -10f;
         private static float lastHitLogTime = -10f;
 

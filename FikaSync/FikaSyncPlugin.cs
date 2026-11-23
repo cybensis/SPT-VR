@@ -27,7 +27,10 @@ namespace SptVrFikaSync
     // 2.4.6 (BoltRoundSync): no packet change. On an older host, shells loaded into or taken out of a break-action by hand stay where they
     // were, because the host plays Tarkov's chamber clip on its copy instead.
     // 2.4.7 (BoltRoundSync): no packet change. The same for a revolver's cylinder loaded or emptied by hand.
-    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.4.7")]
+    // 2.4.9 (HeadSyncApply, UpperBodySolver, ArmSyncApply): no packet change. On an older observer a VR player's body stands up to
+    // 45 deg off their look with their head, hands and gun drawn turned by that, the chest stays partly side-on, and the gun is drawn
+    // 15 cm further out than they hold it.
+    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.4.9")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
     // Soft dependency: ORBIT (a bot-AI mod) runs on the host/headless next to this module. When it is present, a dragged corpse's
     // loot waypoint is moved here, because SPT-VR.dll doesn't run on a headless. The dependency only makes sure ORBIT is in the

@@ -26,7 +26,7 @@ namespace TarkovVR.Source.Weapons
     {
         [Tunable("Belt-fed machine guns", TunableKind.Log, "Log lines for the cover, latch and belt: grabs, refusals (why the cover or box won't move), laid / out, "
             + "charged.")]
-        public static bool beltDebugLog = true;             // grabs, refusals, the belt's states
+        public static bool beltDebugLog = false;             // grabs, refusals, the belt's states
 
         private sealed class LmgData
         {

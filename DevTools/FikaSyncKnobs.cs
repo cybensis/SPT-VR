@@ -21,7 +21,13 @@ namespace SptVrDevTools
         internal static readonly Knob[] All =
         {
             new Knob { type = "TarkovVR.Source.Player.Body.UpperBodySolver", field = "twistShare", section = "Body", kind = TunableKind.Tune, unit = null,
-                description = "How much of the way a VR player's chest turns to where their head looks. Tarkov's rifle stance stands the body about 35° side-on; 1 = the chest squares up to the head (it takes its share after the hips have turned, rows below)." },
+                description = "With Square Chest on: how much of a VR player's glance (their head off the way their body faces) the chest turns too. Off: how much of the way the chest turns from Tarkov's side-on stance to where their head looks." },
+            new Knob { type = "TarkovVR.Source.Player.Body.UpperBodySolver", field = "squareChest", section = "Body", kind = TunableKind.Switch, unit = null,
+                description = "A VR player's chest faces the way their body faces (Tarkov's rifle stance turns it about 35° side-on), then turns part of a glance. Off = it only turns part of the way from that stance to their head." },
+            new Knob { type = "SptVrFikaSync.HeadSyncApply", field = "turnBodyWithLook", section = "Body", kind = TunableKind.Switch, unit = null,
+                description = "A VR player's body turns with their look, as on their own screen. Off = Tarkov's own rule: standing still the body stays up to 45° off their look, and their head, hands and gun are drawn turned with it." },
+            new Knob { type = "SptVrFikaSync.ArmSyncApply", field = "weaponForwardOffset", section = "Body", kind = TunableKind.Tune, unit = "m",
+                description = "Pushes a VR player's gun (and free off hand) this far forward along their body's facing. 0 = where they hold it." },
             new Knob { type = "TarkovVR.Source.Player.Body.UpperBodySolver", field = "maxTwist", section = "Body", kind = TunableKind.Tune, unit = "°",
                 description = "The most the spine twists the chest round, in all." },
             new Knob { type = "TarkovVR.Source.Player.Body.UpperBodySolver", field = "spineMaxTurn", section = "Body", kind = TunableKind.Tune, unit = "°",

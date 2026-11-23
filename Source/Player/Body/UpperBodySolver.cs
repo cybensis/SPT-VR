@@ -4,8 +4,8 @@ namespace TarkovVR.Source.Player.Body
 {
     // An upper body that follows a tracked head: for the local VR player (LocalUpperBody) and for other players' copy of a VR player
     // (SPT-VR-FikaSync's HeadSyncApply; this file is linked into it, so both use one copy of the maths). Starting from this frame's
-    // animated pose, the hips stay as animated or are squared to the body's facing when the caller asks. The chest turns part of the way
-    // toward the head's yaw and the neck takes a share of the head's turn relative to the chest. The spine bends (CCD, a weight and a
+    // animated pose, the hips stay as animated or are squared to the body's facing when the caller asks. The chest is squared to the
+    // body's facing and turns part of the way on toward the head's yaw, and the neck takes a share of the head's turn relative to the chest. The spine bends (CCD, a weight and a
     // limit per bone) to bring the head's pivot to the tracked head's, and the head turns to the tracked rotation. The face is the head
     // bone's rest-pose forward and up, not LootRaycastOrigin (that is the first-person camera point on the ribcage rig). The eyes sit
     // eyeForward / eyeUp off the head's pivot.
@@ -19,8 +19,11 @@ namespace TarkovVR.Source.Player.Body
         public static float spineMaxTurn = 20f;     // deg a spine bone may turn from its animated pose (twist and bend; 80 at most over 4 bones)
         public static float neckWeight = 0.3f;
         public static float neckMaxTurn = 30f;
-        public static float twistShare = 0.6f;      // share of the head's yaw (relative to the chest) that the chest turns
-        public static float maxTwist = 45f;         // deg, for the whole spine
+        // The chest squared to the body's facing (Tarkov's rifle stance turns it ~35 deg side-on), then turned by twistShare of the
+        // head's yaw off the body. false = twistShare of the head's yaw off the chest as animated (the stance's turn partly stays).
+        public static bool squareChest = true;
+        public static float twistShare = 0.6f;      // share of the head's yaw (relative to the body's facing, or the chest's) the chest turns
+        public static float maxTwist = 60f;         // deg, for the whole spine (spineMaxTurn per bone caps it too)
         public static float neckLookShare = 0.35f;  // share of the head's turn (relative to the chest) that the neck takes
         // The hips (and the legs under them) are squared to the body's facing when the caller allows it (Solve's hipWeight, used while
         // standing still: when walking, the legs go the way you walk). Tarkov's rifle stance stands side-on to the look direction; the
@@ -48,6 +51,7 @@ namespace TarkovVR.Source.Player.Body
             public string description;
             public float hipsOffBody;               // deg the animation had the hips off the body's facing, in the last solve that turned them
             public float hipsTurned;                // deg they were turned
+            public float chestOffBody;              // deg the chest was off the body's facing before its twist (after the hips), last solve
         }
 
         public static Rig Build(PlayerBones bones, Transform root)
@@ -169,12 +173,24 @@ namespace TarkovVR.Source.Player.Body
                 }
             }
 
-            // Turn the chest part of the way toward the head's yaw
+            // The chest squared to the body's facing and part of the way on toward the head's yaw (squareChest), or part of the way from
+            // its animated facing
             Vector3 chestFlat = Vector3.ProjectOnPlane(rig.chest.rotation * rig.chestForwardLocal, up);
-            if (lookFlat.sqrMagnitude > 1e-4f && chestFlat.sqrMagnitude > 1e-4f)
+            bool squared = squareChest && bodyFlat.sqrMagnitude > 1e-4f;
+            if ((squared || lookFlat.sqrMagnitude > 1e-4f) && chestFlat.sqrMagnitude > 1e-4f)
             {
-                float yaw = Vector3.SignedAngle(chestFlat, lookFlat, up);
-                float twist = Mathf.Clamp(yaw * twistShare, -maxTwist, maxTwist) * weight / spineCount;
+                float yaw;
+                if (squared)
+                {
+                    float lookOffBody = lookFlat.sqrMagnitude > 1e-4f ? Vector3.SignedAngle(bodyFlat, lookFlat, up) : 0f;
+                    yaw = Vector3.SignedAngle(chestFlat, bodyFlat, up) + lookOffBody * twistShare;
+                }
+                else
+                {
+                    yaw = Vector3.SignedAngle(chestFlat, lookFlat, up) * twistShare;
+                }
+                rig.chestOffBody = bodyFlat.sqrMagnitude > 1e-4f ? Vector3.SignedAngle(chestFlat, bodyFlat, up) : 0f;
+                float twist = Mathf.Clamp(yaw, -maxTwist, maxTwist) * weight / spineCount;
                 Quaternion twistTurn = Quaternion.AngleAxis(twist, up);
                 for (int i = 0; i < spineCount; i++)
                     rig.spine[i].rotation = twistTurn * rig.spine[i].rotation;

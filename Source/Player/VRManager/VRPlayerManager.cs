@@ -242,7 +242,8 @@ namespace TarkovVR.Source.Player.VRManager
                 gunControllerCacheFrame = Time.frameCount;
             }
 
-            Vector3 newLocalPos = initPos * -1 + headOffset;
+            ViewHeight.Sample(VRGlobals.player, VRGlobals.VRCam, headOffset);
+            Vector3 newLocalPos = initPos * -1 + ViewHeight.HeadOffset(headOffset);
             newLocalPos.y -= crouchHeightDiff;
 
             // Written every frame: a gate on small changes would apply the body follow's slow initPos compensation in visible steps

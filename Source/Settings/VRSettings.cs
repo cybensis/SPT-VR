@@ -179,7 +179,7 @@ namespace TarkovVR.Source.Settings
                 gunGripToggle = false;
                 physicalDoors = true;
                 disableDoorContextMenu = false;
-                manualReload = false;
+                manualReload = true;
                 opticRenderResolution = 1024;
                 viveWandCrouchTrackpadThreshold = 0.7f;
                 viveWandVaultHoldTime = 0.3f;

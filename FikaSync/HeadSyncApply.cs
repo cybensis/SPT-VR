@@ -27,6 +27,12 @@ namespace SptVrFikaSync
         public static float hipStillSpeed = 0.3f;
         public static float hipMovingSpeed = 1.0f;
         public static float hipBlendTime = 0.3f;
+        // A VR player's body turns with their look as it does on their own screen (SPT-VR sets the local player's trunk limit to 0).
+        // Tarkov gives the other players a 45 deg limit (EFTHardSettings.HANDS_TO_BODY_MAX_ANGLE): standing still their body stays up to
+        // 45 deg off their look, and every pose they send in their body's frame (head, hands, gun) was drawn turned by that much.
+        public static bool turnBodyWithLook = true;
+
+        private static readonly HashSet<int> trunkFreed = new HashSet<int>();
 
         private sealed class Remote
         {
@@ -48,7 +54,26 @@ namespace SptVrFikaSync
         private static readonly Dictionary<int, Remote> remotes = new Dictionary<int, Remote>();
         private static bool loggedError;
 
-        public static void ResetState() => remotes.Clear();
+        public static void ResetState()
+        {
+            remotes.Clear();
+            trunkFreed.Clear();
+        }
+
+        // Player.TrunkRotationLimit: the body turns once the look is this far off it, only by the excess (MovementState.ProcessRotation).
+        // Set every frame: Tarkov's prone transitions write it too.
+        private static void TurnBodyWithLook(ObservedPlayer player)
+        {
+            if (turnBodyWithLook)
+            {
+                player.TrunkRotationLimit = 0f;
+                trunkFreed.Add(player.NetId);
+            }
+            else if (trunkFreed.Remove(player.NetId))
+            {
+                player.TrunkRotationLimit = EFTHardSettings.Instance.HANDS_TO_BODY_MAX_ANGLE;
+            }
+        }
 
         // A player that sends its headset pose is a VR player.
         internal static bool IsVrPlayer(int netId) => remotes.ContainsKey(netId);
@@ -73,7 +98,12 @@ namespace SptVrFikaSync
         {
             try
             {
-                if (__instance.IsAI || !FikaVrSync.enableHeadSync || !remotes.TryGetValue(__instance.NetId, out Remote remote))
+                if (__instance.IsAI)
+                    return;
+                bool vrPlayer = remotes.ContainsKey(__instance.NetId) || ArmSyncApply.IsVrPlayer(__instance.NetId);
+                if (vrPlayer)
+                    TurnBodyWithLook(__instance);
+                if (!FikaVrSync.enableHeadSync || !remotes.TryGetValue(__instance.NetId, out Remote remote))
                     return;
                 Transform root = __instance.Transform != null ? __instance.Transform.Original : null;
                 if (root == null || __instance.PlayerBones == null)
@@ -119,7 +149,8 @@ namespace SptVrFikaSync
                 if (logRig && !remote.loggedHips && remote.rig.valid && remote.weight >= 1f && remote.hipWeight >= 1f)
                 {
                     remote.loggedHips = true;
-                    FikaSyncPlugin.Log?.LogInfo($"[HeadSync] {__instance.Profile?.Nickname}: hips squared to their body standing: the animation had them {remote.rig.hipsOffBody:F0} deg off it, turned {remote.rig.hipsTurned:F0}");
+                    FikaSyncPlugin.Log?.LogInfo($"[HeadSync] {__instance.Profile?.Nickname}: hips squared to their body standing: the animation had them {remote.rig.hipsOffBody:F0} deg off it, turned {remote.rig.hipsTurned:F0}; "
+                        + $"the chest then {remote.rig.chestOffBody:F0} deg off it (squareChest {UpperBodySolver.squareChest}); body {Mathf.DeltaAngle(root.eulerAngles.y, __instance.MovementContext.Yaw):F0} deg off their look");
                 }
             }
             catch (Exception e)

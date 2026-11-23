@@ -30,10 +30,10 @@ namespace SptVrFikaSync
         public static float smoothRate = 18f;
         public static float staleTimeout = 0.4f;          // stop driving arms if no packet for this long
         public static bool debugWeaponSync = false;       // log the weapon-root / marker hierarchy once
-        // Cosmetic forward nudge (metres) of the observed weapon pose, along the observed body's facing flattened to horizontal.
-        // The sender's gun is body-anchored close to the chest and can look shoved into the torso on an observer. The grip markers
-        // ride the gun, so the welded hands and arms follow. Observer-side only (doesn't touch hitreg or aim). 0 = off.
-        public static float weaponForwardOffset = 0.15f;
+        // Forward nudge (metres) of the observed weapon pose along the observed body's facing, flattened to horizontal; the free off
+        // hand gets it too. Observer-side only (doesn't touch hitreg or aim). 0 = where the VR player holds it: the pose comes in the
+        // body's frame and the body is kept under their head.
+        public static float weaponForwardOffset = 0f;
         // Fraction to push the gun out along the right shoulder->gun line toward the arm's full length. This straightens the held
         // arm at any aim (weaponForwardOffset only helps when aiming roughly forward). A gun already at full reach is left alone.
         // The observed shoulder sits at the anatomical spot, not head-tracked like the local rig, so the same gun pose looks

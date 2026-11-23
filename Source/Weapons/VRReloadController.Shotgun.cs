@@ -298,7 +298,7 @@ namespace TarkovVR.Source.Weapons
                 + "rack the bolt handle. Off: it goes straight into the chamber.")]
             public static bool semiShellWaitsForHandle = true;
             [Tunable("Shotguns", TunableKind.Log, "Log lines for shells (taken, onto a path, in), pump strokes, the gun's clip family and its sound names.")]
-            public static bool shotgunDebugLog = true;          // grabs, paths, strokes
+            public static bool shotgunDebugLog = false;          // grabs, paths, strokes
             public static bool ShellInOffHand => HoldingShell && !roundInGunHand;
             public static bool InsertingShell => HoldingShell && shellPath != null;
             public static bool PumpHeld { get; private set; }

@@ -173,7 +173,7 @@ namespace TarkovVR.Source.Player.Interactions
         [Tunable("Loot & hands", TunableKind.Log, "A line per grip on a body that didn't take: what the hand was doing (holster zone, gun grip...), or (grip "
             + "mode) a press too long / moved for a tap. Also an [Interact] line per trigger on a body / container / door "
             + "that didn't take, with what that hand had.")]
-        public static bool logBodyGrips = true;
+        public static bool logBodyGrips = false;
 
         // The hand the body interaction belongs to (one at a time): false = the off hand, true = the dominant one
         private bool bodyGrabDominant;

@@ -12,3 +12,18 @@ obj/
 /libs/Managed/Assembly-CSharp.dll
 /CLAUDE.md
 /.gitignore
+# Game files and other people's mods: copied in from an SPT install (README, Building from source)
+/libs backup/
+/libs/old csharp 4.0 backup/
+/libs/ModSupport/
+/libs/Aki.Reflection.dll
+/libs/Managed/*
+!/libs/Managed/SteamVR.dll
+!/libs/Managed/SteamVR_Actions.dll
+!/libs/Managed/Unity.XR.Management.dll
+!/libs/Managed/Unity.XR.OpenVR.dll
+!/libs/Managed/Unity.XR.OpenXR.dll
+# Local only: dev probes and generator output
+/native/
+/Tools/gen_reload_holds/out/
+__pycache__/

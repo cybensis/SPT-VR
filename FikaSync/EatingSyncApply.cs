@@ -86,7 +86,10 @@ namespace SptVrFikaSync
             s.active = true;
             s.recvTime = Time.time;
             s.lPos = p.LeftPos; s.lRot = p.LeftRot; s.rPos = p.RightPos; s.rRot = p.RightRot;
-            s.animLayerCount = p.AnimLayerCount; s.animHashes = p.AnimHashes; s.animTimes = p.AnimTimes;
+            // Copied: FIKA reuses the packet's arrays for the next eating packet, from any player
+            s.animLayerCount = p.AnimLayerCount;
+            s.animHashes = PacketArrays.CopyInto(s.animHashes, p.AnimHashes, p.AnimLayerCount);
+            s.animTimes = PacketArrays.CopyInto(s.animTimes, p.AnimTimes, p.AnimLayerCount);
             s.latest.Clear();
             int n = p.PropCount;
             for (int i = 0; i < n; i++)

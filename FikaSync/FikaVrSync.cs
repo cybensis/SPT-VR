@@ -505,6 +505,9 @@ namespace SptVrFikaSync
 
         // Broadcast the dragged corpse's full ragdoll pose (every bone). GetTransformSync() returns fresh world bone
         // transforms (the TransformSyncs property caches).
+        private static Vector3[] _bodySendPos;
+        private static Quaternion[] _bodySendRot;
+
         public static void SendDraggedBody(int corpseNetId, Corpse corpse)
         {
             if (!enableBodyDragSync || corpse == null)
@@ -516,8 +519,9 @@ namespace SptVrFikaSync
             p.CorpseId = corpseNetId;
             p.Released = false;
             p.BoneCount = (byte)syncs.Length;
-            p.Positions = new Vector3[syncs.Length];
-            p.Rotations = new Quaternion[syncs.Length];
+            // Reused: SendData writes the packet out before it returns
+            p.Positions = _bodySendPos = PacketArrays.Sized(_bodySendPos, syncs.Length);
+            p.Rotations = _bodySendRot = PacketArrays.Sized(_bodySendRot, syncs.Length);
             for (int i = 0; i < syncs.Length; i++)
             {
                 p.Positions[i] = syncs[i].Position;
@@ -663,6 +667,9 @@ namespace SptVrFikaSync
 
         // Reads each ragdoll bone's current world pose, plus the point to move the player to: the body's centroid in XZ at the
         // lowest bone's Y (about where it touches the ground, so teleporting the root there keeps them grounded).
+        private static Vector3[] _ragdollReadPos;
+        private static Quaternion[] _ragdollReadRot;
+
         private static bool ReadRagdollWorld(CorpseRagdoll ragdoll, out Vector3[] pos, out Quaternion[] rot, out Vector3 root)
         {
             pos = null; rot = null; root = Vector3.zero;
@@ -670,8 +677,9 @@ namespace SptVrFikaSync
             if (bones == null || bones.Length == 0 || bones.Length > 255)
                 return false;
             int n = bones.Length;
-            pos = new Vector3[n];
-            rot = new Quaternion[n];
+            // Reused: both callers send (or drop) them before returning
+            pos = _ragdollReadPos = PacketArrays.Sized(_ragdollReadPos, n);
+            rot = _ragdollReadRot = PacketArrays.Sized(_ragdollReadRot, n);
             Vector3 sum = Vector3.zero;
             float minY = float.MaxValue;
             int valid = 0;

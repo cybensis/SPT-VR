@@ -3,6 +3,25 @@ using UnityEngine;
 
 namespace SptVrFikaSync
 {
+    // FIKA's RegisterPacket deserializes every packet of a type into ONE kept instance, so a Deserialize reuses its arrays while
+    // the count stays the same. A receiver that keeps a packet's data past its handler copies the arrays (the next packet,
+    // from any player, overwrites them). The wire format is unchanged.
+    internal static class PacketArrays
+    {
+        public static T[] Sized<T>(T[] array, int count) => array != null && array.Length == count ? array : new T[count];
+
+        // Copies the first count entries into own (resized to count), for a receiver that keeps them
+        public static T[] CopyInto<T>(T[] own, T[] source, int count)
+        {
+            if (source == null)
+                return own;
+            count = System.Math.Min(count, source.Length);
+            own = Sized(own, count);
+            System.Array.Copy(source, own, count);
+            return own;
+        }
+    }
+
     // One VR player's two hand poses in their own body frame (Player.Transform), keyed by NetId. Internal: the VR mod
     // never uses the packet type, it calls FikaVrSync.SendArmPose(...) with the values.
     internal struct VRArmsPacket : INetSerializable
@@ -214,14 +233,14 @@ namespace SptVrFikaSync
             LeftPos = reader.GetUnmanaged<Vector3>();   LeftRot = reader.GetUnmanaged<Quaternion>();
             RightPos = reader.GetUnmanaged<Vector3>();  RightRot = reader.GetUnmanaged<Quaternion>();
             AnimLayerCount = reader.GetByte();
-            AnimHashes = new int[AnimLayerCount];
-            AnimTimes = new float[AnimLayerCount];
+            AnimHashes = PacketArrays.Sized(AnimHashes, AnimLayerCount);
+            AnimTimes = PacketArrays.Sized(AnimTimes, AnimLayerCount);
             for (int i = 0; i < AnimLayerCount; i++) { AnimHashes[i] = reader.GetInt(); AnimTimes[i] = reader.GetFloat(); }
             PropCount = reader.GetByte();
-            NameHashes = new int[PropCount];
-            Positions = new Vector3[PropCount];
-            Rotations = new Quaternion[PropCount];
-            Visible = new bool[PropCount];
+            NameHashes = PacketArrays.Sized(NameHashes, PropCount);
+            Positions = PacketArrays.Sized(Positions, PropCount);
+            Rotations = PacketArrays.Sized(Rotations, PropCount);
+            Visible = PacketArrays.Sized(Visible, PropCount);
             for (int i = 0; i < PropCount; i++)
             {
                 NameHashes[i] = reader.GetInt();
@@ -329,9 +348,9 @@ namespace SptVrFikaSync
             LeftPos = reader.GetUnmanaged<Vector3>();   LeftRot = reader.GetUnmanaged<Quaternion>();
             RightPos = reader.GetUnmanaged<Vector3>();  RightRot = reader.GetUnmanaged<Quaternion>();
             PropCount = reader.GetByte();
-            PropItems = new int[PropCount];
-            PropPositions = new Vector3[PropCount];
-            PropRotations = new Quaternion[PropCount];
+            PropItems = PacketArrays.Sized(PropItems, PropCount);
+            PropPositions = PacketArrays.Sized(PropPositions, PropCount);
+            PropRotations = PacketArrays.Sized(PropRotations, PropCount);
             for (int i = 0; i < PropCount; i++)
             {
                 PropItems[i] = reader.GetInt();
@@ -339,10 +358,10 @@ namespace SptVrFikaSync
                 PropRotations[i] = reader.GetUnmanaged<Quaternion>();
             }
             PartCount = reader.GetByte();
-            PartPaths = new int[PartCount];
-            PartPositions = new Vector3[PartCount];
-            PartRotations = new Quaternion[PartCount];
-            PartShown = new bool[PartCount];
+            PartPaths = PacketArrays.Sized(PartPaths, PartCount);
+            PartPositions = PacketArrays.Sized(PartPositions, PartCount);
+            PartRotations = PacketArrays.Sized(PartRotations, PartCount);
+            PartShown = PacketArrays.Sized(PartShown, PartCount);
             for (int i = 0; i < PartCount; i++)
             {
                 PartPaths[i] = reader.GetInt();
@@ -405,8 +424,8 @@ namespace SptVrFikaSync
             if (Released)
                 return;
             BoneCount = reader.GetByte();
-            Positions = new Vector3[BoneCount];
-            Rotations = new Quaternion[BoneCount];
+            Positions = PacketArrays.Sized(Positions, BoneCount);
+            Rotations = PacketArrays.Sized(Rotations, BoneCount);
             for (int i = 0; i < BoneCount; i++)
             {
                 Positions[i] = reader.GetUnmanaged<Vector3>();
@@ -451,8 +470,8 @@ namespace SptVrFikaSync
             Released = reader.GetBool();
             RootPos = reader.GetUnmanaged<Vector3>();
             BoneCount = reader.GetByte();
-            Positions = new Vector3[BoneCount];
-            Rotations = new Quaternion[BoneCount];
+            Positions = PacketArrays.Sized(Positions, BoneCount);
+            Rotations = PacketArrays.Sized(Rotations, BoneCount);
             for (int i = 0; i < BoneCount; i++)
             {
                 Positions[i] = reader.GetUnmanaged<Vector3>();

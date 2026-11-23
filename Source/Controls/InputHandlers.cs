@@ -228,6 +228,7 @@ namespace TarkovVR.Source.Controls
                     if (timeHeld > HEIGH_RESET_TIME_THRESHOLD)
                     {
                         VRGlobals.vrPlayer.initPos = VRGlobals.VRCam.transform.localPosition;
+                        TarkovVR.Source.Player.VRManager.ViewHeight.Remeasure();
                         TarkovVR.Source.Player.VR.ArmLength.TryMeasure();
                         heightReset = true;
                     }

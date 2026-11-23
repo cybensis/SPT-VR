@@ -333,7 +333,7 @@ namespace TarkovVR.Source.Weapons
         public static class BreakAction
         {
             public static bool breakActions = true;             // false = Tarkov's own break-action reloads only
-            public static bool breakDebugLog = true;            // unlatch, holds, cases, shells
+            public static bool breakDebugLog = false;            // unlatch, holds, cases, shells
             public static float barrelOpenEnough = 0.6f;        // share of the hinge's travel open before the chambers can be reached
             public static float foreEndGrabRadius = 0.1f;       // m from the palm to where the fore-end is taken
             public static float caseGrabRadius = 0.045f;        // m from the palm to a chamber's mouth that takes its shell

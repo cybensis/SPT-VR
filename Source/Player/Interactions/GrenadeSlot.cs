@@ -52,7 +52,7 @@ namespace TarkovVR.Source.Player.Interactions
             + "slot waits before another grab.", Unit = "s")]
         public static float refusedTakeHold = 2f;       // co-op client: s the slot waits after the host refused a take
         [Tunable("Grenades", TunableKind.Log, "A line per pick, grab, skipped draw and slot move.")]
-        public static bool debugLog = true;         // one line per grab / pick / placement
+        public static bool debugLog = false;         // one line per grab / pick / placement
 
         private sealed class Hand
         {

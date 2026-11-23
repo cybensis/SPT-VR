@@ -51,7 +51,7 @@ namespace TarkovVR.Source.Controls
         public static float pulseFrequency = 90f;
         [Tunable("Moving", TunableKind.Log, "A line per start and stop, and per near miss while walking or running, with its numbers. On for the first "
             + "tuning round.", Suggested = false)]
-        public static bool debugLog = true;         // logs a line per start / stop and per near miss while walking or running
+        public static bool debugLog = false;         // logs a line per start / stop and per near miss while walking or running
 
         private const int Capacity = 256;
         private static readonly float[] sampleTime = new float[Capacity];

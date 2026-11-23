@@ -1,203 +1,124 @@
- SPT-VR (Single Player Tarkov VR Mod) 
-======================================
+# SPT-VR
 
-**SPT-VR** brings the immersive, intense experience of Tarkov into the realm of virtual reality. Engage in intense firefights, loot dangerous environments, and survive the unforgiving world of Tarkov—all in full VR.
+**SPT-VR** puts Single Player Tarkov in virtual reality. You play with your hands: you hold the gun, reload it by hand, open doors by their handles, pull grenade pins, take guns off your body, loot with your hands and eat by bringing food to your mouth.
 
-[![giphy.gif](https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExZDQxZHN4NTU4ZTd2bHA4czRmbjlsemNhNjBkNHY4aWoxdTR5aHlsbyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/vybnEvzrYKyDTXAITB/giphy.gif)](https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExZDQxZHN4NTU4ZTd2bHA4czRmbjlsemNhNjBkNHY4aWoxdTR5aHlsbyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/vybnEvzrYKyDTXAITB/giphy.gif)
+[![SPT-VR gameplay](https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExZDQxZHN4NTU4ZTd2bHA4czRmbjlsemNhNjBkNHY4aWoxdTR5aHlsbyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/vybnEvzrYKyDTXAITB/giphy.gif)](https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExZDQxZHN4NTU4ZTd2bHA4czRmbjlsemNhNjBkNHY4aWoxdTR5aHlsbyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/vybnEvzrYKyDTXAITB/giphy.gif)
 
- Table of Contents 
--------------------
+## Contents
 
-1. [Setup](#setup)
-2. [Controls](#controls)
-3. [FPS/Graphics Guide](#fpsgraphics-guide)
-4. [FAQ](#faq)
-5. [Contributions](#contributions)
-6. [Development Environment Setup](#development-environment-setup)
-7. [Get in contact](#get-in-contact)
- 
- Setup 
--------
+1. [Features](#features)
+2. [Requirements](#requirements)
+3. [Installing](#installing)
+4. [Controls](#controls)
+5. [Settings](#settings)
+6. [Performance](#performance)
+7. [FAQ](#faq)
+8. [Building from source](#building-from-source)
+9. [Credits and contact](#credits-and-contact)
 
-###  Prerequisites 
+## Features
 
-- **Single Player Tarkov (SPT) Installation**: Make sure you have a working copy of SPT installed.
-- **SteamVR**: The mod requires SteamVR to support VR hardware.
- 
-###  Installation Steps 
+- **Reloading by hand** for every kind of gun: magazines, charging handles, bolt-actions, pump and semi-auto shotguns, break-actions, revolvers, belt-fed machine guns and grenade launchers. Jams are cleared by hand too.
+- **Guns on your body.** Let go of your gun and it hangs across your chest. Your second gun sits behind your shoulder and your pistol on your hip, ready to grab. You can move each spot by hand.
+- **Physical guns.** Your gun bumps into walls instead of passing through them and breaks windows. Weapon weight, aim steadying and shouldering a stocked gun all change how it handles.
+- **Grenades** sit on your chest. Pull the ring with your other hand and throw.
+- **Doors by hand.** Turn the handle and swing the door, unlock it with your key, or breach it with your gun.
+- **Looting with your hands.** Point your palm at items to grab them, put them away over your shoulder, reach into containers and drag bodies.
+- **Eating and drinking by hand.** Open the can, bottle or wrapper and bring it to your mouth.
+- **Mounted guns** are operated by their handles.
+- **Your body follows you.** Your upper body turns with your head, you crouch and lean with your own body, and on Valve Index your fingers are tracked.
+- **Either hand can hold a gun.**
+- **FIKA co-op.** Other players see your real head, arms and hands (see the [FAQ](#faq)).
+- **Performance options** for VR: foveated rendering, scope render resolution, upscaler support and more.
 
-1. **Ensure SPT is up to date**: Make sure you have the latest version of SPT installed on your system.
-2. **Download the latest release**: On the right side of this page (if on GitHub), download the latest release from the "Releases" section.
-3. **Navigate to SPT's root directory**: This should contain the SPT.Launcher, SPT.Server files, and the BepInEx folder.
-4. **Extract the downloaded files**: Merge the folders from the release with the folders in the SPT installation.
-5. **Launch SteamVR**: Ensure that SteamVR is running and your headset is connected before launching the game.
-6. **Launch the game through the SPT Launcher**.
- 
-###  Uninstalling 
+## Requirements
 
-To uninstall the mod, go to your SPT installation and remove the BepInEx/plugins/sptvr/SPT-VR.dll file, which will stop the game from launching in VR. To reinstall it, simply drag the .dll file back into the directory.
+- **SPT 4.1** (built and tested on SPT 4.1.6, Tarkov 0.16.9).
+- **A PC VR headset running through SteamVR.** The mod starts VR through OpenXR and falls back to OpenVR on its own if OpenXR can't start.
+- **A high-end PC.** This is a very heavy mod and will not run well on mid-range hardware. Recommended minimums:
 
- Controls 
-----------
+| | Minimum |
+|---|---|
+| GPU (Nvidia) | RTX 30 series or newer with 16 GB of VRAM or more |
+| GPU (AMD) | RX 7000 series (RDNA 3 / 4) or newer with 16 GB of VRAM or more |
+| CPU | An AMD X3D chip (5800X3D, 7800X3D, 9800X3D or similar) |
+| RAM | 32 GB with a separate headless FIKA PC, more if you host yourself |
+| Drive | SSD, ideally NVMe |
 
-###  Movement 
+You may get by with a little less, but this is what it takes for a playable experience.
 
-- **Walking:** Left joystick.
-- **Look around:** Right joystick.
-- **Sprint:** Click the right joystick.
-- **Jump:** Push the right joystick up.
-- **Vault:** Hold the right joystick up at a ledge.
-- **Crouch:** Pull down on the right joystick, physically crouch, or do both.
-- **Prone:** Fully crouch, release the joystick, then pull down again.
- 
-###  Weapon Controls 
+## Installing
 
-- **Fire:** Right trigger.
-- **Two-hand weapon:** Support the gun with the left grip when it vibrates (toggle option available).
-- **Aim:** Looking down the sights automatically increases accuracy.
-- **Steady aim:** Hold the left trigger to hold your breath.
-- **Weapon interaction mode:** Hold the right grip when not aiming to interact with the weapon: 
-    - Check Magazine
-    - Reload
-    - Inspect Weapon
-    - Fix Malfunction
-    - Toggle Firemode
-    - Fold Stock (not implemented yet)
-- **Reload:** Press **B** or use the interaction mode.
-- **Toggle Firemode:** Press **A** or use the interaction mode when two-handing.
-- **Change red dot/holo mode:** Press the left grip when your hand vibrates near the sight.
-- **Change optic zoom:** Pull the right joystick or rotate the left hand near the scope.
-- **Grenades:** Select from the quick slot radial menu, then hold the right trigger to pull the pin, trigger will act as grip, do throwing motion and let go of trigger to throw. Press left trigger while pin is pulled to reset pin and cancel throw
-- **Toggle Tactical Device:** While holding secondary grip, press B on secondary controller, long press B to toggle other modes
-- **Under Barrel Grenade Launcher:** While holding gun with other hand, hold secondary controller trigger and press A
- 
-###  In-Game Interactions 
+1. Make sure SPT 4.1 is installed and up to date.
+2. Download the latest SPT-VR release zip.
+3. Open the zip and copy its **BepInEx** folder into your SPT folder (the one with `EscapeFromTarkov.exe` and `SPT.Launcher`), merging it with the BepInEx folder already there.
+4. **Playing with FIKA:** also copy the **BepInEx** folder from inside `FIKASync (NEEDED ONLY FOR FIKA)` into your SPT folder. Every computer in the group needs it, including a headless client. Players in your group who don't play in VR install only this folder, not step 3's. Without FIKA, leave this folder out.
+5. Start SteamVR with your headset connected.
+6. Start the game through the SPT Launcher.
 
-- **Swap Weapon:**
-    1. For a pistol, bring your right hand to your hip and press the right grip.
-    2. For primary weapons, bring your right hand to your shoulder and press the right grip.
-    3. Use the radial menu by holding the right grip at your shoulder.
-- **Quick Slot Items:** Open the radial menu by putting your hand in backpack (over non-dominant shoulder) and press and hold grip, bring into view while keeping grip held, select item with thumbstick and let go of grip
-- **Interacting with doors/containers/bodies/loose loot/etc:**
-    1. Through a menu by looking at the object, which will bring up the menu where you're looking, then using the right joystick you can navigate it and use the **A** button to select an option.
-    2. Bring your left hand up to the object and press the left grip to perform the primary operation, or with loose loot you can hold the left grip to pick it up and bring it over your left shoulder and release to place it in your inventory if there is room.
-- **Toggle head visor/night vision:** These can be toggled by bringing the left hand up to your head and pressing the left grip.
-- **Toggle Head light:** Left hand by head and press trigger instead of grip
-- **Drop Backpack:** Put left hand in backpack collider (over non-dominant shoulder) and press trigger
- 
-###  Menus & Menu Interactions 
+Everything installs inside the BepInEx folder. None of the game's own files are replaced. On start, the mod adds a few VR files to `EscapeFromTarkov_Data`, which Unity needs to find there.
 
-- **Select:** To interact with menu items, buttons, etc, press the **A** button while hovering over it with your laser pointer.
-- **Open Inventory:** Press **X** while in a raid.
-- **Open Menu:** Press **Y** while in a raid.
-- **Dragging Items:** Hold the right trigger to move items.
-- **Opening Item Sub-Menu:** While hovering over an item, hold down the **A** button to bring up a dropdown menu for that item.
-- **Opening Item Display Window:** Double tap **A** while hovering over an item to open the item display window.
-- **Quick Equip:** While holding the left grip, pressing the **A** button on an item will automatically equip it to its respective slot.
-- **Quick Transfer Item:** While holding the right grip, pressing the **A** button on an item will automatically transfer it in or out of your inventory.
- 
-###  Configuring your experience 
+**Uninstalling:** delete `BepInEx/plugins/sptvr` and `BepInEx/patchers/SPT-VR-Preloader.dll`. To remove every trace, also delete `UnityOpenXR` and `XRSDKOpenVR` from `EscapeFromTarkov_Data/UnitySubsystems`, and `EscapeFromTarkov_Data/StreamingAssets/SteamVR`.
 
-If you go into the Tarkov settings menu, you will see a VR tab, which allows you to modify some of the VR-specific settings.
+## Controls
 
-Performance Guide!
+The full controls guide comes with the mod. Open **`BepInEx/plugins/sptvr/SPT-VR-Controls.html`** in your SPT folder with any web browser. It is also in this repository at [Docs/SPT-VR-Controls.html](Docs/SPT-VR-Controls.html): download it and open it in a browser.
 
-For reference my specs -
+It shows what every button does in each situation (on the move, holding a gun, hands free, grenades, menus), the places on your body you reach for, how the hand interactions work (doors, keys, loot, bodies, mounted guns, eating) and the settings that change the controls.
 
-AMD 9070 XT
+## Settings
 
-32GB of ram
+In the game's settings there is a **VR** tab. A dropdown at the top picks the category:
 
-Ryzen 5 7600x
+- **Movement:** how the stick moves you, smooth or snap turning, swapping the sticks, step-to-sprint, seated mode.
+- **Weapons:** weapon weight, aim steadying, shouldering, the chest sling, toggling the gun grip, manual reloading, resetting your gun spots.
+- **Hands & Body:** which hand points the laser in menus, hand angles, hiding your arms or legs.
+- **Interaction:** physical doors, context menus on doors and bodies, manual eating, the in-game VR keyboard.
+- **Graphics:** scope render resolution, shadows, foveated rendering, LOD bias, clutter draw distance, fog.
+- **Desktop View:** what the game window on your monitor shows.
 
-NVME SSD
+Many settings explain themselves when you point the laser at them.
 
-1. Install VRAMCleaner - [VRAM Cleaner](https://hub.sp-tarkov.com/files/file/2876-vram-cleaner/)
-2. Set all graphics settings to lowest/off except textures, shadows, anisotropic, and LOD/visibility (set those to whatever you want) AA should always be set to off or FXAA, nothing else works (set texture to medium or low if you have 10GB VRAM or less)
-3. Check boxes on graphics settings at bottom, Grass shadows, high quality color, and streets low quality textures. Everything else unchecked, volumetric lighting is your preference. Another checkbox I suggest using if you are 10GB or less VRAM is Mip Streaming. This free's up A LOT of VRAM and can help a lot with performance on lower VRAM cards
-4. ***Use an upscaler - Nvidia DLSS - AMD FSR3***
-5. In SteamVR settings, go into your tarkov video settings and set the resolution in there to 100-150%. This is one of the things that hurts performance the most, the lower the better. You need a lot of VRAM if you want to run this at a high resolution (keep in mind if you're using an upscaler, this setting plays together with that)
-6. Learn how to use a headless Fika client, I don't recommend running headless through your own PC but it can help performance, just make sure you have AT LEAST 64GB of ram. In reality, you should run a headless client on a separate PC on your network that has at least 32GB of ram and a decent CPU
-7. Install a bot spawner mod such as MOAR or ABPS, these are also big helps to performance because the main killer of performance in SPT is the AI. These mods are much better at managing spawns.
-8. Last thing I'd suggest which may not apply for many people, I disable my 4k monitor whenever I play which seems to help a bit.
+## Performance
 
-**IMPORTANT**: This mod is a *very* heavy mod, it will not run on a low-end or mid-grade PC. This requires a very high-end PC. 
+What has worked best on an RX 9070 XT, Ryzen 5 7600X, 32 GB of RAM and an NVMe drive:
 
-Minimum GPU Nvidia - Any 30 series+ with 16GB+ of VRAM 
+1. Install [VRAM Cleaner](https://hub.sp-tarkov.com/files/file/2876-vram-cleaner/).
+2. In the game's graphics settings, set everything to the lowest or off except textures, shadows, anisotropic filtering and LOD / visibility, which you can set to taste. Anti-aliasing must be off or FXAA, nothing else works. With 10 GB of VRAM or less, set textures to medium or low.
+3. Of the checkboxes at the bottom of the graphics settings, turn on grass shadows, high quality color and Streets low quality textures, and leave the rest off (volumetric lighting is your call).
+4. **Use an upscaler:** Nvidia DLSS or AMD FSR 3.
+5. In SteamVR's settings, set Tarkov's resolution between 100% and 150%. This costs the most performance of anything, so lower is faster, and it works together with the upscaler.
+6. Try the options in **VR › Graphics**: foveated rendering, a lower scope render resolution, Disable Hideout Shadows, and less LOD bias and clutter draw distance. **VR › Desktop View › Plain Mirror** saves CPU time too.
+7. Run FIKA with a headless client, ideally on a second PC on your network with at least 32 GB of RAM and a decent CPU. Running headless on the same PC only helps with at least 64 GB of RAM.
+8. Install a bot spawn mod such as MOAR or ABPS. The AI is the biggest performance cost in SPT, and these mods manage spawns much better.
 
-Minimum GPU AMD - Any RX 7000+ RDNA3/4 with 16GB+ of VRAM.
+## FAQ
 
-Minimum CPU - Really I can't recommend anything other than the AMD X3D chips like the 5800x3d, 9800x3d, etc
+**Which headsets and controllers are supported?**
+Any headset that supports OpenXR and can work with SteamVR. (Let me know if one doesn't work)
 
-Minimum RAM: 32GB if you have a secondary headless PC, if you're self hosting you should really have more than 32GB
+**Does it work with FIKA?**
+Yes. Install `SPT-VR-FikaSync.dll` on every computer in the group (including headless), VR or not (see [Installing](#installing)). Other players then see your real head, arm and hand movements, and things you do by hand such as reloads and doors.
 
-Minimum drive - SSD or NVMe SSD, preferably NVMe but this isn't a big deal
+**Does it work with other mods?**
+SPT-VR has built-in support for FIKA, Dynamic Maps, Amands's Graphics, Weapon Customizer, FuckThisCulling, ORBIT and Integrated Configuration Manager. A lot of other mods just work. Mods that add their own new UI often don't, guns from mods may be missing some by-hand features, and some graphics mods cause problems. Add mods one at a time, and remove the rest before reporting a bug.
 
+**VR doesn't start, or starts in the wrong mode.**
+Make sure SteamVR is running before you start the game, and check `BepInEx/LogOutput.log` for lines from SPT-VR. If OpenXR can't start, the mod falls back to OpenVR. To always use OpenVR, set `"useOpenXR": false` in `BepInEx/plugins/sptvr/ModSettings.json`.
 
-You may be able to get away with slightly lower specs but this is what I recommend to have an actual playable experience.
+## Building from source
 
- FAQ 
------
+1. Clone this repository and open `TarkovVR.sln` (Visual Studio or Rider), or build from the command line.
+2. The VR assemblies are in the `libs` folder. The game's and the supported mods' are not in the repository, so copy them in from your SPT install. The code reads private members, so publicize them first, for example with [BepInEx.AssemblyPublicizer](https://github.com/BepInEx/BepInEx.AssemblyPublicizer):
+   - into `libs/Managed`, from `EscapeFromTarkov_Data/Managed`: `Assembly-CSharp`, `Assembly-CSharp-firstpass`, `AnimationSystem.Types`, `Cinemachine`, `Comfort`, `Comfort.Unity`, `CommonExtensions`, `ItemComponent.Types`, `Newtonsoft.Json`, `Sirenix.Serialization`, `Unity.Postprocessing.Runtime`, `Unity.TextMeshPro` and `UnityEngine.UI`;
+   - into `libs/ModSupport`, from each mod's plugin folder: `Fika.Core`, `AmandsGraphics`, `DynamicMaps`, `KmyTarkovConfiguration`, `ORBIT` (saved as `Orbit.dll`), `FuckThisCulling` and `Tyfon.WeaponCustomizer`.
+3. Build with `dotnet build -c Release`. The build lands in `bin/Release/netstandard2.1/SPT-VR.dll`. Copy it over `BepInEx/plugins/sptvr/SPT-VR.dll` in your SPT folder.
+4. The other projects: `FikaSync` (the co-op module, `SPT-VR-FikaSync.dll`), `Preloader` (`SPT-VR-Preloader.dll`, goes in `BepInEx/patchers`) and `DevTools` (a developer settings plugin, not shipped to players).
 
-###  What controllers and headsets are supported? 
+## Credits and contact
 
-The mod supports most VR headsets. The following controllers work out of the box:
+SPT-VR was created by **cybensis**. Since 1.0.6 (4/28/2025) it has been developed by **MaTSix**.
 
-- Quest 2/3
-- Valve Index
-- Vive
- 
-If your controller isn’t working, configure the control scheme through SteamVR bindings.
+Thank you to the testers who helped and provided bug reports and feedback.
 
-###  Does this work with the non-SPT Escape From Tarkov? 
-
-No, using this mod with the official version of Escape From Tarkov can result in a ban.
-
-###  Does it support FIKA? 
-
-Yes, it supports FIKA. VR players will appear as non-VR players in multiplayer.
-
-###  Are other mods compatible with the VR mod? 
-
-Several mods have been confirmed to work. However, mods that add a new UI may not work, new guns might be missing features, and some graphics mods may cause issues. Please remove all incompatible mods before reporting any bugs.
-
-Current list of known compatible mods:
-
-- FIKA
-- Hollywood Graphics/FX
-- SAIN
-- Waypoints
-- Declutterer
-- BigBrain
-- Epic's AIO modded scopes (still needs some work)
-- A lot of others, my best suggestion is to try one at a time, most UI mods that *add* totally new UI elements will not work properly
- 
-###  Do I need to buy this mod? 
-
-No, the mod is free, and the source code is open-source.
-
- Contributions 
----------------
-
-A huge thank you to these primary testers who helped shape the mod:
-
-- **groundzeroday**: Check out his work at [hexler.net](https://hexler.net/)
-- **Havviks**: Thanks for making the trailer, go watch his videos on [YouTube](https://www.youtube.com/@HAVVIKS)
-- **MaTSix**: Offered a lot of helpful ideas which greatly decreased the jankiness of the mod
-
- Get in contact 
-----------------
-
-**Join the discord - <https://discord.gg/U8B8h3s6SN>**
-
-If you want to reach out to me personally, you can send an email to <a>cybensis@protonmail.com</a>
-
- Development Environment Setup 
--------------------------------
-
-If you wish to make your own changes to the mod or want to check it out for any purpose, follow the steps below:
-
-1. **Clone the Repository**: This can either be done by downloading the source code from the GitHub page or using the command below: git clone https://github.com/cybensis/SPT-VR.git
-2. **Open it in your IDE**: I've only ever used Visual Studio for development, so I would recommend using that. Opening the .sln file will open Visual Studio, which should already be configured to build without issue.
-3. **Make your changes and build**: After making your changes, to test them simply go to the *Build* dropdown menu at the top of Visual Studio and select *Build Solution*.
-4. **Add the build to your SPT installation**: After building the mod, you should find the new file under *bin/Debug/TarkovVR.dll* or *bin/Release/TarkovVR.dll* depending on whether you've built a debug or release version. Then, in your SPT installation, replace the BepInEx/plugins/sptvr/SPT-VR.dll file with your new one and you should be good to go.
+**Join the Discord: <https://discord.gg/U8B8h3s6SN>**

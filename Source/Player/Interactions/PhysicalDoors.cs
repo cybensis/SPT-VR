@@ -71,7 +71,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static float handleSnapSkin = 0.03f;     // m from the palm point (the knuckle line) to the handle's surface
         public static float pushLeadDegrees = 0.3f;     // deg a hand-pushed door turns past the contact, so it isn't touched again at once
         public static float syncInterval = 1f / 15f;    // s between the angle packets of a moving door
-        public static bool logGrabs = true;             // logs a line per grab: the door, its handle, its angles
+        public static bool logGrabs = false;             // logs a line per grab: the door, its handle, its angles
         internal static bool syncBroken;                // SPT-VR-FikaSync older than 2.2.0: it has no door packet to send
 
         public static bool Active => VRSettings.GetPhysicalDoorsOn();

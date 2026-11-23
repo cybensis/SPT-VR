@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SPT-VR Controls</title>
+<style>
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; font: 14px system-ui, sans-serif; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a field reference card - controller map by situation, then the body zones, then how-to cards and settings */
+:root {
+  --paper: #E8EAE3;
+  --panel: #F5F6F1;
+  --ink: #1E241A;
+  --muted: #586050;
+  --line: #C8CCBE;
+  --olive: #45552A;
+  --accent: #E3A21A;
+  --accent-ink: #1E241A;
+  --shape: #DCDFD5;
+  --shape-line: #7A8270;
+  --off: #C2C6B8;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #13170F; --panel: #1B2117; --ink: #E2E6D8; --muted: #9CA391; --line: #2E3628; --olive: #AEC274;
+    --accent: #F0B429; --accent-ink: #13170F; --shape: #252C20; --shape-line: #707A66; --off: #353D2E; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #13170F; --panel: #1B2117; --ink: #E2E6D8; --muted: #9CA391; --line: #2E3628; --olive: #AEC274;
+  --accent: #F0B429; --accent-ink: #13170F; --shape: #252C20; --shape-line: #707A66; --off: #353D2E; color-scheme: dark;
+}
+
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.page { max-width: 1120px; margin: 0 auto; padding-block: 28px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 44px; }
+
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.05; margin: 0; text-wrap: balance; letter-spacing: 0.01em; }
+h1 { font-size: clamp(2.6rem, 7vw, 4.2rem); text-transform: uppercase; }
+h2 { font-size: 1.9rem; text-transform: uppercase; }
+h3 { font-size: 1.35rem; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--olive); }
+
+/* Header */
+header { display: grid; gap: 14px; border-bottom: 2px solid var(--ink); padding-bottom: 22px; }
+.lead { max-width: 68ch; color: var(--muted); font-size: 1.02rem; }
+.hands-key { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.92rem; }
+.hands-key span { display: inline-flex; align-items: center; gap: 8px; }
+.tag { font-family: var(--font-mono); font-size: 0.75rem; padding: 2px 7px; border: 1.5px solid var(--ink); border-radius: 4px; white-space: nowrap; }
+
+section { display: grid; gap: 18px; }
+.section-head { display: grid; gap: 6px; }
+.section-head p { color: var(--muted); max-width: 70ch; }
+
+/* Situation tabs */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab { font: 600 0.95rem var(--font-body); color: var(--ink); background: var(--panel); border: 1.5px solid var(--line); border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+.tab:hover { border-color: var(--shape-line); }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.tab:focus-visible, .zone-item:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.situation-note { font-size: 0.95rem; color: var(--ink); background: var(--panel); border-left: 4px solid var(--accent); padding: 10px 14px; border-radius: 0 6px 6px 0; max-width: 90ch; }
+
+.controllers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.controller { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.controller-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.role { font-family: var(--font-mono); font-size: 0.78rem; color: var(--olive); text-transform: uppercase; letter-spacing: 0.06em; }
+.controller svg { width: 100%; max-width: 230px; height: auto; justify-self: center; display: block; }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.legend li { display: grid; grid-template-columns: 4.6rem minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.badge { font-family: var(--font-mono); font-size: 0.74rem; text-align: center; padding: 3px 4px; border-radius: 4px; background: var(--accent); color: var(--accent-ink); font-weight: 500; }
+.legend .empty { color: var(--muted); font-style: italic; grid-template-columns: 1fr; }
+
+/* Controller drawing */
+.c-body { fill: var(--shape); stroke: var(--shape-line); stroke-width: 2; }
+.c-face { fill: var(--panel); stroke: var(--shape-line); stroke-width: 1.2; }
+.c-input { fill: var(--off); stroke: var(--shape-line); stroke-width: 1.5; transition: fill 0.2s; }
+.c-input.on { fill: var(--accent); stroke: var(--ink); }
+.c-text { font-family: var(--font-mono); font-size: 13px; fill: var(--ink); }
+.c-text.inside { font-size: 12px; text-anchor: middle; dominant-baseline: central; }
+.c-label { font-family: var(--font-mono); font-size: 12px; fill: var(--muted); }
+.c-label.on { fill: var(--ink); }
+
+/* Body map */
+.body-map { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 22px; align-items: start; }
+.figure-box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 6px; min-width: 0; }
+.figure-box svg { width: 100%; height: auto; display: block; }
+.figure-caption { font-size: 0.82rem; color: var(--muted); text-align: center; }
+.f-body { fill: var(--shape); stroke: var(--shape-line); stroke-width: 2; }
+.f-limb { fill: none; stroke: var(--shape); stroke-linecap: round; stroke-linejoin: round; }
+.f-limb-edge { fill: none; stroke: var(--shape-line); stroke-linecap: round; stroke-linejoin: round; }
+.f-pin { fill: var(--accent); stroke: var(--ink); stroke-width: 1.5; }
+.f-pin-front { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.f-lead { stroke: var(--ink); stroke-width: 1; }
+.f-title { font: 600 13px var(--font-body); fill: var(--ink); }
+.f-sub { font: 11.5px var(--font-body); fill: var(--muted); }
+.zones { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.zone-item { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 11px 14px; display: grid; gap: 3px; }
+.zone-item strong { font-family: var(--font-display); font-size: 1.15rem; letter-spacing: 0.01em; }
+.zone-item p { font-size: 0.93rem; }
+.zone-item .how { color: var(--muted); font-size: 0.86rem; }
+
+/* How-to cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 6px; font-size: 0.94rem; }
+.card li::marker { color: var(--olive); }
+kbd { font-family: var(--font-mono); font-size: 0.8em; padding: 1px 5px; border: 1px solid var(--shape-line); border-bottom-width: 2px; border-radius: 4px; background: var(--paper); white-space: nowrap; }
+
+/* Settings table */
+.table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: none; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+.where { font-family: var(--font-mono); font-size: 0.78rem; color: var(--olive); white-space: nowrap; }
+
+.not-covered { border: 2px dashed var(--shape-line); border-radius: 10px; padding: 18px 20px; display: grid; gap: 8px; }
+.not-covered p { max-width: 75ch; }
+footer { color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--line); padding-top: 14px; }
+
+@media (max-width: 760px) {
+  .controllers { grid-template-columns: 1fr; }
+  .body-map { grid-template-columns: 1fr; }
+  .figure-box { max-width: 460px; }
+  td:first-child { white-space: normal; }
+}
+@media (prefers-reduced-motion: reduce) { .c-input { transition: none; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="eyebrow">SPT-VR · VR for Single Player Tarkov</div>
+    <h1>Controls</h1>
+    <p class="lead">Most of SPT-VR is done with your hands: you reach for things on your body and on your gear and grab them. The buttons do the rest. Pick a situation below to see what every button does in it.</p>
+    <div class="hands-key">
+      <span><span class="tag">Gun hand</span> your right hand, the one holding the gun</span>
+      <span><span class="tag">Off hand</span> your left hand, for the foregrip, gear and loot</span>
+      <span>Either hand can take a gun. Grab one with the left and it becomes the gun hand.</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="map-title">
+    <div class="section-head">
+      <h2 id="map-title">Buttons by situation</h2>
+      <p>Buttons shown on a Quest-style layout: A and B on the right controller, X and Y on the left. Lit buttons do something in the situation you picked.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Situation" id="tabs"></div>
+    <p class="situation-note" id="note"></p>
+    <div class="controllers">
+      <article class="controller" id="left-controller" aria-live="polite"></article>
+      <article class="controller" id="right-controller" aria-live="polite"></article>
+    </div>
+  </section>
+
+  <section aria-labelledby="body-title">
+    <div class="section-head">
+      <h2 id="body-title">Your body</h2>
+      <p>Your guns, grenades and gear sit on your body. Reach for one and use the grip or trigger there. A short buzz tells you that your hand is in place.</p>
+    </div>
+    <div class="body-map">
+      <div class="figure-box">
+        <svg viewBox="0 0 420 430" role="img" aria-labelledby="fig-title">
+          <title id="fig-title">You, seen from behind, with the places you reach for</title>
+          <!-- legs -->
+          <polyline class="f-limb-edge" points="192,248 188,330 186,408" stroke-width="30"></polyline>
+          <polyline class="f-limb-edge" points="228,248 232,330 234,408" stroke-width="30"></polyline>
+          <polyline class="f-limb" points="192,248 188,330 186,408" stroke-width="26"></polyline>
+          <polyline class="f-limb" points="228,248 232,330 234,408" stroke-width="26"></polyline>
+          <!-- arms -->
+          <polyline class="f-limb-edge" points="160,110 146,172 140,240" stroke-width="26"></polyline>
+          <polyline class="f-limb-edge" points="260,110 274,172 280,240" stroke-width="26"></polyline>
+          <polyline class="f-limb" points="160,110 146,172 140,240" stroke-width="22"></polyline>
+          <polyline class="f-limb" points="260,110 274,172 280,240" stroke-width="22"></polyline>
+          <circle class="f-body" cx="139" cy="254" r="12"></circle>
+          <circle class="f-body" cx="281" cy="254" r="12"></circle>
+          <!-- torso, neck, head -->
+          <path class="f-body" d="M160 98 Q210 86 260 98 L268 150 Q264 205 252 252 L168 252 Q156 205 152 150 Z"></path>
+          <rect class="f-body" x="199" y="78" width="22" height="20" rx="6"></rect>
+          <circle class="f-body" cx="210" cy="54" r="28"></circle>
+
+          <!-- head -->
+          <line class="f-lead" x1="178" y1="50" x2="118" y2="44"></line>
+          <circle class="f-pin" cx="180" cy="50" r="8"></circle>
+          <text class="f-title" x="8" y="40">Head</text>
+          <text class="f-sub" x="8" y="56">left hand</text>
+          <!-- left shoulder -->
+          <line class="f-lead" x1="166" y1="100" x2="140" y2="104"></line>
+          <circle class="f-pin" cx="170" cy="100" r="8"></circle>
+          <text class="f-title" x="8" y="100">Behind left</text>
+          <text class="f-title" x="8" y="116">shoulder</text>
+          <text class="f-sub" x="8" y="132">backpack</text>
+          <!-- left wrist -->
+          <line class="f-lead" x1="134" y1="234" x2="96" y2="230"></line>
+          <circle class="f-pin" cx="140" cy="234" r="8"></circle>
+          <text class="f-title" x="8" y="226">Left wrist</text>
+          <text class="f-sub" x="8" y="242">look at it</text>
+          <!-- right shoulder -->
+          <line class="f-lead" x1="254" y1="100" x2="292" y2="104"></line>
+          <circle class="f-pin" cx="250" cy="100" r="8"></circle>
+          <text class="f-title" x="412" y="100" text-anchor="end">Behind right</text>
+          <text class="f-title" x="412" y="116" text-anchor="end">shoulder</text>
+          <text class="f-sub" x="412" y="132" text-anchor="end">second gun</text>
+          <!-- chest -->
+          <line class="f-lead" x1="220" y1="150" x2="320" y2="166"></line>
+          <circle class="f-pin-front" cx="210" cy="148" r="11"></circle>
+          <text class="f-title" x="412" y="168" text-anchor="end">Chest (front)</text>
+          <text class="f-sub" x="412" y="184" text-anchor="end">slung gun, grenade</text>
+          <!-- right hip -->
+          <line class="f-lead" x1="258" y1="236" x2="330" y2="236"></line>
+          <circle class="f-pin" cx="252" cy="236" r="8"></circle>
+          <text class="f-title" x="412" y="232" text-anchor="end">Right hip</text>
+          <text class="f-sub" x="412" y="248" text-anchor="end">pistol</text>
+        </svg>
+        <p class="figure-caption">Seen from behind, so your left is on the left. The dashed ring is on your front.</p>
+      </div>
+      <ul class="zones">
+        <li class="zone-item"><strong>Head</strong><p>Left grip: flip your visor, face shield or night vision. Left trigger: headlight on or off.</p></li>
+        <li class="zone-item"><strong>Behind your left shoulder</strong><p>Hold the left grip and bring your hand in front of you: the quick-slot menu. Pick with the stick, let go to use it. Left trigger: drop your backpack. Let go of an item here (either hand) to put it in your inventory.</p></li>
+        <li class="zone-item"><strong>Behind your right shoulder</strong><p>Your second primary. Grip it to take it.</p></li>
+        <li class="zone-item"><strong>Chest</strong><p>Your gun hangs across your chest when you let go of it. Grip it by its grip to take it back. The grenade slot is at the top left: grip it with either hand.</p></li>
+        <li class="zone-item"><strong>Right hip</strong><p>Your pistol. Grip it to draw it.</p></li>
+        <li class="zone-item"><strong>Knife</strong><p>On its sheath, wherever your gear carries it. Grip it to draw it, then swing it.</p></li>
+        <li class="zone-item"><strong>Left wrist</strong><p>Look at it for your health, stance, exit timers and notifications.</p></li>
+        <li class="zone-item"><strong>Move a spot</strong><p>Hold the trigger on a gun or the grenade at its spot for a second. It comes off and follows your hand: let go of the trigger where you want it.</p><p class="how">VR tab › Weapons › Reset Placed Gun Spots puts them all back.</p></li>
+      </ul>
+    </div>
+  </section>
+
+  <section aria-labelledby="how-title">
+    <div class="section-head">
+      <h2 id="how-title">How things work</h2>
+      <p>The parts that are more than one button press.</p>
+    </div>
+    <div class="cards">
+      <article class="card">
+        <h3>Aiming and scopes</h3>
+        <ul>
+          <li>Raise the sight to your eye to aim. There is no aim button. Lower the gun or look away to stop.</li>
+          <li>While aiming, hold the left trigger to hold your breath. The gun steadies until your lungs run out.</li>
+          <li>Bring a gun with a stock up to your shoulder and it steadies.</li>
+          <li>Zoom: while aiming a zoom scope, push the right stick up or down. Or put your left hand on the scope, hold the grip and twist.</li>
+          <li>Left hand on a red dot, holo or scope, tap the grip: switches its mode or brightness.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Holding and switching guns</h3>
+        <ul>
+          <li>The gun stays in your hand while you hold the grip. Open your hand and it hangs across your chest.</li>
+          <li>Let go with your gun hand while the left holds the foregrip, and the left hand keeps the gun. It can't fire like that.</li>
+          <li>Take another gun straight off your body: second primary behind your right shoulder, pistol on your right hip.</li>
+          <li>Pass a rifle to your other hand: put that hand on the gun hand's grip and press its grip. A pistol: hold it with both hands and let go with the gun hand.</li>
+          <li>With <em>Toggle Gun Grip</em> on, press the grip to take hold and press again to let go.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Working the gun</h3>
+        <ul>
+          <li>Reach your left hand to a part of the gun (the magazine, the bolt, the selector, the stock): its menu appears. The right stick picks, the left trigger or <kbd>A</kbd> does it. Check chamber, check magazine, inspect, fire mode, fold stock.</li>
+          <li>The part menu doesn't open while you aim or hold the foregrip.</li>
+          <li>Fire mode: <kbd>A</kbd> while holding the foregrip.</li>
+          <li>Light or laser: left hand on the foregrip, tap <kbd>Y</kbd>. Hold <kbd>Y</kbd> to switch its mode.</li>
+          <li>Under-barrel grenade launcher: hold the left trigger and press <kbd>X</kbd>. Again to switch back.</li>
+          <li>Press check on a pistol (Index and Quest controllers): let go of the grip with your thumb resting on a button or the stick and your finger resting on the trigger. Your hand goes onto the slide. Squeeze the trigger to draw it back.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Loot, containers and bodies</h3>
+        <ul>
+          <li>Point an open palm at loose items: dots mark what you can grab. The grip pulls it into your hand.</li>
+          <li>Let go to drop it, or swing and let go to throw it. Let go behind your left shoulder to put it in your inventory.</li>
+          <li>Either hand works while it isn't holding the gun.</li>
+          <li>Containers: put your hand in and pull the trigger.</li>
+          <li>Bodies: palm on the body, pull the trigger for its loot. Hold the grip to drag it.</li>
+          <li>Look at anything you can use to get its menu. The right stick picks, <kbd>A</kbd> selects.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Doors and keys</h3>
+        <ul>
+          <li>Grip the handle, turn it, then push or pull the door. Let go while it moves and it keeps swinging.</li>
+          <li>A locked door rattles and won't open.</li>
+          <li>Unlock: hold the locked door's handle and pull the trigger. Your key comes into your hand. Put its tip in the lock and twist your wrist. Pull the trigger again to put the key away.</li>
+          <li>Breach: hit a shut door hard with your gun, in the direction it opens. Kicking and keycards go through the look-at menu.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Grenades</h3>
+        <ul>
+          <li>The grenade you'd throw next sits at the top left of your chest. Grip it with either hand and keep holding.</li>
+          <li>With your other hand, pull the trigger on the ring and pull the pin out. Grenades without a ring are ready at once.</li>
+          <li>Swing and let go to throw. Let go before the pin is out and it goes back on your chest.</li>
+          <li>Changed your mind: bring the pin back to the grenade and push it in.</li>
+          <li>Before pulling the pin, hold the trigger of the hand holding it to pick a different grenade with the stick.</li>
+          <li>Hold <kbd>A</kbd> for tripwire mode, then the trigger places its posts.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Mounted guns</h3>
+        <ul>
+          <li>With both hands free (empty, or your gun slung), grip both handles. The Utyos only needs the right one.</li>
+          <li>Turn it with your hands and fire with the trigger. Put your eye to the sight to aim.</li>
+          <li>Open both hands to get off.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Eating and drinking</h3>
+        <ul>
+          <li>Use food from your inventory or a quick slot. It comes out in your hands.</li>
+          <li>Open it with your free hand: put it on the lid, cap or wrapper, squeeze the trigger, then pull or tilt.</li>
+          <li>Bring it to your mouth to eat. Hold a drink at your mouth to drink and lower it to stop. Trigger at the cap puts it back on.</li>
+          <li>Some foods want a shake over your other palm or a reach into the bag.</li>
+          <li>Both triggers at once: put it away.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Setup and comfort</h3>
+        <ul>
+          <li>Reset your height: stand straight, look ahead and hold the right stick click for half a second.</li>
+          <li>Do it with your arms straight out to the sides and it also measures your arm length.</li>
+          <li>Crouch, lean and peek with your body. Your character follows you.</li>
+          <li>Playing seated: turn on <em>Seated Mode</em>, then reset your height.</li>
+          <li>Valve Index: the same buttons. Touching the left trackpad also sprints, grabs need a squeeze, and your fingers are tracked.</li>
+          <li>Vive wands: click the top half of the right trackpad to jump (hold to vault). Hold your thumb low on it to crouch. Both can be tuned on the VR tab under Movement.</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <section aria-labelledby="settings-title">
+    <div class="section-head">
+      <h2 id="settings-title">Settings that change the controls</h2>
+      <p>All in the game's settings, on the VR tab. Pick the category from the dropdown at the top.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Setting</th><th>Where</th><th>What it changes</th></tr></thead>
+        <tbody>
+          <tr><td>Movement Method</td><td class="where">Movement</td><td>Whether the stick moves you where you look, where the controller points, or by the stick alone.</td></tr>
+          <tr><td>Turning, Snap Turn Angle</td><td class="where">Movement</td><td>Smooth or snap turning, and how far each snap goes.</td></tr>
+          <tr><td>Swap Sticks</td><td class="where">Movement</td><td>Move with the right stick and turn, jump and crouch with the left.</td></tr>
+          <tr><td>Step Or Lean Forward To Sprint</td><td class="where">Movement</td><td>A quick step or lean forward starts a sprint, a step back stops it.</td></tr>
+          <tr><td>Disable Run Animation</td><td class="where">Movement</td><td>Keeps the gun up while you sprint, so you can fire on the run.</td></tr>
+          <tr><td>Seated Mode</td><td class="where">Movement</td><td>For playing seated. Reset your height after turning it on.</td></tr>
+          <tr><td>Chest Sling</td><td class="where">Weapons</td><td>Off: the gun stays in your hand whatever your grip does.</td></tr>
+          <tr><td>Toggle Gun Grip</td><td class="where">Weapons</td><td>Press the grip to take hold of a gun or foregrip and press again to let go.</td></tr>
+          <tr><td>Virtual Gunstock</td><td class="where">Weapons</td><td>Shouldering a stocked gun steadies it.</td></tr>
+          <tr><td>Manual Reload</td><td class="where">Weapons</td><td>Reloading by hand. Off: <kbd>B</kbd> runs the game's own reload.</td></tr>
+          <tr><td>Laser Pointer In Left Hand</td><td class="where">Hands &amp; Body</td><td>Menus are pointed with the left hand. The two hands' menu buttons swap.</td></tr>
+          <tr><td>Physical Doors</td><td class="where">Interaction</td><td>Off: a grip on a door opens or closes it.</td></tr>
+          <tr><td>Disable Door / Corpse Context Menu</td><td class="where">Interaction</td><td>No look-at menu on doors you open by hand, or on bodies.</td></tr>
+          <tr><td>Manual Eating</td><td class="where">Interaction</td><td>Off: food and drink are used for you.</td></tr>
+          <tr><td>Use In-Game VR Keyboard</td><td class="where">Interaction</td><td>A keyboard you type on with the laser, for text fields.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="not-covered" aria-labelledby="reload-title">
+    <h2 id="reload-title">Not in this guide: reloading</h2>
+    <p>Magazines, charging handles, bolts, pumps, break-actions, cylinders and clearing jams are all done by hand, the way you would with the real gun. Figuring that out is part of the game. Every gun works a little differently.</p>
+  </section>
+
+  <footer>Buttons named for Quest and Index controllers. With Swap Sticks, Laser Pointer In Left Hand or a gun in your left hand, the hands trade the jobs shown here.</footer>
+</div>
+
+<script>
+(function () {
+  // Each situation: what every input does on each hand. A missing entry = that input does nothing there.
+  var SITUATIONS = [
+    {
+      id: 'move', name: 'On the move',
+      note: 'Prone: crouch all the way down, let the stick go, then pull it down again. Do the same to get up. Physical crouching works too.',
+      left: { role: 'Off hand', inputs: {
+        stick: 'Move. Movement Method in the VR tab decides which way forward is.',
+        click: 'Sprint on or off. It stops when you stop pushing forward. From prone it gets you up.',
+        upper: 'Game menu',
+        lower: 'Inventory'
+      } },
+      right: { role: 'Gun hand', inputs: {
+        stick: 'Left or right: turn. Up: jump (hold it up to vault or climb). Down: crouch lower, then up to stand.',
+        click: 'Hold for half a second: reset your height.'
+      } }
+    },
+    {
+      id: 'gun', name: 'Holding a gun',
+      note: 'Aim by bringing the sight up to your eye. There is no aim button.',
+      left: { role: 'Off hand', inputs: {
+        grip: 'Hold the foregrip to aim with both hands.',
+        trigger: 'While aiming: hold your breath. Next to a part of the gun: do its action.',
+        upper: 'Hand on the foregrip: light or laser on or off, hold to switch its mode. Otherwise: game menu.',
+        lower: 'With the trigger held: under-barrel grenade launcher and back. Otherwise: inventory.',
+        stick: 'Move',
+        click: 'Sprint'
+      } },
+      right: { role: 'Gun hand', inputs: {
+        trigger: 'Fire',
+        grip: 'Hold the gun. Open your hand to let go and it hangs on your chest.',
+        lower: 'Fire mode, while the left hand holds the foregrip. Also does the weapon action you picked.',
+        upper: 'Magazine release and reload. See "Not in this guide".',
+        stick: 'Aiming a zoom scope: up or down zooms. A weapon part menu open: up or down picks. Otherwise turn, jump and crouch as usual.',
+        click: 'Hold: reset your height.'
+      } }
+    },
+    {
+      id: 'hands', name: 'Hands free',
+      note: 'Look at a door, a container or an item to get its menu. Your right hand counts as free with the gun slung.',
+      left: { role: 'Off hand', inputs: {
+        grip: 'Grab loot your palm points at, a door handle, a body. At your head: visor or night vision. Behind your left shoulder: quick-slot menu.',
+        trigger: 'Hand in a container or palm on a body: open it (also doors you can\'t swing by hand). At your head: headlight. Behind your left shoulder: drop your backpack.',
+        upper: 'Game menu',
+        lower: 'Inventory',
+        stick: 'Move',
+        click: 'Sprint'
+      } },
+      right: { role: 'Gun hand, empty', inputs: {
+        grip: 'Grab loot, a door handle, a body, or a gun or grenade off your body.',
+        trigger: 'Hand in a container or palm on a body: open it (also doors you can\'t swing by hand).',
+        lower: 'Select in the look-at menu.',
+        stick: 'Look-at menu with several options: up or down picks. Otherwise turn.',
+        click: 'Hold: reset your height.'
+      } }
+    },
+    {
+      id: 'grenade', name: 'Grenade in hand',
+      note: 'Grenades without a ring are ready to throw as soon as you hold them. Either hand can take one; the other hand pulls the ring.',
+      left: { role: 'The other hand', inputs: {
+        trigger: 'On the ring: hook it and pull the pin out. Push it back in to put the pin back.',
+        stick: 'Move',
+        click: 'Sprint'
+      } },
+      right: { role: 'Holding the grenade', inputs: {
+        grip: 'Keep holding. Let go to throw once the pin is out. Before that, letting go puts it back on your chest.',
+        trigger: 'Hold: pick another grenade. The stick picks, let go of the trigger to swap.',
+        lower: 'Hold: tripwire mode. The trigger then places its posts.',
+        stick: 'Turn'
+      } }
+    },
+    {
+      id: 'menus', name: 'Menus and inventory',
+      note: 'The laser can go on your left hand: VR tab › Hands & Body › Laser Pointer In Left Hand. The two hands then trade jobs.',
+      left: { role: 'Other hand', inputs: {
+        trigger: 'Ctrl: click to quick-move an item, drag to split a stack.',
+        lower: 'Alt: click to equip. On its own: open or close the inventory.',
+        upper: 'Close or back.'
+      } },
+      right: { role: 'Laser', inputs: {
+        trigger: 'Drag an item. Stick left or right turns it. Let go away from the panel to drop it on the ground.',
+        lower: 'Click. Hold: right-click menu. Double tap: open the item.',
+        upper: 'Back. Cancels a drag.',
+        stick: 'Scroll'
+      } }
+    }
+  ];
+
+  var ORDER = ['trigger', 'grip', 'upper', 'lower', 'stick', 'click'];
+  var NAMES = {
+    left: { trigger: 'Trigger', grip: 'Grip', upper: 'Y', lower: 'X', stick: 'Stick', click: 'Click' },
+    right: { trigger: 'Trigger', grip: 'Grip', upper: 'B', lower: 'A', stick: 'Stick', click: 'Click' }
+  };
+  var SVGNS = 'http://www.w3.org/2000/svg';
+
+  function el(name, attrs, parent) {
+    var node = document.createElementNS(SVGNS, name);
+    for (var key in attrs) node.setAttribute(key, attrs[key]);
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+
+  // One controller, face up, trigger at the top. Drawn as the right one; the left is its mirror (x -> 240 - x).
+  function drawController(side, inputs) {
+    var left = side === 'left';
+    var mx = function (x) { return left ? 240 - x : x; };
+    var mrect = function (x, w) { return left ? 240 - x - w : x; };
+    var svg = el('svg', { viewBox: '0 -28 240 330', role: 'img', 'aria-label': (left ? 'Left' : 'Right') + ' controller' });
+    var on = function (key) { return inputs[key] ? ' on' : ''; };
+
+    el('rect', { 'class': 'c-input' + on('trigger'), x: mrect(96, 48), y: -4, width: 48, height: 40, rx: 11 }, svg);
+    el('rect', { 'class': 'c-body', x: mrect(88, 64), y: 136, width: 64, height: 158, rx: 30 }, svg);
+    el('rect', { 'class': 'c-input' + on('grip'), x: mrect(74, 20), y: 166, width: 20, height: 84, rx: 9 }, svg);
+    el('ellipse', { 'class': 'c-body', cx: 120, cy: 100, rx: 82, ry: 70 }, svg);
+    el('ellipse', { 'class': 'c-face', cx: 120, cy: 100, rx: 62, ry: 52 }, svg);
+    el('circle', { 'class': 'c-input' + on('stick'), cx: mx(98), cy: 98, r: 22 }, svg);
+    el('circle', { 'class': 'c-input' + on('click'), cx: mx(98), cy: 98, r: 10 }, svg);
+    el('circle', { 'class': 'c-input' + on('upper'), cx: mx(152), cy: 80, r: 13 }, svg);
+    el('circle', { 'class': 'c-input' + on('lower'), cx: mx(141), cy: 116, r: 13 }, svg);
+
+    var names = NAMES[side];
+    var t = el('text', { 'class': 'c-text inside', x: mx(152), y: 80 }, svg); t.textContent = names.upper;
+    t = el('text', { 'class': 'c-text inside', x: mx(141), y: 116 }, svg); t.textContent = names.lower;
+
+    var label = function (text, x, y, anchor, key) {
+      var node = el('text', { 'class': 'c-label' + on(key), x: x, y: y, 'text-anchor': anchor }, svg);
+      node.textContent = text;
+    };
+    label('Trigger', 120, -12, 'middle', 'trigger');
+    label('Grip', left ? 174 : 66, 212, left ? 'start' : 'end', 'grip');
+    label('Stick', mx(98), 140, 'middle', 'stick');
+    return svg;
+  }
+
+  function renderController(side, info) {
+    var box = document.getElementById(side + '-controller');
+    box.textContent = '';
+    var head = document.createElement('div');
+    head.className = 'controller-head';
+    var title = document.createElement('h3');
+    title.textContent = side === 'left' ? 'Left controller' : 'Right controller';
+    var role = document.createElement('span');
+    role.className = 'role';
+    role.textContent = info.role;
+    head.appendChild(title);
+    head.appendChild(role);
+    box.appendChild(head);
+    box.appendChild(drawController(side, info.inputs));
+
+    var list = document.createElement('ul');
+    list.className = 'legend';
+    var any = false;
+    ORDER.forEach(function (key) {
+      var text = info.inputs[key];
+      if (!text) return;
+      any = true;
+      var row = document.createElement('li');
+      var badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = NAMES[side][key];
+      var body = document.createElement('span');
+      body.textContent = text;
+      row.appendChild(badge);
+      row.appendChild(body);
+      list.appendChild(row);
+    });
+    if (!any) {
+      var empty = document.createElement('li');
+      empty.className = 'empty';
+      empty.textContent = 'Nothing special here.';
+      list.appendChild(empty);
+    }
+    box.appendChild(list);
+  }
+
+  var tabs = document.getElementById('tabs');
+  var buttons = [];
+
+  function show(index) {
+    var situation = SITUATIONS[index];
+    buttons.forEach(function (button, i) {
+      var selected = i === index;
+      button.setAttribute('aria-selected', selected ? 'true' : 'false');
+      button.tabIndex = selected ? 0 : -1;
+    });
+    document.getElementById('note').textContent = situation.note;
+    renderController('left', situation.left);
+    renderController('right', situation.right);
+    try { localStorage.setItem('sptvr-controls-tab', situation.id); } catch (e) {}
+  }
+
+  SITUATIONS.forEach(function (situation, i) {
+    var button = document.createElement('button');
+    button.className = 'tab';
+    button.type = 'button';
+    button.id = 'tab-' + situation.id;
+    button.setAttribute('role', 'tab');
+    button.textContent = situation.name;
+    button.addEventListener('click', function () { show(i); });
+    button.addEventListener('keydown', function (event) {
+      if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+      event.preventDefault();
+      var next = (i + (event.key === 'ArrowRight' ? 1 : SITUATIONS.length - 1)) % SITUATIONS.length;
+      show(next);
+      buttons[next].focus();
+    });
+    tabs.appendChild(button);
+    buttons.push(button);
+  });
+
+  var start = 0;
+  try {
+    var saved = localStorage.getItem('sptvr-controls-tab');
+    SITUATIONS.forEach(function (situation, i) { if (situation.id === saved) start = i; });
+  } catch (e) {}
+  show(start);
+})();
+</script>
+</body>
+</html>

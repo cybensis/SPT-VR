@@ -79,9 +79,9 @@ namespace TarkovVR.Patches.Misc
                 hideoutUiCam.enabled = false;
             }
             if (VRGlobals.vrPlayer)
-                VRGlobals.vrOffsetter.transform.localPosition = VRGlobals.vrPlayer.initPos * -1 + VRPlayerManager.headOffset;
+                VRGlobals.vrOffsetter.transform.localPosition = VRGlobals.vrPlayer.initPos * -1 + ViewHeight.HeadOffset(VRPlayerManager.headOffset);
             else
-                VRGlobals.vrOffsetter.transform.localPosition = VRGlobals.VRCam.transform.localPosition * -1 + VRPlayerManager.headOffset;
+                VRGlobals.vrOffsetter.transform.localPosition = VRGlobals.VRCam.transform.localPosition * -1 + ViewHeight.HeadOffset(VRPlayerManager.headOffset);
             VRGlobals.commonUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
             VRGlobals.commonUi.parent = VRGlobals.camRoot.transform;
             VRGlobals.commonUi.localPosition = new Vector3(-0.8f, -0.5f, 0.8f);
